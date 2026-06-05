@@ -873,13 +873,13 @@ export default function Player({ channel }: PlayerProps) {
             </button>
             <div
               className="relative hidden h-1 w-0 overflow-hidden rounded-full transition-all duration-300 group-hover/vol:w-24 sm:block"
-              style={{ backgroundColor: "#1f2120" }}
+              style={{ backgroundColor: "rgba(255,255,255,0.18)" }}
             >
               <div
                 className="h-full rounded-full transition-all duration-150"
                 style={{
                   width: `${(muted ? 0 : volume) * 100}%`,
-                  backgroundColor: "#332a4f",
+                  backgroundColor: "#ffffff",
                 }}
               />
               <input

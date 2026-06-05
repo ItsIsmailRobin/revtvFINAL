@@ -4,9 +4,9 @@ interface Petal {
   id: number;
   startX: number;
   startY: number;
-  size: number; // random 14-22px (bigger)
-  baseOpacity: number; // random 0.3-0.65
-  duration: number; // 300-550s
+  size: number; // 14-22px
+  baseOpacity: number; // 0.3-0.65
+  duration: number; // 450-750s (0.07x speed)
   delay: number;
   travel: "tl-br" | "tr-bl" | "bl-tr" | "br-tl";
 }
@@ -17,10 +17,10 @@ function makePetal(id: number): Petal {
     id,
     startX: 1 + Math.random() * 98,
     startY: 1 + Math.random() * 98,
-    size: 14 + Math.random() * 8, // 14-22px (bigger, random)
-    baseOpacity: 0.3 + Math.random() * 0.35, // 30-65% random opacity
-    duration: 300 + Math.random() * 250, // 0.10x speed: 300-550s
-    delay: -Math.random() * 200,
+    size: 14 + Math.random() * 8, // 14-22px
+    baseOpacity: 0.3 + Math.random() * 0.35, // 30-65%
+    duration: 450 + Math.random() * 300, // 0.07x: 7.5-12.5 min
+    delay: -Math.random() * 300,
     travel: travels[Math.floor(Math.random() * travels.length)],
   };
 }
@@ -28,28 +28,27 @@ function makePetal(id: number): Petal {
 export default function Background() {
   const [petals, setPetals] = useState<Petal[]>([]);
 
-  // 30-36 flowers active at the same time, distributed across the whole
-  // viewport with random sizes and opacity. Old logic: long cross-viewport
-  // travel, fade in/out at the edges, never fade in the middle.
+  // Spawn loop: keep 25-30 flowers active on screen at all times.
   useEffect(() => {
-    const initial = Array.from({ length: 33 }, (_, i) => makePetal(i + 1));
+    const initial = Array.from({ length: 28 }, (_, i) => makePetal(i + 1));
     setPetals(initial);
 
     const interval = setInterval(() => {
       setPetals((prev) => {
         const count = prev.length;
-        if (count >= 36) return prev.slice(1);
-        if (count <= 30) {
+        if (count >= 30) return prev.slice(1);
+        if (count < 25) {
           const newId = Math.max(0, ...prev.map((p) => p.id)) + 1;
           return [...prev, makePetal(newId)];
         }
-        if (Math.random() > 0.5) {
+        if (Math.random() > 0.45) {
           const newId = Math.max(0, ...prev.map((p) => p.id)) + 1;
           return [...prev, makePetal(newId)];
+        } else {
+          return prev.slice(1);
         }
-        return prev.slice(1);
       });
-    }, 2200);
+    }, 1500);
 
     return () => clearInterval(interval);
   }, []);
@@ -59,9 +58,7 @@ export default function Background() {
       {/* Base dark wash */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(20,12,38,1)_0%,rgba(6,5,13,1)_72%)]" />
 
-      {/* Primary purple wash - all colors are pure purple/violet shades
-          for a more purple theme. Very large blur (200px) for perfectly
-          smooth, no pixelation. */}
+      {/* Primary purple wash */}
       <div
         className="absolute inset-[-35%] opacity-95"
         style={{
@@ -74,7 +71,7 @@ export default function Background() {
         }}
       />
 
-      {/* Secondary ambient purple glow - complementary motion */}
+      {/* Secondary ambient purple glow */}
       <div
         className="absolute inset-[-35%] opacity-80"
         style={{
@@ -87,7 +84,7 @@ export default function Background() {
         }}
       />
 
-      {/* Subtle conic accent - all purple shades */}
+      {/* Subtle conic accent */}
       <div
         className="absolute inset-[-20%] opacity-55"
         style={{
@@ -100,7 +97,7 @@ export default function Background() {
         }}
       />
 
-      {/* Top vignette for depth */}
+      {/* Vignette + shading + grain */}
       <div
         className="absolute inset-0"
         style={{
@@ -108,8 +105,6 @@ export default function Background() {
             "radial-gradient(ellipse 100% 80% at 50% 50%, transparent 30%, rgba(6,5,13,0.22) 80%, rgba(6,5,13,0.50) 100%)",
         }}
       />
-
-      {/* Subtle linear top/bottom shading */}
       <div
         className="absolute inset-0"
         style={{
@@ -117,8 +112,6 @@ export default function Background() {
             "linear-gradient(180deg, rgba(255,255,255,0.012) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.06) 100%)",
         }}
       />
-
-      {/* Subtle grain */}
       <div
         className="absolute inset-0 opacity-[0.035] mix-blend-overlay"
         style={{
@@ -127,10 +120,9 @@ export default function Background() {
         }}
       />
 
-      {/* Flowers - 30-36 active at the same time, distributed across
-          the whole viewport. Bigger sizes (14-22px), random opacity
-          (30-65%). Long cross-viewport travel (0.10x speed). Fade in/out
-          at the edges so they never fade in the middle. */}
+      {/* Flowers - 25-30 active. Pure floating logic, no mouse interaction.
+          Long cross-viewport travel (0.07x speed).
+          Fade in/out 15s at the edges. */}
       <div
         className="absolute inset-0"
         style={{
@@ -150,7 +142,6 @@ export default function Background() {
                 top: `${p.startY}%`,
                 fontSize: `${p.size}px`,
                 filter: "blur(0.3px) drop-shadow(0 0 5px rgba(236,72,153,0.22))",
-                // Travel animation + separate opacity fade (15s in, 15s out)
                 animation: `petalTravel${p.travel.replace(
                   "-",
                   ""
@@ -166,7 +157,6 @@ export default function Background() {
       </div>
 
       <style>{`
-        /* Slow continuous rotation of the primary wash */
         @keyframes bgDriftA {
           0%   { transform: rotate(0deg) scale(1); }
           50%  { transform: rotate(180deg) scale(1.05); }
@@ -182,34 +172,29 @@ export default function Background() {
           100% { transform: rotate(360deg) scale(1.02); }
         }
 
-        /* Cross-viewport travel. The transform is purely the travel —
-           no opacity in the travel keyframes. The opacity is animated
-           separately by the petalFade keyframe (15s in, 15s out)
-           so the fade-in and fade-out each take exactly 15 seconds. */
+        /* Cross-viewport travel — only the transform. */
         @keyframes petalTraveltlbr {
-          0%   { transform: translate(-40vw, -40vh) rotate(0deg); }
-          100% { transform: translate(140vw, 140vh) rotate(720deg); }
+          0%   { transform: translate(-50vw, -50vh) rotate(0deg); }
+          100% { transform: translate(150vw, 150vh) rotate(720deg); }
         }
         @keyframes petalTraveltrbl {
-          0%   { transform: translate(140vw, -40vh) rotate(0deg); }
-          100% { transform: translate(-40vw, 140vh) rotate(-720deg); }
+          0%   { transform: translate(150vw, -50vh) rotate(0deg); }
+          100% { transform: translate(-50vw, 150vh) rotate(-720deg); }
         }
         @keyframes petalTravelbltr {
-          0%   { transform: translate(-40vw, 140vh) rotate(0deg); }
-          100% { transform: translate(140vw, -40vh) rotate(720deg); }
+          0%   { transform: translate(-50vw, 150vh) rotate(0deg); }
+          100% { transform: translate(150vw, -50vh) rotate(720deg); }
         }
         @keyframes petalTravelbrtl {
-          0%   { transform: translate(140vw, 140vh) rotate(0deg); }
-          100% { transform: translate(-40vw, -40vh) rotate(-720deg); }
+          0%   { transform: translate(150vw, 150vh) rotate(0deg); }
+          100% { transform: translate(-50vw, -50vh) rotate(-720deg); }
         }
 
-        /* Opacity fade: 15s fade in, hold, 15s fade out. The total
-           duration matches the travel duration so the fade timing is
-           proportional. For a 300s travel: 15s = 5% of the duration. */
+        /* Opacity fade: 15s in, 15s out. For a 600s travel: 2.5% = 15s. */
         @keyframes petalFade {
           0%      { opacity: 0; }
-          5%      { opacity: var(--maxO, 0.5); }
-          95%     { opacity: var(--maxO, 0.5); }
+          2.5%    { opacity: var(--maxO, 0.5); }
+          97.5%   { opacity: var(--maxO, 0.5); }
           100%    { opacity: 0; }
         }
       `}</style>
