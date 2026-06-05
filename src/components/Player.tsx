@@ -47,6 +47,10 @@ export default function Player({ channel }: PlayerProps) {
   const [brightness, setBrightness] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobileDevice, setIsMobileDevice] = useState(false);
+  // Fallback override: when the native Fullscreen API fails (e.g. inside
+  // an iframe preview where requestFullscreen is blocked), this state
+  // forces the position:fixed overlay to cover the viewport anyway.
+  const [fsOverride, setFsOverride] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +60,7 @@ export default function Player({ channel }: PlayerProps) {
     visible: boolean;
   }>({ type: null, value: 0, visible: false });
 
-  const presentationFullscreen = isFullscreen;
+  const presentationFullscreen = isFullscreen || fsOverride;
 
   // ---- HLS attach / detach ----
   useEffect(() => {
@@ -168,7 +172,10 @@ export default function Player({ channel }: PlayerProps) {
 
     const onChange = () => {
       const doc = document as Document & { webkitFullscreenElement?: Element | null };
-      setIsFullscreen(!!(doc.fullscreenElement || doc.webkitFullscreenElement));
+      const inFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement);
+      setIsFullscreen(inFs);
+      // If native fullscreen is now active, clear the fallback override
+      if (inFs) setFsOverride(false);
     };
 
     detectMobile();
@@ -202,7 +209,7 @@ export default function Player({ channel }: PlayerProps) {
   // When entering mobile fullscreen: lock body + html scroll, remove any
   // margins/padding, and best-effort request landscape orientation.
   useEffect(() => {
-    if (!isFullscreen) return;
+    if (!isFullscreen && !fsOverride) return;
     const html = document.documentElement;
     const previous = {
       bodyOverflow: document.body.style.overflow,
@@ -229,7 +236,7 @@ export default function Player({ channel }: PlayerProps) {
         }
       } catch {}
     };
-  }, [isFullscreen]);
+  }, [isFullscreen, fsOverride]);
 
   // ---- controls auto hide ----
   const armHide = useCallback(() => {
@@ -290,9 +297,30 @@ export default function Player({ channel }: PlayerProps) {
       /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
       (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
 
+    // Helper: lock orientation to landscape
+    const lockLandscape = () => {
+      try {
+        const so = (screen as any).orientation;
+        if (so && typeof so.lock === "function") {
+          so.lock("landscape").catch(() => {});
+        }
+      } catch {}
+    };
+
+    // Helper: unlock orientation
+    const unlockOrientation = () => {
+      try {
+        const so = (screen as any).orientation;
+        if (so && typeof so.unlock === "function") {
+          so.unlock();
+        }
+      } catch {}
+    };
+
     // ---- iOS: use webkitEnterFullscreen on the <video> element ----
     // This is the ONLY way to get true fullscreen (no URL bar, no browser
-    // chrome) on iOS. Must be called from a user gesture.
+    // chrome) on iOS. The browser takes over the video element with its
+    // own native fullscreen player. Must be called from a user gesture.
     if (isIOS && video) {
       const v = video as HTMLVideoElement & {
         webkitEnterFullscreen?: () => void;
@@ -310,60 +338,58 @@ export default function Player({ channel }: PlayerProps) {
       return;
     }
 
-    // ---- Android / other mobile: use native Fullscreen API on the
-    // container, then lock orientation to landscape ----
-    if (isMobileDevice) {
-      const inFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement);
+    // ---- All other devices (Android, desktop) ----
+    // Try a cascade of fullscreen methods. The native Fullscreen API on
+    // the container is the most reliable on Android Chrome. If that
+    // fails (e.g. inside an iframe preview), fall back to the video
+    // element's requestFullscreen. If that also fails, force the
+    // position:fixed overlay via state (handled by the isFullscreen
+    // state which is also set below) to at least cover the viewport.
+    // ---- All devices (Android, desktop) ----
+    // Try native Fullscreen API. If it fails (e.g. inside an iframe),
+    // fall back to our own fixed overlay via fsOverride.
+    const inFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement);
+
+    if (inFs) {
       try {
-        if (!inFs) {
-          if (container.requestFullscreen) {
-            await container.requestFullscreen();
-          } else if (container.webkitRequestFullscreen) {
-            await container.webkitRequestFullscreen();
-          }
-          // Best-effort landscape lock
-          try {
-            const so = (screen as any).orientation;
-            if (so && typeof so.lock === "function") {
-              await so.lock("landscape").catch(() => {});
-            }
-          } catch {}
-        } else {
-          if (doc.exitFullscreen) {
-            await doc.exitFullscreen();
-          } else if (doc.webkitExitFullscreen) {
-            await doc.webkitExitFullscreen();
-          }
-          try {
-            const so = (screen as any).orientation;
-            if (so && typeof so.unlock === "function") {
-              so.unlock();
-            }
-          } catch {}
-        }
+        if (doc.exitFullscreen) await doc.exitFullscreen();
+        else if (doc.webkitExitFullscreen) await doc.webkitExitFullscreen();
       } catch {}
+      unlockOrientation();
+      setFsOverride(false);
       armHide();
       return;
     }
 
-    // ---- Desktop: native Fullscreen API ----
+    let fsWorked = false;
     try {
-      if (!doc.fullscreenElement && !doc.webkitFullscreenElement) {
-        if (container.requestFullscreen) {
-          await container.requestFullscreen();
-        } else if (container.webkitRequestFullscreen) {
-          await container.webkitRequestFullscreen();
-        }
-      } else {
-        if (doc.exitFullscreen) {
-          await doc.exitFullscreen();
-        } else if (doc.webkitExitFullscreen) {
-          await doc.webkitExitFullscreen();
-        }
+      if (container.requestFullscreen) {
+        await container.requestFullscreen({ navigationUI: "hide" });
+        fsWorked = true;
+      } else if (container.webkitRequestFullscreen) {
+        await container.webkitRequestFullscreen();
+        fsWorked = true;
+      } else if ((video as any)?.requestFullscreen) {
+        await (video as any).requestFullscreen({ navigationUI: "hide" });
+        fsWorked = true;
+      } else if ((video as any)?.webkitRequestFullscreen) {
+        await (video as any).webkitRequestFullscreen();
+        fsWorked = true;
+      } else if ((video as HTMLVideoElement & { webkitEnterFullscreen?: () => void })?.webkitEnterFullscreen) {
+        (video as any).webkitEnterFullscreen();
+        fsWorked = true;
       }
     } catch {}
+
+    if (fsWorked) {
+      lockLandscape();
+      setFsOverride(false);
+    } else {
+      // All native methods failed — force our own fixed overlay
+      setFsOverride((prev) => !prev);
+    }
     armHide();
-  }, [armHide, isMobileDevice]);
+  }, [armHide]);
 
   // ---- MOBILE GESTURES (fullscreen only) ----
   useEffect(() => {
@@ -509,8 +535,11 @@ export default function Player({ channel }: PlayerProps) {
   const containerClass = cn(
     "group/player relative w-full overflow-hidden bg-black transition-[border-radius,box-shadow] duration-300",
     presentationFullscreen
-      ? // Fullscreen: cover the entire viewport, no border, no rounding
-        "fixed inset-0 z-[2147483646] h-[100dvh] w-[100dvw] rounded-none border-0 shadow-none"
+      ? // Fullscreen: cover the entire viewport with multiple fallback
+        // units. 100dvh/dvw are ideal, 100vh/vw cover older browsers,
+        // and env(safe-area-*) handles notched devices. The z-[2147483646]
+        // ensures it sits above everything. No border, no rounding, no shadow.
+        "fixed inset-0 z-[2147483646] h-[100dvh] h-[100vh] w-[100dvw] w-[100vw] rounded-none border-0 shadow-none"
       : // Inline: rounded card with subtle border
         "mx-auto rounded-2xl border border-white/10 aspect-video max-h-[80vh] shadow-2xl shadow-violet-900/10"
   );
@@ -842,10 +871,16 @@ export default function Player({ channel }: PlayerProps) {
                 </svg>
               )}
             </button>
-            <div className="relative hidden h-1 w-0 overflow-hidden rounded-full bg-white/15 transition-all duration-300 group-hover/vol:w-24 sm:block">
+            <div
+              className="relative hidden h-1 w-0 overflow-hidden rounded-full transition-all duration-300 group-hover/vol:w-24 sm:block"
+              style={{ backgroundColor: "#1f2120" }}
+            >
               <div
-                className="h-full rounded-full bg-white transition-all duration-150"
-                style={{ width: `${(muted ? 0 : volume) * 100}%` }}
+                className="h-full rounded-full transition-all duration-150"
+                style={{
+                  width: `${(muted ? 0 : volume) * 100}%`,
+                  backgroundColor: "#332a4f",
+                }}
               />
               <input
                 type="range"

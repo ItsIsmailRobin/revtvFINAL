@@ -97,16 +97,39 @@ export default function App() {
     }
   };
 
+  // Background refresh: updates the channel list silently without
+  // showing a loading state or interrupting the current playback.
+  const refreshPlaylist = async () => {
+    try {
+      const res = await fetch(PLAYLIST_URL, { cache: "no-store" });
+      if (!res.ok) return;
+      const text = await res.text();
+      const parsed = parseM3U(text);
+      if (parsed.length === 0) return;
+
+      // Preserve the currently playing channel by matching on URL
+      const active = activeChannel;
+      const same = active ? parsed.find((p) => p.url === active.url) : null;
+      if (same) {
+        // Keep the same channel object identity so HLS doesn't remount
+        activeChannel && Object.assign(activeChannel, same);
+      }
+      setChannels(parsed);
+    } catch {
+      // silently ignore background refresh errors
+    }
+  };
+
   useEffect(() => {
-    // Initial fetch + auto-refresh every 5 minutes (before 10 min, so the
-    // playlist stays fresh)
+    // Initial full fetch (shows loading spinner)
     fetchPlaylist();
-    const t = setInterval(fetchPlaylist, 5 * 60 * 1000);
+    // Auto-refresh every 5 minutes using the silent background method
+    // so current playback is never interrupted.
+    const t = setInterval(refreshPlaylist, 5 * 60 * 1000);
 
     // Hidden manual refresh: listen for the custom event dispatched by
-    // the "Live Playlist" indicator in the Header. This lets the user
-    // force a refresh without exposing a visible button.
-    const onRefresh = () => fetchPlaylist();
+    // the "Live Playlist" indicator in the Header.
+    const onRefresh = () => refreshPlaylist();
     window.addEventListener("revtv:refresh-playlist", onRefresh);
 
     return () => {
