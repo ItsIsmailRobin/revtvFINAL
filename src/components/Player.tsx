@@ -12,6 +12,11 @@ import { cn } from "../utils/cn";
 
 interface PlayerProps {
   channel: Channel | null;
+  /** When true, the video will autoplay (the user has visited before
+   *  and is revisiting — the site remembers this via localStorage).
+   *  When false (first visit), the video loads the first frame but
+   *  doesn't autoplay. */
+  shouldAutoplay?: boolean;
 }
 
 interface GestureState {
