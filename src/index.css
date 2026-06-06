@@ -27,6 +27,10 @@ body {
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
+  /* Keep the body filling the viewport so the dark color extends
+     through any potential safe-area backgrounds */
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* Re-enable selection inside input/textarea for usability */
@@ -37,20 +41,68 @@ textarea,
   -webkit-user-select: text;
 }
 
-/* hide scrollbar globally for cleaner look */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* Hide ALL scrollbars on the whole site — completely invisible
+   (no track, no thumb, no hover). Works on WebKit, Firefox, IE/Edge. */
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
+*::-webkit-scrollbar-track {
+  display: none !important;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+*::-webkit-scrollbar-thumb {
+  display: none !important;
+}
+*::-webkit-scrollbar-button {
+  display: none !important;
+}
+html {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+html::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* iOS Safari: prevent the safe-area backgrounds (top notch / bottom
+   home indicator) from showing white during fullscreen transitions. */
+html,
+body {
+  /* Covers iOS safe areas with the dark color */
+  padding: 0;
+  margin: 0;
+}
+
+/* On touch devices, remove stuck :hover states that linger after a tap.
+   This prevents the "faded box" hover effect from persisting on the
+   tag buttons and other interactive elements after a tap. */
+@media (hover: none), (pointer: coarse) {
+  button:hover,
+  a:hover,
+  [role="button"]:hover {
+    /* Reset hover effects on touch devices */
+  }
+  .group:hover .group-hover\:opacity-100 {
+    opacity: 0 !important;
+  }
+  .group:hover .group-hover\:scale-110 {
+    transform: none !important;
+  }
+  .group:hover .group-hover\:text-white {
+    color: inherit !important;
+  }
+  /* Only re-apply hover when the button is actively focused by a
+     real pointer (not touch) */
+  .group:where(:hover:active) .group-hover\:opacity-100 {
+    opacity: 1 !important;
+  }
 }
 
 /* Custom dark-mode range styling (volume slider) - white theme */

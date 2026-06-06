@@ -54,13 +54,76 @@ export default function Player({ channel }: PlayerProps) {
   const [controlsVisible, setControlsVisible] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // True for a short moment after the user toggles fullscreen. Used to
+  // show a loading overlay during the brief black-frame period on
+  // Android before the native fullscreen player takes over.
+  const [fsTransitioning, setFsTransitioning] = useState(false);
   const [gestureLevel, setGestureLevel] = useState<{
     type: "volume" | "brightness" | null;
     value: number;
     visible: boolean;
   }>({ type: null, value: 0, visible: false });
 
+  // Aspect ratio modes: "contain" (default letterbox), "cover" (fill,
+  // may crop), "fill" (stretch to fill, no aspect ratio preservation),
+  // "native" (use video's intrinsic size).
+  type AspectMode = "contain" | "cover" | "fill" | "native";
+  const [aspectMode, setAspectMode] = useState<AspectMode>("contain");
+
+  // Status indicator — shows current volume / aspect ratio briefly
+  // when the user changes them via keyboard, then fades out after 3s.
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [statusVisible, setStatusVisible] = useState(false);
+  const statusTimerRef = useRef<number | null>(null);
+
+  const showStatus = useCallback((msg: string) => {
+    setStatusMessage(msg);
+    setStatusVisible(true);
+    if (statusTimerRef.current) window.clearTimeout(statusTimerRef.current);
+    statusTimerRef.current = window.setTimeout(() => {
+      setStatusVisible(false);
+    }, 3000);
+  }, []);
+
   const presentationFullscreen = isFullscreen || fsOverride;
+
+  // Human-readable aspect label
+  const aspectLabel = useCallback(
+    (mode: AspectMode): string => {
+      if (mode === "contain") return "Fit";
+      if (mode === "cover") return "Fill";
+      if (mode === "fill") return "Stretch";
+      return "Native";
+    },
+    []
+  );
+
+  // Cycle through aspect modes: contain → cover → fill → native → contain
+  const cycleAspect = useCallback(() => {
+    setAspectMode((prev) => {
+      const next: AspectMode =
+        prev === "contain"
+          ? "cover"
+          : prev === "cover"
+          ? "fill"
+          : prev === "fill"
+          ? "native"
+          : "contain";
+      showStatus(`Aspect: ${aspectLabel(next)}`);
+      return next;
+    });
+  }, [aspectLabel, showStatus]);
+
+  // Show volume status when it changes (e.g. via keyboard)
+  useEffect(() => {
+    if (!channel) return;
+    showStatus(
+      muted || volume === 0
+        ? "Muted"
+        : `Volume: ${Math.round(volume * 100)}%`
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [volume, muted]);
 
   // ---- HLS attach / detach ----
   useEffect(() => {
@@ -183,13 +246,34 @@ export default function Player({ channel }: PlayerProps) {
     document.addEventListener("webkitfullscreenchange", onChange as any);
     window.addEventListener("resize", detectMobile);
 
-    // iOS fires these on the <video> element when webkitEnterFullscreen is used
+    // iOS / Android fires these on the <video> element when the native
+    // fullscreen player enters/exits. We sync our React state and clean
+    // up the controls attribute (we add it for the fullscreen call,
+    // remove it when returning to the inline player).
     const video = videoRef.current as (HTMLVideoElement & {
       webkitbeginfullscreen?: () => void;
       webkitendfullscreen?: () => void;
     }) | null;
-    const onBegin = () => setIsFullscreen(true);
-    const onEnd = () => setIsFullscreen(false);
+    const onBegin = () => {
+      setIsFullscreen(true);
+      setFsOverride(false);
+    };
+    const onEnd = () => {
+      setIsFullscreen(false);
+      // Clean up: remove the controls attribute we added for the
+      // fullscreen call, so the inline player has no native controls
+      // overlapping with our custom UI.
+      try {
+        if (video && video.hasAttribute("controls")) {
+          video.removeAttribute("controls");
+        }
+      } catch {}
+      // Unlock orientation if we locked it
+      try {
+        const so = (screen as any).orientation;
+        if (so && typeof so.unlock === "function") so.unlock();
+      } catch {}
+    };
     if (video) {
       video.addEventListener("webkitbeginfullscreen", onBegin as any);
       video.addEventListener("webkitendfullscreen", onEnd as any);
@@ -246,7 +330,7 @@ export default function Player({ channel }: PlayerProps) {
     setControlsVisible(true);
     hideTimerRef.current = window.setTimeout(() => {
       if (playing) setControlsVisible(false);
-    }, 3200);
+    }, 5000);
   }, [playing]);
 
   useEffect(() => {
@@ -292,41 +376,27 @@ export default function Player({ channel }: PlayerProps) {
       webkitExitFullscreen?: () => Promise<void>;
     };
 
-    // Detect iOS (Safari / WebKit) — it has special fullscreen handling
+    // Detect iOS — it has special fullscreen handling
     const isIOS =
       /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
       (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
 
-    // Helper: lock orientation to landscape
-    const lockLandscape = () => {
-      try {
-        const so = (screen as any).orientation;
-        if (so && typeof so.lock === "function") {
-          so.lock("landscape").catch(() => {});
-        }
-      } catch {}
-    };
-
-    // Helper: unlock orientation
-    const unlockOrientation = () => {
-      try {
-        const so = (screen as any).orientation;
-        if (so && typeof so.unlock === "function") {
-          so.unlock();
-        }
-      } catch {}
-    };
-
-    // ---- iOS: use webkitEnterFullscreen on the <video> element ----
-    // This is the ONLY way to get true fullscreen (no URL bar, no browser
-    // chrome) on iOS. The browser takes over the video element with its
-    // own native fullscreen player. Must be called from a user gesture.
-    if (isIOS && video) {
+    // ---- iOS: use webkitEnterFullscreen on the <video> element.
+    // This is iOS Safari's ONLY reliable fullscreen path — the standard
+    // Fullscreen API only works on iframes/regular elements, and iOS
+    // forces the native video player. This gives true fullscreen with
+    // no URL bar, no browser chrome, and proper iOS-style controls.
+    if (isMobileDevice && isIOS && video) {
       const v = video as HTMLVideoElement & {
         webkitEnterFullscreen?: () => void;
         webkitExitFullscreen?: () => void;
         webkitDisplayingFullscreen?: boolean;
       };
+      // iOS requires the controls attribute for webkitEnterFullscreen
+      const hadControls = v.hasAttribute("controls");
+      if (!hadControls) v.setAttribute("controls", "");
+      v.setAttribute("playsinline", "");
+
       try {
         if (v.webkitDisplayingFullscreen) {
           v.webkitExitFullscreen?.();
@@ -334,6 +404,95 @@ export default function Player({ channel }: PlayerProps) {
           v.webkitEnterFullscreen?.();
         }
       } catch {}
+      // Clean up controls after the native player has had time to
+      // capture the attribute
+      if (!hadControls) {
+        window.setTimeout(() => {
+          try {
+            v.removeAttribute("controls");
+          } catch {}
+        }, 300);
+      }
+      armHide();
+      return;
+    }
+
+    // ---- Android mobile: use the standard Fullscreen API on the
+    // container. This keeps OUR custom UI and 5-second auto-hide timer
+    // visible, with the aspect ratio button, play/pause, volume, swipe
+    // gestures, and everything else. The native player
+    // (webKitEnterFullscreen) is NOT used because it replaces the entire
+    // <video> with a 10-second-controls native player and hides our UI.
+    //
+    // Must be called from a user gesture.
+    if (isMobileDevice && video) {
+      const v = video as HTMLVideoElement & {
+        webkitEnterFullscreen?: () => void;
+        webkitExitFullscreen?: () => void;
+        webkitDisplayingFullscreen?: boolean;
+      };
+      // Ensure the video has playsinline for iOS inline playback
+      v.setAttribute("playsinline", "");
+
+      // Show a transition overlay so the user doesn't see a black
+      // flash on Android while the native fullscreen player loads.
+      setFsTransitioning(true);
+      window.setTimeout(() => setFsTransitioning(false), 800);
+
+      // Detect if we're in any kind of fullscreen
+      const inContainerFs = !!(
+        doc.fullscreenElement === container ||
+        doc.webkitFullscreenElement === container
+      );
+      const inVideoFs = !!(
+        doc.fullscreenElement === video ||
+        doc.webkitFullscreenElement === video
+      );
+      const isInFs = inContainerFs || inVideoFs;
+
+      if (isInFs) {
+        // Exit: use the standard API
+        try {
+          if (doc.exitFullscreen) await doc.exitFullscreen();
+          else if (doc.webkitExitFullscreen) await doc.webkitExitFullscreen();
+        } catch {}
+        // Unlock orientation
+        try {
+          const so = (screen as any).orientation;
+          if (so && typeof so.unlock === "function") so.unlock();
+        } catch {}
+      } else {
+        // Enter: use the standard Fullscreen API on the container.
+        // This keeps our custom UI visible on top of the video.
+        let entered = false;
+        try {
+          if (container.requestFullscreen) {
+            await container.requestFullscreen({ navigationUI: "hide" });
+            entered = true;
+          } else if (container.webkitRequestFullscreen) {
+            await container.webkitRequestFullscreen();
+            entered = true;
+          }
+        } catch {}
+        // Fallback: try the video element itself
+        if (!entered) {
+          try {
+            if ((video as any).requestFullscreen) {
+              await (video as any).requestFullscreen({ navigationUI: "hide" });
+              entered = true;
+            }
+          } catch {}
+        }
+        // Best-effort landscape lock on mobile
+        if (entered) {
+          try {
+            const so = (screen as any).orientation;
+            if (so && typeof so.lock === "function") {
+              so.lock("landscape").catch(() => {});
+            }
+          } catch {}
+        }
+      }
       armHide();
       return;
     }
@@ -355,12 +514,13 @@ export default function Player({ channel }: PlayerProps) {
         if (doc.exitFullscreen) await doc.exitFullscreen();
         else if (doc.webkitExitFullscreen) await doc.webkitExitFullscreen();
       } catch {}
-      unlockOrientation();
       setFsOverride(false);
       armHide();
       return;
     }
 
+    // ---- Desktop: use the standard Fullscreen API on the container.
+    // This keeps our custom UI and 5-second auto-hide timer visible.
     let fsWorked = false;
     try {
       if (container.requestFullscreen) {
@@ -375,14 +535,10 @@ export default function Player({ channel }: PlayerProps) {
       } else if ((video as any)?.webkitRequestFullscreen) {
         await (video as any).webkitRequestFullscreen();
         fsWorked = true;
-      } else if ((video as HTMLVideoElement & { webkitEnterFullscreen?: () => void })?.webkitEnterFullscreen) {
-        (video as any).webkitEnterFullscreen();
-        fsWorked = true;
       }
     } catch {}
 
     if (fsWorked) {
-      lockLandscape();
       setFsOverride(false);
     } else {
       // All native methods failed — force our own fixed overlay
@@ -478,7 +634,12 @@ export default function Player({ channel }: PlayerProps) {
   }, [brightness, volume, isMobileDevice, presentationFullscreen, changeVolume]);
 
   // ---- Keyboard shortcuts (desktop only) ----
-  // SPACE: play/pause, M: mute/unmute, F: fullscreen toggle
+  // Keyboard shortcuts (desktop only):
+  //   SPACE        — play/pause
+  //   M            — mute/unmute
+  //   F            — fullscreen toggle
+  //   ArrowUp      — volume up
+  //   ArrowDown    — volume down
   // Only active when the player is mounted and there's a channel.
   useEffect(() => {
     if (!channel) return;
@@ -506,14 +667,28 @@ export default function Player({ channel }: PlayerProps) {
       } else if (key === "f") {
         e.preventDefault();
         toggleFullscreen();
+      } else if (key === "c") {
+        // Cycle aspect ratio (contain → cover → fill → native)
+        e.preventDefault();
+        cycleAspect();
+      } else if (key === "arrowup") {
+        // Volume up — increments by 5% per press, unmutes if muted
+        e.preventDefault();
+        setMuted(false);
+        setVolume((prev) => Math.min(1, Math.round((prev + 0.05) * 100) / 100));
+      } else if (key === "arrowdown") {
+        // Volume down — decrements by 5% per press, mutes when 0
+        e.preventDefault();
+        setVolume((prev) => {
+          const next = Math.max(0, Math.round((prev - 0.05) * 100) / 100);
+          if (next === 0) setMuted(true);
+          return next;
+        });
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [channel, togglePlay, toggleMute, toggleFullscreen]);
-
-  // Touch event handlers on container (used as React fallback - mostly empty)
-  const noop = () => {};
 
   const onVideoClick = (e: ReactMouseEvent) => {
     if (isSwiping.current) return;
@@ -553,7 +728,16 @@ export default function Player({ channel }: PlayerProps) {
       ref={containerRef}
       onMouseMove={armHide}
       onMouseLeave={() => playing && setControlsVisible(false)}
-      onTouchStart={noop}
+      // Show controls on any touch on mobile (anywhere in the player).
+      // The touch then re-hides after 5s via armHide.
+      onTouchStart={(e) => {
+        if (!isMobileDevice) return;
+        // Don't show controls on tap of the gesture layer (the video area
+        // itself). Tap on controls is handled by their own onClick.
+        const target = e.target as HTMLElement;
+        if (target.closest("[data-player-control]")) return;
+        armHide();
+      }}
       className={containerClass}
       style={containerStyle}
     >
@@ -565,8 +749,21 @@ export default function Player({ channel }: PlayerProps) {
             onDoubleClick={onVideoDoubleClick}
             className="h-full w-full cursor-pointer"
             playsInline
+            // @ts-ignore - webkit-playsinline is iOS-specific
+            webkit-playsinline="true"
             autoPlay
             muted={muted}
+            style={{
+              objectFit:
+                aspectMode === "contain"
+                  ? "contain"
+                  : aspectMode === "cover"
+                  ? "cover"
+                  : aspectMode === "fill"
+                  ? "fill"
+                  : "none", // "native" — use intrinsic size, may show black bars
+              transition: "object-fit 300ms ease",
+            }}
           />
           {/* On mobile in fullscreen, a transparent gesture layer captures taps
               so the native <video> element doesn't steal them. The center
@@ -612,11 +809,91 @@ export default function Player({ channel }: PlayerProps) {
         </div>
       )}
 
+      {/* Fullscreen-transition overlay — covers the brief black flash
+          on Android between exiting the inline player and the native
+          fullscreen player taking over. */}
+      {fsTransitioning && (
+        <div
+          className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/85 backdrop-blur-md transition-opacity duration-200"
+          aria-hidden
+        >
+          <div className="flex flex-col items-center gap-3">
+            <div className="relative h-10 w-10">
+              <div
+                className="absolute inset-0 animate-spin rounded-full border-2 border-transparent"
+                style={{ borderTopColor: "rgba(255,255,255,0.9)" }}
+              />
+              <div
+                className="absolute inset-1 animate-spin rounded-full border-2 border-transparent"
+                style={{
+                  borderTopColor: "rgba(255,255,255,0.5)",
+                  animationDirection: "reverse",
+                  animationDuration: "1.2s",
+                }}
+              />
+            </div>
+            <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-white/70">
+              Entering fullscreen
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Error */}
       {error && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur">
           <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-5 py-3 text-sm text-red-200">
             {error}
+          </div>
+        </div>
+      )}
+
+      {/* Status indicator — shows current volume / aspect ratio briefly
+          when changed via keyboard (C, ArrowUp, ArrowDown), then fades
+          out after 3 seconds. Sits at top-center of the player. */}
+      {statusMessage && (
+        <div
+          className="pointer-events-none absolute inset-x-0 top-6 z-30 flex justify-center transition-opacity duration-500 sm:top-8"
+          style={{ opacity: statusVisible ? 1 : 0 }}
+          aria-hidden={!statusVisible}
+        >
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/60 px-4 py-1.5 backdrop-blur-xl">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="rgba(255,255,255,0.85)"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              {statusMessage.startsWith("Volume") ? (
+                <>
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                </>
+              ) : statusMessage === "Muted" ? (
+                <>
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <line x1="23" y1="9" x2="17" y2="15" />
+                  <line x1="17" y1="9" x2="23" y2="15" />
+                </>
+              ) : (
+                /* Aspect ratio icon */
+                <>
+                  <path d="M3 8V5a2 2 0 0 1 2-2h3" />
+                  <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+                  <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+                  <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
+                  <rect x="9" y="9" width="6" height="6" rx="1" />
+                </>
+              )}
+            </svg>
+            <span className="text-[11px] font-semibold uppercase tracking-widest text-white/90">
+              {statusMessage}
+            </span>
           </div>
         </div>
       )}
@@ -721,29 +998,6 @@ export default function Player({ channel }: PlayerProps) {
               </>
             )}
           </div>
-          {presentationFullscreen && (
-            <button
-              onClick={toggleFullscreen}
-              className="pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-black/50 text-white/80 backdrop-blur-md transition-all duration-300 hover:scale-110 hover:border-white/30 hover:bg-white/10 hover:text-white active:scale-95"
-              aria-label="Exit fullscreen"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M8 3v3a2 2 0 0 1-2 2H3" />
-                <path d="M21 8h-3a2 2 0 0 1-2-2V3" />
-                <path d="M3 16h3a2 2 0 0 1 2 2v3" />
-                <path d="M16 21v-3a2 2 0 0 1 2-2h3" />
-              </svg>
-            </button>
-          )}
         </div>
       </div>
 
@@ -780,7 +1034,10 @@ export default function Player({ channel }: PlayerProps) {
             : "opacity-0 translate-y-2"
         )}
       >
-        <div className="pointer-events-auto flex items-center gap-2 sm:gap-3">
+        <div
+          className="pointer-events-auto flex items-center gap-2 sm:gap-3"
+          data-player-control
+        >
           {/* Play/pause */}
           <button
             onClick={togglePlay}
@@ -871,8 +1128,11 @@ export default function Player({ channel }: PlayerProps) {
                 </svg>
               )}
             </button>
+            {/* Volume slider — hidden on mobile, only visible on hover
+                on desktop (lg+). Mobile uses gesture-based volume via
+                the swipe-up/down controls. */}
             <div
-              className="relative hidden h-1 w-0 overflow-hidden rounded-full transition-all duration-300 group-hover/vol:w-24 sm:block"
+              className="relative hidden h-1 w-0 overflow-hidden rounded-full transition-all duration-300 group-hover/vol:w-24 lg:block"
               style={{ backgroundColor: "rgba(255,255,255,0.18)" }}
             >
               <div
@@ -904,6 +1164,44 @@ export default function Player({ channel }: PlayerProps) {
                 </span>
               </div>
             )}
+
+            {/* Aspect ratio / crop / fill button.
+                Glass effect, available on PC and Android.
+                Cycles through: contain → cover (fill to screen, crops) →
+                fill (stretch to screen) → native. Works in fullscreen too. */}
+            <button
+              onClick={cycleAspect}
+              aria-label={`Aspect ratio: ${aspectMode}`}
+              title={`Aspect: ${aspectMode} (click to change)`}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white backdrop-blur-md transition-all duration-300 hover:scale-110 hover:border-white/30 hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                {/* Crop / expand icon - two arrows pointing in/out */}
+                <path d="M3 8V5a2 2 0 0 1 2-2h3" />
+                <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+                <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+                <path d="M21 16v3a2 2 0 0 1-2 2h-3" />
+                {/* Inner rectangle showing the current mode */}
+                <rect
+                  x={aspectMode === "cover" ? 7 : 9}
+                  y={aspectMode === "cover" ? 5 : 9}
+                  width={aspectMode === "cover" ? 10 : 6}
+                  height={aspectMode === "cover" ? 14 : 6}
+                  rx="1"
+                  strokeOpacity={aspectMode === "native" ? 0.4 : 0.9}
+                  strokeDasharray={aspectMode === "fill" ? "2 2" : ""}
+                />
+              </svg>
+            </button>
 
             {/* Fullscreen */}
             <button
@@ -948,12 +1246,49 @@ export default function Player({ channel }: PlayerProps) {
           </div>
         </div>
 
-        {/* Live indicator strip */}
+        {/* lucide lucide-zap (with the dot animation baked in)
+            + Revenger. Format: ⚡(anim) Revenger. Color #34bf80. */}
         <div className="mt-2.5 flex items-center gap-2 sm:mt-3">
-          <div className="flex items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-red-300">
-              Live Stream
+          <div
+            className="flex items-center gap-1.5 rounded-full border px-2 py-0.5"
+            style={{
+              borderColor: "rgba(52,191,128,0.25)",
+              backgroundColor: "rgba(52,191,128,0.10)",
+            }}
+          >
+            {/* Zap icon with a pulsing dot inside it (combined animation) */}
+            <span className="relative inline-flex h-3 w-3 items-center justify-center">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#34bf80"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="lucide lucide-zap"
+              >
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+              {/* Pulsing green dot overlaid on the zap icon */}
+              <span
+                className="absolute h-1 w-1 rounded-full"
+                style={{
+                  backgroundColor: "#34bf80",
+                  top: "50%",
+                  left: "50%",
+                  transform: "translate(-50%, -50%)",
+                  boxShadow: "0 0 4px #34bf80",
+                  animation: "zapDotPulse 1.2s ease-in-out infinite",
+                }}
+              />
+            </span>
+            <span
+              className="text-[10px] font-semibold uppercase tracking-widest"
+              style={{ color: "#34bf80" }}
+            >
+              Revenger
             </span>
           </div>
         </div>
@@ -964,6 +1299,12 @@ export default function Player({ channel }: PlayerProps) {
           0% { opacity: 0; transform: scale(0.7); }
           60% { opacity: 1; transform: scale(1.08); }
           100% { opacity: 1; transform: scale(1); }
+        }
+        /* Zap dot pulse — the green dot overlaid on the zap icon
+           pulses with a soft scale + opacity flicker. */
+        @keyframes zapDotPulse {
+          0%, 100% { opacity: 0.4; transform: translate(-50%, -50%) scale(0.7); }
+          50%      { opacity: 1;   transform: translate(-50%, -50%) scale(1.3); }
         }
         @keyframes gesturePop {
           0% { opacity: 0; transform: scale(0.92); }

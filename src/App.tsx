@@ -168,7 +168,15 @@ export default function App() {
 
           {/* Sidebar: category + channel list (desktop only) */}
           <aside className="hidden lg:block">
-            <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-md shadow-none">
+            <div
+              className="rounded-2xl border shadow-none"
+              style={{
+                borderColor: "rgba(255,255,255,0.08)",
+                backgroundColor: "rgba(255,255,255,0.03)",
+                backdropFilter: "blur(20px)",
+                WebkitBackdropFilter: "blur(20px)",
+              }}
+            >
               <CategoryHeader
                 groupsLength={groups.length}
                 isOpen={categoriesOpen}
@@ -219,7 +227,15 @@ export default function App() {
 
         {/* Mobile / tablet: tags + channel list below player */}
         <section className="mt-4 sm:mt-6 lg:hidden">
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-md shadow-none">
+          <div
+            className="rounded-2xl border shadow-none"
+            style={{
+              borderColor: "rgba(255,255,255,0.08)",
+              backgroundColor: "rgba(255,255,255,0.03)",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+            }}
+          >
             <CategoryHeader
               groupsLength={groups.length}
               isOpen={categoriesOpen}

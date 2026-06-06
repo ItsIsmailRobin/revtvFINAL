@@ -17,6 +17,13 @@ export default function TagBar({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
+  // State-based hover tracking. On iOS Safari, :hover styles get
+  // "stuck" after a tap, so we drive the visual hover effect with
+  // React state instead of Tailwind's group-hover pseudo-class.
+  const [hoveredTag, setHoveredTag] = useState<string | null>(null);
+  const [hoveredArrow, setHoveredArrow] = useState<"left" | "right" | null>(
+    null
+  );
   const canScroll = tags.length > 1;
 
   useEffect(() => {
@@ -35,6 +42,14 @@ export default function TagBar({
     };
   }, [tags.length]);
 
+  // When the active tag changes, clear any lingering hover state so
+  // the previously-hovered tag fades out cleanly (important on iPhone
+  // where :hover styles otherwise stay stuck).
+  useEffect(() => {
+    setHoveredTag(null);
+    setHoveredArrow(null);
+  }, [activeTag]);
+
   const scroll = (dir: 1 | -1) => {
     if (!scrollRef.current) return;
     scrollRef.current.scrollBy({
@@ -46,21 +61,40 @@ export default function TagBar({
   return (
     <div className="relative w-full">
       <div className="flex items-center py-2">
-        {/* < arrow slot - hidden when hideArrows is true (dropdown open) */}
+        {/* < arrow slot */}
         {!hideArrows && (
         <div className="relative flex shrink-0 items-center justify-center pl-2 pr-2">
           <button
             onClick={() => canLeft && scroll(-1)}
             aria-label="Previous tags"
+            onTouchStart={() => setHoveredArrow("left")}
+            onTouchEnd={() => setHoveredArrow(null)}
+            onTouchCancel={() => setHoveredArrow(null)}
+            onMouseEnter={() => setHoveredArrow("left")}
+            onMouseLeave={() => setHoveredArrow(null)}
             className={cn(
-              "group flex h-7 w-7 items-center justify-center rounded-full bg-white/[0.04] text-white/70 backdrop-blur-2xl transition-all duration-300 active:scale-90",
+              "flex h-7 w-7 items-center justify-center rounded-full bg-white/[0.04] text-white/70 backdrop-blur-2xl transition-all duration-300 active:scale-90",
               canScroll
                 ? canLeft
-                  ? "opacity-100 hover:scale-110 hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                  ? "opacity-100 cursor-pointer"
                   : "opacity-25 cursor-not-allowed"
                 : "opacity-20 cursor-not-allowed"
             )}
-            style={{ boxShadow: "none" }}
+            style={{
+              transform:
+                canScroll && canLeft && hoveredArrow === "left"
+                  ? "scale(1.10)"
+                  : "scale(1)",
+              backgroundColor:
+                canScroll && canLeft && hoveredArrow === "left"
+                  ? "rgba(255,255,255,0.08)"
+                  : "rgba(255,255,255,0.04)",
+              color:
+                canScroll && canLeft && hoveredArrow === "left"
+                  ? "rgba(255,255,255,1)"
+                  : "rgba(255,255,255,0.7)",
+              boxShadow: "none",
+            }}
           >
             <span
               className="pointer-events-none absolute -inset-px rounded-full"
@@ -84,7 +118,11 @@ export default function TagBar({
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="relative transition-transform duration-300 group-hover:-translate-x-0.5"
+              className="relative transition-transform duration-300"
+              style={{
+                transform:
+                  hoveredArrow === "left" ? "translateX(-2px)" : "translateX(0)",
+              }}
             >
               <polyline points="15 18 9 12 15 6" />
             </svg>
@@ -92,8 +130,7 @@ export default function TagBar({
         </div>
         )}
 
-        {/* Scrollable tags area - the border fades on both sides.
-            The fade is created by a gradient mask on the scrollable container. */}
+        {/* Scrollable tags area - the border fades on both sides. */}
         <div
           className="relative min-w-0 flex-1 overflow-hidden"
           style={{
@@ -110,25 +147,50 @@ export default function TagBar({
           >
             {tags.map((tag, idx) => {
               const isActive = tag === activeTag;
+              // State-based hover: only true when the user is actively
+              // touching/hovering this specific tag. Clears on touch end
+              // and mouse leave so the effect fades out cleanly.
+              const isHovering = hoveredTag === tag;
               return (
                 <button
                   key={tag}
-                  onClick={() => onChange(tag)}
+                  onClick={() => {
+                    // After clicking, fade out the hover effect by
+                    // clearing the hovered state immediately. This
+                    // ensures a clean UI on iPhone where :hover styles
+                    // otherwise get stuck after a tap.
+                    setHoveredTag(null);
+                    onChange(tag);
+                  }}
+                  onTouchStart={() => setHoveredTag(tag)}
+                  onTouchEnd={() => setHoveredTag(null)}
+                  onTouchCancel={() => setHoveredTag(null)}
+                  onMouseEnter={() => setHoveredTag(tag)}
+                  onMouseLeave={() => setHoveredTag(null)}
                   style={{
                     animation: `tagEnter 360ms cubic-bezier(.4,0,.2,1) ${idx * 10}ms both`,
+                    color: isActive
+                      ? "#fff"
+                      : isHovering
+                      ? "#fff"
+                      : "rgba(255,255,255,0.65)",
+                    transform: isHovering && !isActive ? "scale(1.04)" : "scale(1)",
                   }}
                   className={cn(
-                    "group relative flex shrink-0 items-center whitespace-nowrap rounded-full px-3 py-1 text-[12px] font-medium transition-all duration-300",
-                    isActive
-                      ? "text-white"
-                      : "text-white/65 hover:scale-[1.04] hover:text-white active:scale-95"
+                    "relative flex shrink-0 items-center whitespace-nowrap rounded-full px-3 py-1 text-[12px] font-medium transition-all duration-300 active:scale-95"
                   )}
                 >
-                  {/* Animated gradient border for all tags (replaces box border) */}
+                  {/* Animated gradient border. Opacity is controlled by
+                      isHovering state instead of group-hover CSS so it's
+                      reliable on iOS Safari. */}
                   <span
                     className={cn(
                       "pointer-events-none absolute -inset-px rounded-full transition-opacity duration-300",
-                      isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                      isActive
+                        ? "opacity-100"
+                        : isHovering
+                        ? "opacity-100"
+                        : "opacity-0"
                     )}
                     style={{
                       background: isActive
@@ -142,13 +204,15 @@ export default function TagBar({
                       animation: "borderShine 6s linear infinite",
                     }}
                   />
-                  {/* Subtle glass fill for non-active tags, brighter for active */}
+                  {/* Subtle glass fill. Same state-based approach. */}
                   <span
                     className={cn(
                       "pointer-events-none absolute inset-0 rounded-full transition-opacity duration-300",
                       isActive
                         ? "bg-white/[0.10] opacity-100"
-                        : "bg-white/[0.04] opacity-0 group-hover:opacity-100"
+                        : isHovering
+                        ? "bg-white/[0.04] opacity-100"
+                        : "bg-white/[0.04] opacity-0"
                     )}
                   />
                   {/* Soft outer glow for active tag (replaces shadow) */}
@@ -170,21 +234,40 @@ export default function TagBar({
           </div>
         </div>
 
-        {/* > arrow slot - hidden when hideArrows is true (dropdown open) */}
+        {/* > arrow slot */}
         {!hideArrows && (
         <div className="relative flex shrink-0 items-center justify-center pl-2 pr-2">
           <button
             onClick={() => scroll(1)}
             aria-label="Next tags"
+            onTouchStart={() => setHoveredArrow("right")}
+            onTouchEnd={() => setHoveredArrow(null)}
+            onTouchCancel={() => setHoveredArrow(null)}
+            onMouseEnter={() => setHoveredArrow("right")}
+            onMouseLeave={() => setHoveredArrow(null)}
             className={cn(
-              "group flex h-7 w-7 items-center justify-center rounded-full bg-white/[0.04] text-white/70 backdrop-blur-2xl transition-all duration-300 active:scale-90",
+              "flex h-7 w-7 items-center justify-center rounded-full bg-white/[0.04] text-white/70 backdrop-blur-2xl transition-all duration-300 active:scale-90",
               canScroll
                 ? canRight
-                  ? "opacity-100 hover:scale-110 hover:bg-white/[0.08] hover:text-white cursor-pointer"
+                  ? "opacity-100 cursor-pointer"
                   : "opacity-25 cursor-not-allowed"
                 : "opacity-20 cursor-not-allowed"
             )}
-            style={{ boxShadow: "none" }}
+            style={{
+              transform:
+                canScroll && canRight && hoveredArrow === "right"
+                  ? "scale(1.10)"
+                  : "scale(1)",
+              backgroundColor:
+                canScroll && canRight && hoveredArrow === "right"
+                  ? "rgba(255,255,255,0.08)"
+                  : "rgba(255,255,255,0.04)",
+              color:
+                canScroll && canRight && hoveredArrow === "right"
+                  ? "rgba(255,255,255,1)"
+                  : "rgba(255,255,255,0.7)",
+              boxShadow: "none",
+            }}
           >
             <span
               className="pointer-events-none absolute -inset-px rounded-full"
@@ -208,7 +291,11 @@ export default function TagBar({
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="relative transition-transform duration-300 group-hover:translate-x-0.5"
+              className="relative transition-transform duration-300"
+              style={{
+                transform:
+                  hoveredArrow === "right" ? "translateX(2px)" : "translateX(0)",
+              }}
             >
               <polyline points="9 18 15 12 9 6" />
             </svg>

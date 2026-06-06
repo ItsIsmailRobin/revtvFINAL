@@ -25,14 +25,15 @@ export default function Footer() {
   }, []);
 
   return (
-    <footer className="flex flex-col items-center gap-1.5 px-2 pb-12 pt-10 text-center sm:gap-2 sm:px-0">
-      {/* Animated clock dot + TIME | HH:MM:SS AM/PM - smaller */}
+    <footer className="flex flex-col items-center gap-1 px-2 pb-10 pt-8 text-center sm:gap-1.5 sm:px-0">
+      {/* Animated clock dot + TIME | HH:MM:SS AM/PM
+          - compact pill, tight spacing, same font sizes. */}
       <div
-        className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 backdrop-blur-md"
+        className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 backdrop-blur-md"
         aria-label={`Time ${time} ${ampm}`}
       >
         {/* Animated clock dot - rotating ring + pulsing core */}
-        <span className="relative flex h-3 w-3 items-center justify-center">
+        <span className="relative flex h-3 w-3 shrink-0 items-center justify-center">
           <span
             className="absolute inset-0 rounded-full border border-white/30"
             style={{ animation: "dotSpin 6s linear infinite" }}
@@ -43,18 +44,18 @@ export default function Footer() {
           />
           <span className="absolute inset-[4px] rounded-full bg-white/95" />
         </span>
-        <span className="text-[9px] font-semibold uppercase tracking-[0.22em] text-white/55 sm:text-[10px]">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-white/55">
           TIME
         </span>
-        <span className="h-2 w-px bg-white/15" />
+        <span className="h-2.5 w-px bg-white/15" />
         <span
-          className="font-mono text-[11px] font-medium tabular-nums tracking-[0.06em] text-white/80 sm:text-xs"
+          className="font-mono text-[13px] font-medium tabular-nums tracking-normal text-white/80"
           style={{ fontVariantNumeric: "tabular-nums" }}
         >
           {time}
         </span>
         <span
-          className="ml-0.5 text-[9px] font-semibold uppercase tracking-widest text-white/55 sm:text-[10px]"
+          className="text-[11px] font-semibold uppercase tracking-normal text-white/55"
           aria-hidden
         >
           {ampm}
