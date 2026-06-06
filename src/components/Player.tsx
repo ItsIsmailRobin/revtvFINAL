@@ -28,7 +28,10 @@ interface GestureState {
   locked: boolean;
 }
 
-export default function Player({ channel }: PlayerProps) {
+export default function Player({
+  channel,
+  shouldAutoplay = false,
+}: PlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
