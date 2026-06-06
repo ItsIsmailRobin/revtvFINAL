@@ -30,7 +30,7 @@ interface GestureState {
 
 export default function Player({
   channel,
-  shouldAutoplay = false,
+  shouldAutoplay = true,
 }: PlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
