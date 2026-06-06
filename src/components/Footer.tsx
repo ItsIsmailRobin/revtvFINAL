@@ -32,17 +32,13 @@ export default function Footer() {
         className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 backdrop-blur-md"
         aria-label={`Time ${time} ${ampm}`}
       >
-        {/* Animated clock dot - rotating ring + pulsing core */}
+               {/* Animated clock dot — soft pulsing core (no outside ring) */}
         <span className="relative flex h-3 w-3 shrink-0 items-center justify-center">
           <span
-            className="absolute inset-0 rounded-full border border-white/30"
-            style={{ animation: "dotSpin 6s linear infinite" }}
-          />
-          <span
-            className="absolute inset-[2.5px] rounded-full bg-white/70"
+            className="absolute inset-0 rounded-full bg-white/85"
             style={{ animation: "dotPulse 1.4s ease-in-out infinite" }}
           />
-          <span className="absolute inset-[4px] rounded-full bg-white/95" />
+          <span className="absolute inset-[3px] rounded-full bg-white/95" />
         </span>
         <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-white/55">
           TIME
