@@ -74,7 +74,30 @@ export default function App() {
   const [activeTag, setActiveTag] = useState<string>("All");
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
-
+  // Track whether the user has explicitly selected a channel in this
+  // session. We only auto-play the first channel on the very first
+  // load (new visit or re-visit) — once the user has picked something,
+  // we don't override their choice on subsequent renders.
+  const hasUserSelectedRef = useRef(false);
+  // True only on the very first visit (or after the user explicitly
+  // clears site data). On new visits the first channel auto-plays;
+  // on return visits we still auto-play if the user hasn't interacted
+  // with the player in this session.
+  const [autoPlayOnLoad, setAutoPlayOnLoad] = useState(false);
+  // Mark this session as a "new visit" so the first channel auto-plays.
+  // Uses sessionStorage so it resets per browser session.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const isNewVisit = !window.sessionStorage.getItem("revtv:visited");
+      if (isNewVisit) {
+        window.sessionStorage.setItem("revtv:visited", "1");
+      }
+      setAutoPlayOnLoad(isNewVisit);
+    } catch {
+      setAutoPlayOnLoad(true);
+    }
+  }, []);
   const fetchPlaylist = async () => {
     try {
       setLoading(true);
