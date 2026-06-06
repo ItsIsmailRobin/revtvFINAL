@@ -760,7 +760,7 @@ export default function Player({
             // @ts-ignore - webkit-playsinline is iOS-specific
             webkit-playsinline="true"
             autoPlay
-            muted={muted}
+            muted={false}
             style={{
               objectFit:
                 aspectMode === "contain"
