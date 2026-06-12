@@ -12,7 +12,7 @@ export default function Header() {
   };
 
   return (
-    <header className="relative z-20 flex items-center justify-between border-b border-white/5 bg-black/30 px-4 py-3 backdrop-blur-xl sm:px-8 sm:py-4">
+    <header className="relative z-20 flex items-center justify-between border-b border-white/5 bg-black/60 px-4 py-3 sm:px-8 sm:py-4">
       <button
         onClick={handleLogoClick}
         aria-label="RevTV - Go to homepage"

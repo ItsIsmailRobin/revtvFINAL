@@ -12,11 +12,8 @@ import { cn } from "../utils/cn";
 
 interface PlayerProps {
   channel: Channel | null;
-  /** When true, the video will autoplay (the user has visited before
-   *  and is revisiting — the site remembers this via localStorage).
-   *  When false (first visit), the video loads the first frame but
-   *  doesn't autoplay. */
-  shouldAutoplay?: boolean;
+  /** Called when a stream fails fatally — parent uses this to skip to next channel */
+  onStreamError?: (channel: Channel) => void;
 }
 
 interface GestureState {
@@ -30,7 +27,7 @@ interface GestureState {
 
 export default function Player({
   channel,
-  shouldAutoplay = true,
+  onStreamError,
 }: PlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -142,7 +139,17 @@ export default function Player({
     setLoading(true);
     setPlaying(false);
 
+    // Track recovery attempts to avoid infinite loops
+    let networkRetries = 0;
+    let mediaRetries = 0;
+    const MAX_RETRIES = 2;
+    // Skip timer: if stream doesn't start within 12s, consider it dead
+    const skipTimer = window.setTimeout(() => {
+      if (channel) onStreamError?.(channel);
+    }, 12000);
+
     const onPlaying = () => {
+      window.clearTimeout(skipTimer);
       setLoading(false);
       setPlaying(true);
     };
@@ -150,7 +157,8 @@ export default function Player({
     const onPause = () => setPlaying(false);
     const onError = () => {
       setLoading(false);
-      setError("Stream error. Please try another channel.");
+      // Native video error (non-HLS) — skip immediately
+      if (channel) onStreamError?.(channel);
     };
     video.addEventListener("playing", onPlaying);
     video.addEventListener("waiting", onWaiting);
@@ -168,41 +176,74 @@ export default function Player({
         startLevel: -1,
         capLevelToPlayerSize: true,
         abrEwmaDefaultEstimate: 500000,
-        fragLoadingMaxRetry: 6,
-        manifestLoadingMaxRetry: 4,
-        levelLoadingMaxRetry: 4,
+        // Fewer retries — fail faster so we can skip to next channel
+        fragLoadingMaxRetry: 2,
+        manifestLoadingMaxRetry: 2,
+        levelLoadingMaxRetry: 2,
         progressive: true,
       });
       hlsRef.current = hls;
       hls.loadSource(channel.url);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch(() => {});
+        // Autoplay with sound — browsers allow this when user interacted;
+        // if blocked, fall back to muted autoplay
+        video.muted = false;
+        video.volume = 1;
+        video.play().catch(() => {
+          // Autoplay with sound blocked — try muted, then unmute on interaction
+          video.muted = true;
+          video.play().catch(() => {});
+        });
       });
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              hls.startLoad();
+              if (networkRetries < MAX_RETRIES) {
+                networkRetries++;
+                hls.startLoad();
+              } else {
+                // Network failed after retries — skip to next channel
+                window.clearTimeout(skipTimer);
+                setLoading(false);
+                if (channel) onStreamError?.(channel);
+              }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              hls.recoverMediaError();
+              if (mediaRetries < MAX_RETRIES) {
+                mediaRetries++;
+                hls.recoverMediaError();
+              } else {
+                window.clearTimeout(skipTimer);
+                setLoading(false);
+                if (channel) onStreamError?.(channel);
+              }
               break;
             default:
-              setError("Cannot play this stream.");
+              window.clearTimeout(skipTimer);
               setLoading(false);
+              if (channel) onStreamError?.(channel);
           }
         }
       });
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      // Native HLS (Safari/iOS)
       video.src = channel.url;
-      video.play().catch(() => {});
+      video.muted = false;
+      video.volume = 1;
+      video.play().catch(() => {
+        video.muted = true;
+        video.play().catch(() => {});
+      });
     } else {
+      window.clearTimeout(skipTimer);
       setError("HLS not supported on this browser.");
       setLoading(false);
     }
 
     return () => {
+      window.clearTimeout(skipTimer);
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("pause", onPause);
@@ -759,8 +800,6 @@ export default function Player({
             playsInline
             // @ts-ignore - webkit-playsinline is iOS-specific
             webkit-playsinline="true"
-            autoPlay
-            muted={false}
             style={{
               objectFit:
                 aspectMode === "contain"
@@ -769,7 +808,7 @@ export default function Player({
                   ? "cover"
                   : aspectMode === "fill"
                   ? "fill"
-                  : "none", // "native" — use intrinsic size, may show black bars
+                  : "none",
               transition: "object-fit 300ms ease",
             }}
           />
@@ -807,7 +846,7 @@ export default function Player({
 
       {/* Loading */}
       {loading && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 ">
           <div className="flex flex-col items-center gap-3">
             <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/15 border-t-white/80" />
             <span className="text-xs font-medium uppercase tracking-widest text-white/60">
@@ -822,7 +861,7 @@ export default function Player({
           fullscreen player taking over. */}
       {fsTransitioning && (
         <div
-          className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/85 backdrop-blur-md transition-opacity duration-200"
+          className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/85  transition-opacity duration-200"
           aria-hidden
         >
           <div className="flex flex-col items-center gap-3">
@@ -849,7 +888,7 @@ export default function Player({
 
       {/* Error */}
       {error && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60 ">
           <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-5 py-3 text-sm text-red-200">
             {error}
           </div>
@@ -865,7 +904,7 @@ export default function Player({
           style={{ opacity: statusVisible ? 1 : 0 }}
           aria-hidden={!statusVisible}
         >
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/60 px-4 py-1.5 backdrop-blur-xl">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/60 px-4 py-1.5 ">
             <svg
               width="12"
               height="12"
@@ -910,7 +949,7 @@ export default function Player({
       {gestureLevel.visible && gestureLevel.type && (
         <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
           <div
-            className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-black/70 px-7 py-5 backdrop-blur-xl"
+            className="flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-black/70 px-7 py-5 "
             style={{
               animation: "gesturePop 220ms cubic-bezier(.4,0,.2,1)",
             }}
@@ -988,7 +1027,7 @@ export default function Player({
           <div className="min-w-0 flex-1">
             {channel && (
               <>
-                <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 backdrop-blur-md">
+                <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 ">
                   <span className="relative flex h-1.5 w-1.5">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
                     <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
@@ -1016,7 +1055,7 @@ export default function Player({
         >
           <button
             onClick={togglePlay}
-            className="pointer-events-auto flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md transition-transform duration-300 hover:scale-110 hover:bg-white/20 active:scale-95 sm:h-20 sm:w-20"
+            className="pointer-events-auto flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white  transition-transform duration-300 hover:scale-110 hover:bg-white/20 active:scale-95 sm:h-20 sm:w-20"
             style={{ animation: "playPop 280ms cubic-bezier(.34,1.56,.64,1) both" }}
             aria-label="Play"
           >
@@ -1049,7 +1088,7 @@ export default function Player({
           {/* Play/pause */}
           <button
             onClick={togglePlay}
-            className="group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white backdrop-blur-md transition-all duration-300 hover:scale-110 hover:border-white/30 hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
+            className="group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white  transition-all duration-300 hover:scale-110 hover:border-white/30 hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
             aria-label={playing ? "Pause" : "Play"}
           >
             <svg
@@ -1087,7 +1126,7 @@ export default function Player({
           <div className="group/vol flex items-center gap-1.5">
             <button
               onClick={toggleMute}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white backdrop-blur-md transition-all duration-300 hover:scale-110 hover:border-white/30 hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white  transition-all duration-300 hover:scale-110 hover:border-white/30 hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
               aria-label={muted ? "Unmute" : "Mute"}
             >
               {muted || volume === 0 ? (
@@ -1166,7 +1205,7 @@ export default function Player({
           <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
             {/* Channel badge / name on fullscreen */}
             {presentationFullscreen && channel && (
-              <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 backdrop-blur-md sm:flex">
+              <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5  sm:flex">
                 <span className="text-[10px] font-semibold uppercase tracking-widest text-white/70">
                   Now Playing
                 </span>
@@ -1181,7 +1220,7 @@ export default function Player({
               onClick={cycleAspect}
               aria-label={`Aspect ratio: ${aspectMode}`}
               title={`Aspect: ${aspectMode} (click to change)`}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white backdrop-blur-md transition-all duration-300 hover:scale-110 hover:border-white/30 hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white  transition-all duration-300 hover:scale-110 hover:border-white/30 hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
             >
               <svg
                 width="16"
@@ -1214,7 +1253,7 @@ export default function Player({
             {/* Fullscreen */}
             <button
               onClick={toggleFullscreen}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white backdrop-blur-md transition-all duration-300 hover:scale-110 hover:border-white/30 hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white  transition-all duration-300 hover:scale-110 hover:border-white/30 hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
               aria-label={presentationFullscreen ? "Exit fullscreen" : "Fullscreen"}
             >
               {presentationFullscreen ? (
