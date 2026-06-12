@@ -48,12 +48,10 @@ export function parseM3U(text: string): Channel[] {
         group: getAttr("group-title") || "Uncategorized",
         url: "",
       };
-    } else if (line.startsWith("#") || line.startsWith("http") === false) {
-      // not a url
-      if (!line.startsWith("#EXTM3U") && !line.startsWith("#EXTINF")) {
-        // could be a comment, skip
-      }
-    } else if (current && (line.startsWith("http://") || line.startsWith("https://"))) {
+    } else if (line.startsWith("#")) {
+      // comment / directive — skip
+    } else if (current && (line.startsWith("http://") || line.startsWith("https://") || line.startsWith("rtmp://") || line.startsWith("/"))) {
+      // Accept any stream URL: .m3u8, .ts, .mp4, rtmp, relative paths, etc.
       current.url = line;
       const ch = current as Channel;
       if (!isExcluded(ch.name, ch.group) && ch.name && ch.url) {

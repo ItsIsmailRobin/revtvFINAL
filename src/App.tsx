@@ -5,6 +5,7 @@ import TagBar from "./components/TagBar";
 import ChannelList from "./components/ChannelList";
 import Player from "./components/Player";
 import Footer from "./components/Footer";
+import FifaSchedule from "./components/FifaSchedule";
 import { parseM3U, getUniqueGroups, type Channel } from "./utils/parseM3U";
 
 const PLAYLIST_URL =
@@ -300,6 +301,9 @@ export default function App() {
             </button>
           </div>
         )}
+
+        {/* FIFA 2026 Schedule */}
+        <FifaSchedule />
 
         <Footer />
       </main>
