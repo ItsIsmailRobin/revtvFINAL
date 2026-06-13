@@ -165,7 +165,21 @@ export default function Player({
     video.addEventListener("pause", onPause);
     video.addEventListener("error", onError);
 
-    if (Hls.isSupported()) {
+    // Detect raw .ts stream — HLS.js handles these as MPEG-TS segments,
+    // but some raw .ts URLs are just direct video files that the browser
+    // can play natively without needing HLS.js at all.
+    const isTsStream = /\.ts(\?.*)?$/i.test(channel.url);
+
+    if (isTsStream) {
+      // Try native playback first for .ts files
+      video.src = channel.url;
+      video.muted = false;
+      video.volume = 1;
+      video.play().catch(() => {
+        video.muted = true;
+        video.play().catch(() => {});
+      });
+    } else if (Hls.isSupported()) {
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
