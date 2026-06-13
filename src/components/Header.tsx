@@ -49,7 +49,7 @@ export default function Header() {
 
         {/* Inline BD clock — no border, dot + HH:MM:SS AM/PM */}
         <div className="flex items-center gap-1.5 pl-1">
-          <span className="relative inline-flex h-2 w-2 items-center justify-center shrink-0">
+          <span className="relative inline-flex h-2 w-2 items-center justify-center shrink-0" style={{ marginLeft: "-3px" }}>
             <span
               className="absolute h-1.5 w-1.5 rounded-full"
               style={{
@@ -60,16 +60,13 @@ export default function Header() {
             />
           </span>
           <span
-            className="font-semibold tabular-nums"
+            className="flex items-baseline gap-1 font-semibold tabular-nums"
             style={{ fontSize: "15px", color: "#ffffff", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}
           >
-            {bdClock.time}
-          </span>
-          <span
-            className="font-semibold uppercase tracking-widest"
-            style={{ fontSize: "14px", color: "rgba(255,255,255,0.6)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight: 1 }}
-          >
-            {bdClock.ampm}
+            <span>{bdClock.time}</span>
+            <span className="uppercase tracking-widest" style={{ fontSize: "15px", color: "rgba(255,255,255,0.6)", lineHeight: 1 }}>
+              {bdClock.ampm}
+            </span>
           </span>
         </div>
       </div>

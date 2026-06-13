@@ -53,6 +53,15 @@ export default function App() {
   const channelsRef = useRef<Channel[]>([]);
   useEffect(() => { channelsRef.current = channels; }, [channels]);
 
+  // Remember the currently-watched channel so it stays selected after a
+  // page refresh or clicking the RevTV logo (which reloads the page).
+  useEffect(() => {
+    if (!activeChannel) return;
+    try {
+      window.localStorage.setItem("revtv:lastChannelId", activeChannel.id);
+    } catch {}
+  }, [activeChannel]);
+
   const handleStreamError = useCallback((failedChannel: Channel) => {
     failedChannelsRef.current.add(failedChannel.url);
     const all = channelsRef.current;
@@ -75,7 +84,15 @@ export default function App() {
       const parsed = parseM3U(text);
       if (!parsed.length) throw new Error("No channels found");
       setChannels(parsed);
-      if (!activeChannel) setActiveChannel(parsed[0]);
+      if (!activeChannel) {
+        // Restore the last-watched channel (survives refresh & logo click)
+        let restored: Channel | null = null;
+        try {
+          const savedId = window.localStorage.getItem("revtv:lastChannelId");
+          if (savedId) restored = parsed.find(c => c.id === savedId) || null;
+        } catch {}
+        setActiveChannel(restored || parsed[0]);
+      }
     } catch (err: any) {
       setError(err?.message || "Could not load playlist");
     } finally {
