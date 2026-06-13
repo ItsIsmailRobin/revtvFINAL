@@ -51,15 +51,30 @@ export default function Player({
   const userPausedRef = useRef(false);
 
   const [playing, setPlaying] = useState(false);
-  const [muted, setMuted] = useState(false);
-  const [volume, setVolume] = useState(1);
+  // Restore muted/volume from localStorage so refresh or logo-click doesn't
+  // reset the player to muted. Default: unmuted at full volume.
+  const [muted, setMuted] = useState<boolean>(() => {
+    try { return window.localStorage.getItem("revtv:muted") === "true"; } catch { return false; }
+  });
+  const [volume, setVolume] = useState<number>(() => {
+    try {
+      const v = parseFloat(window.localStorage.getItem("revtv:volume") ?? "1");
+      return isNaN(v) ? 1 : Math.min(1, Math.max(0, v));
+    } catch { return 1; }
+  });
   // Refs mirroring muted/volume so the channel-switch effect (which only
   // re-runs on channel change) can read the latest user preference
   // without forcing a full HLS re-attach on every mute/volume toggle.
   const mutedRef = useRef(muted);
   const volumeRef = useRef(volume);
-  useEffect(() => { mutedRef.current = muted; }, [muted]);
-  useEffect(() => { volumeRef.current = volume; }, [volume]);
+  useEffect(() => {
+    mutedRef.current = muted;
+    try { window.localStorage.setItem("revtv:muted", String(muted)); } catch {}
+  }, [muted]);
+  useEffect(() => {
+    volumeRef.current = volume;
+    try { window.localStorage.setItem("revtv:volume", String(volume)); } catch {}
+  }, [volume]);
   const [brightness, setBrightness] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobileDevice, setIsMobileDevice] = useState(false);
@@ -282,10 +297,12 @@ export default function Player({
         video.muted = mutedRef.current;
         video.volume = volumeRef.current;
         video.play().catch(() => {
-          // Autoplay blocked — fall back to muted playback and keep the
-          // mute state in sync with the actual player.
+          // Autoplay blocked — fall back to muted playback temporarily.
+          // Do NOT save this forced-muted state to localStorage; it's a
+          // browser autoplay restriction, not a user preference.
           video.muted = true;
-          if (!mutedRef.current) setMuted(true);
+          mutedRef.current = true;
+          setMuted(true);
           video.play().catch(() => {});
         });
       });
@@ -327,7 +344,8 @@ export default function Player({
       video.volume = volumeRef.current;
       video.play().catch(() => {
         video.muted = true;
-        if (!mutedRef.current) setMuted(true);
+        mutedRef.current = true;
+        setMuted(true);
         video.play().catch(() => {});
       });
     } else {

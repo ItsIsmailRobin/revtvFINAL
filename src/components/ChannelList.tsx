@@ -27,7 +27,12 @@ export default function ChannelList({
     if (loading || !activeId) return;
     if (scrolledIdRef.current === activeId) return;
     scrolledIdRef.current = activeId;
-    if (activeRef.current) {
+    // On mobile (<1024px) the player is at the top — we scroll the page
+    // to the top so the player is visible (handled in App.tsx handleSelect).
+    // Scrolling the channel into view here on mobile would override that
+    // and pull the screen down to the list instead. Only auto-scroll the
+    // channel item into view on desktop where the sidebar is beside the player.
+    if (activeRef.current && window.innerWidth >= 1024) {
       activeRef.current.scrollIntoView({ block: "center", behavior: "auto" });
     }
   }, [activeId, loading]);
