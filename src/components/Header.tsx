@@ -9,7 +9,7 @@ export default function Header() {
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleLivePlaylistClick = () => {
-    if (refreshState === "loading") return; // prevent double-tap
+    if (refreshState === "loading" || refreshState === "done") return; // prevent double-tap and pressing during "Updated!" period
     setRefreshState("loading");
     window.dispatchEvent(new CustomEvent("revtv:refresh-playlist"));
   };
@@ -18,7 +18,7 @@ export default function Header() {
     const onDone = () => {
       setRefreshState("done");
       if (resetTimer.current) clearTimeout(resetTimer.current);
-      resetTimer.current = setTimeout(() => setRefreshState("idle"), 2000);
+      resetTimer.current = setTimeout(() => setRefreshState("idle"), 60_000); // hold "Updated!" for 1 minute
     };
     const onError = () => {
       setRefreshState("error");
@@ -99,7 +99,7 @@ export default function Header() {
 
       {/* Update Playlist pill — no border/outline, purple dot + text */}
       <button onClick={handleLivePlaylistClick} aria-label="Update Playlist — click to refresh"
-        disabled={refreshState === "loading"}
+        disabled={refreshState === "loading" || refreshState === "done"}
         className="group flex cursor-pointer items-center gap-2 px-3.5 py-2 transition-all duration-300 hover:scale-105 active:scale-95 disabled:cursor-default disabled:opacity-80"
         style={{
           background: "transparent",

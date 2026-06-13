@@ -170,10 +170,17 @@ function Countdown({ match }: { match: Match }) {
   if (isLive(match)) return (
     <div className="flex items-center justify-center gap-1.5">
       <span className="relative flex h-2 w-2 shrink-0">
-        <span className="absolute inset-0 animate-ping rounded-full bg-green-400 opacity-75" />
-        <span className="relative h-2 w-2 rounded-full bg-green-400" style={{boxShadow:"0 0 6px #4ade80,0 0 12px #4ade80"}} />
+        <span className="absolute inset-0 rounded-full" style={{
+          backgroundColor: "rgba(139,92,246,0.7)",
+          animation: "livePulseRing 2s ease-in-out infinite",
+        }} />
+        <span className="relative h-2 w-2 rounded-full" style={{
+          backgroundColor: "#a78bfa",
+          boxShadow: "0 0 6px rgba(167,139,250,0.9), 0 0 14px rgba(139,92,246,0.6)",
+          animation: "liveDotGlow 2s ease-in-out infinite",
+        }} />
       </span>
-      <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"13px", fontWeight:700, letterSpacing:"0.12em", color:"#86efac", textShadow:"0 0 10px rgba(74,222,128,0.7)"}}>LIVE</span>
+      <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"13px", fontWeight:700, letterSpacing:"0.12em", color:"#c4b5fd", textShadow:"0 0 10px rgba(167,139,250,0.8), 0 0 20px rgba(139,92,246,0.5)", animation:"liveLabelPulse 2s ease-in-out infinite"}}>LIVE</span>
     </div>
   );
 
@@ -319,15 +326,15 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
       className="relative overflow-hidden rounded-xl transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.01]"
       style={{
         background: live
-          ? "linear-gradient(135deg,rgba(15,40,15,0.75),rgba(10,30,10,0.65))"
+          ? "linear-gradient(135deg,rgba(60,20,100,0.75),rgba(40,10,80,0.65))"
           : over
           ? "rgba(255,255,255,0.02)"
           : isToday
           ? "linear-gradient(135deg,rgba(139,92,246,0.13),rgba(79,42,201,0.07))"
           : "rgba(255,255,255,0.035)",
-        border: `1px solid ${live ? "rgba(74,222,128,0.30)" : isToday ? "rgba(167,139,250,0.65)" : over ? "rgba(255,255,255,0.05)" : "rgba(139,92,246,0.13)"}`,
+        border: `1px solid ${live ? "rgba(167,139,250,0.40)" : isToday ? "rgba(167,139,250,0.65)" : over ? "rgba(255,255,255,0.05)" : "rgba(139,92,246,0.13)"}`,
         boxShadow: live
-          ? "0 0 20px rgba(74,222,128,0.12),0 2px 10px rgba(0,0,0,0.4)"
+          ? "0 0 20px rgba(139,92,246,0.22),0 0 40px rgba(139,92,246,0.10),0 2px 10px rgba(0,0,0,0.4)"
           : final
           ? "0 0 20px rgba(251,191,36,0.08),0 2px 10px rgba(0,0,0,0.4)"
           : isToday
@@ -448,12 +455,25 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
 
       <style>{`
         @keyframes liveGlow {
-          0%,100%{box-shadow:inset 0 0 20px rgba(74,222,128,0.05)}
-          50%{box-shadow:inset 0 0 32px rgba(74,222,128,0.12)}
+          0%,100%{box-shadow:inset 0 0 20px rgba(139,92,246,0.06)}
+          50%{box-shadow:inset 0 0 32px rgba(139,92,246,0.18)}
         }
         @keyframes cardPulseCPU {
-          0%,100%{outline:2px solid rgba(74,222,128,0.15); outline-offset:0px;}
-          50%{outline:2px solid rgba(74,222,128,0.42); outline-offset:1px;}
+          0%,100%{outline:2px solid rgba(139,92,246,0.18); outline-offset:0px;}
+          50%{outline:2px solid rgba(167,139,250,0.5); outline-offset:1px;}
+        }
+        @keyframes livePulseRing {
+          0%   { transform: scale(1);   opacity: 0.8; }
+          60%  { transform: scale(2.6); opacity: 0; }
+          100% { transform: scale(2.6); opacity: 0; }
+        }
+        @keyframes liveDotGlow {
+          0%,100% { box-shadow: 0 0 5px rgba(167,139,250,0.8), 0 0 10px rgba(139,92,246,0.5); }
+          50%     { box-shadow: 0 0 10px rgba(167,139,250,1),  0 0 22px rgba(139,92,246,0.9); }
+        }
+        @keyframes liveLabelPulse {
+          0%,100% { opacity: 0.85; }
+          50%     { opacity: 1; }
         }
       `}</style>
     </div>
@@ -472,9 +492,12 @@ function DayColumn({ dayGroup, todayBD }: { dayGroup: { date: string; matches: M
       {/* Day header */}
       <div className="rounded-lg px-3 py-2.5"
         style={{
-          background: isToday ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.035)",
-          border: `1px solid ${isToday ? "rgba(139,92,246,0.38)" : "rgba(255,255,255,0.07)"}`,
-          boxShadow: isToday ? "0 0 16px rgba(139,92,246,0.13)" : "none",
+          background: isToday ? "rgba(139,92,246,0.20)" : "rgba(255,255,255,0.035)",
+          border: `1px solid ${isToday ? "rgba(167,139,250,0.55)" : "rgba(255,255,255,0.07)"}`,
+          boxShadow: isToday
+            ? "0 0 20px rgba(139,92,246,0.35), 0 0 40px rgba(139,92,246,0.18), inset 0 0 12px rgba(167,139,250,0.08)"
+            : "none",
+          transition: "box-shadow 0.5s ease",
         }}>
         <div className="flex flex-col gap-0.5">
           <span style={{
@@ -514,7 +537,15 @@ export default function FifaSchedule() {
     return p;
   })();
 
-  const todayBD = bdNow().toISOString().slice(0,10);
+  // Reactive today — re-evaluates at midnight so current-day glow always tracks the real date
+  const [todayBD, setTodayBD] = useState(() => bdNow().toISOString().slice(0, 10));
+  useEffect(() => {
+    const updateToday = () => setTodayBD(bdNow().toISOString().slice(0, 10));
+    // tick every minute so midnight flip is caught quickly
+    const id = setInterval(updateToday, 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   const [page, setPage] = useState(() => todayPageIndex(pages, colsPerPage));
   const [dir, setDir] = useState<1 | -1>(1);
   const [animKey, setAnimKey] = useState(0);
