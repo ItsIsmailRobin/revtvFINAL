@@ -89,34 +89,6 @@ export default function Player({
   const [statusVisible, setStatusVisible] = useState(false);
   const statusTimerRef = useRef<number | null>(null);
 
-  // ── Inline BD clock ──────────────────────────────────────────────
-  const [bdClock, setBdClock] = useState(() => {
-    const now = new Date();
-    const utcMs = now.getTime() + now.getTimezoneOffset() * 60_000;
-    const bd = new Date(utcMs + 6 * 3600_000);
-    const h24 = bd.getHours();
-    const mm = String(bd.getMinutes()).padStart(2,"0");
-    const ss = String(bd.getSeconds()).padStart(2,"0");
-    const ampm = h24 >= 12 ? "PM" : "AM";
-    const h12 = ((h24 + 11) % 12) + 1;
-    return { time: `${String(h12).padStart(2,"0")}:${mm}:${ss}`, ampm };
-  });
-  useEffect(() => {
-    const tick = () => {
-      const now = new Date();
-      const utcMs = now.getTime() + now.getTimezoneOffset() * 60_000;
-      const bd = new Date(utcMs + 6 * 3600_000);
-      const h24 = bd.getHours();
-      const mm = String(bd.getMinutes()).padStart(2,"0");
-      const ss = String(bd.getSeconds()).padStart(2,"0");
-      const ampm = h24 >= 12 ? "PM" : "AM";
-      const h12 = ((h24 + 11) % 12) + 1;
-      setBdClock({ time: `${String(h12).padStart(2,"0")}:${mm}:${ss}`, ampm });
-    };
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, []);
-
     const showStatus = useCallback((msg: string) => {
     setStatusMessage(msg);
     setStatusVisible(true);
@@ -1439,7 +1411,7 @@ export default function Player({
           </div>
         </div>
 
-        {/* lucide lucide-zap + Revenger pill | Clock pill (ZAP style, white) */}
+        {/* lucide lucide-zap + Revenger pill */}
         <div className="mt-2.5 flex items-center gap-2 sm:mt-3">
           {/* Zap + Revenger */}
           <div
@@ -1482,40 +1454,6 @@ export default function Player({
               Revenger
             </span>
           </div>
-
-          {/* Clock pill — ZAP REVENGER style, white, beside it */}
-          <div
-            className="flex items-center gap-1.5 rounded-full border px-2 py-0.5"
-            style={{
-              borderColor: "rgba(255,255,255,0.22)",
-              backgroundColor: "rgba(255,255,255,0.08)",
-            }}
-          >
-            {/* White dot — same size/position as ZAP dot */}
-            <span className="relative inline-flex h-3 w-3 items-center justify-center">
-              <span
-                className="absolute h-1 w-1 rounded-full"
-                style={{
-                  backgroundColor: "#ffffff",
-                  top: "50%",
-                  left: "50%",
-                  transform: "translate(-50%, -50%)",
-                  boxShadow: "0 0 4px rgba(255,255,255,0.9)",
-                  animation: "clockDotPulse 1.4s ease-in-out infinite",
-                }}
-              />
-            </span>
-            {/* HH:MM:SS */}
-            <span
-              className="font-semibold tabular-nums"
-              style={{ fontSize: "10px", color: "#ffffff", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}
-            >{bdClock.time}</span>
-            {/* AM/PM */}
-            <span
-              className="font-semibold uppercase tracking-widest"
-              style={{ fontSize: "10px", color: "rgba(255,255,255,0.75)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight: 1 }}
-            >{bdClock.ampm}</span>
-          </div>
         </div>
       </div>
 
@@ -1530,10 +1468,6 @@ export default function Player({
         @keyframes zapDotPulse {
           0%, 100% { opacity: 0.4; transform: translate(-50%, -50%) scale(0.7); }
           50%      { opacity: 1;   transform: translate(-50%, -50%) scale(1.3); }
-        }
-        @keyframes clockDotPulse {
-          0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(0.75); }
-          50%      { opacity: 1;   transform: translate(-50%, -50%) scale(1.35); }
         }
         @keyframes gesturePop {
           0% { opacity: 0; transform: scale(0.92); }

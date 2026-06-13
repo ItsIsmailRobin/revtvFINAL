@@ -191,7 +191,7 @@ export default function TagBar({
                     )}
                     style={{
                       background: isActive
-                        ? "linear-gradient(135deg, rgba(255,255,255,0.35) 0%, rgba(200,220,255,0.2) 50%, rgba(255,255,255,0.30) 100%)"
+                        ? "linear-gradient(135deg, rgba(255,255,255,0.28) 0%, rgba(200,220,255,0.14) 50%, rgba(255,255,255,0.24) 100%)"
                         : "linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.15) 100%)",
                       padding: "1px",
                       WebkitMask:
@@ -213,11 +213,12 @@ export default function TagBar({
                     )}
                     style={{
                       background: isActive
-                        ? "rgba(255,255,255,0.10)"
+                        ? "linear-gradient(135deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.16) 100%)"
                         : "rgba(255,255,255,0.04)",
-                      backdropFilter: isActive ? "blur(8px)" : undefined,
+                      backdropFilter: isActive ? "blur(18px) saturate(180%)" : undefined,
+                      WebkitBackdropFilter: isActive ? "blur(18px) saturate(180%)" : undefined,
                       boxShadow: isActive
-                        ? "0 0 8px rgba(255,255,255,0.12), inset 0 1px 0 rgba(255,255,255,0.15)"
+                        ? "0 0 6px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(255,255,255,0.05)"
                         : undefined,
                     }}
                   />

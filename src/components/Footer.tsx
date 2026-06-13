@@ -35,8 +35,8 @@ export function FooterCredits() {
             strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
             style={{
               stroke: zapHover ? "rgba(255,255,255,1)" : "rgba(255,255,255,0.45)",
-              filter: zapHover ? "drop-shadow(0 0 7px rgba(255,255,255,0.9))" : "none",
-              transform: zapHover ? "scale(1.25)" : "scale(1)",
+              filter: zapHover ? "drop-shadow(0 0 3px rgba(255,255,255,0.5))" : "none",
+              transform: zapHover ? "scale(1.15)" : "scale(1)",
               transition: "filter 0.3s, transform 0.3s, stroke 0.3s",
             }}
           >
@@ -46,7 +46,7 @@ export function FooterCredits() {
             ...TEXT,
             fontWeight: 700,
             color: zapHover ? "rgba(255,255,255,1)" : "inherit",
-            textShadow: zapHover ? "0 0 8px rgba(255,255,255,0.7), 0 0 16px rgba(255,255,255,0.4)" : "none",
+            textShadow: zapHover ? "0 0 4px rgba(255,255,255,0.45)" : "none",
           }}>
             Revenger
           </span>
@@ -77,7 +77,7 @@ export function FooterCredits() {
             fill="currentColor"
             style={{
               color: discHover ? "rgba(255,255,255,1)" : "rgba(255,255,255,0.45)",
-              filter: discHover ? "drop-shadow(0 0 6px rgba(255,255,255,0.85))" : "none",
+              filter: discHover ? "drop-shadow(0 0 3px rgba(255,255,255,0.45))" : "none",
               transition: "filter 0.3s, color 0.3s",
             }}
           >
@@ -86,7 +86,7 @@ export function FooterCredits() {
           <span style={{
             ...TEXT,
             color: discHover ? "rgba(255,255,255,1)" : "inherit",
-            textShadow: discHover ? "0 0 8px rgba(255,255,255,0.7), 0 0 16px rgba(255,255,255,0.4)" : "none",
+            textShadow: discHover ? "0 0 4px rgba(255,255,255,0.45)" : "none",
           }}>
             NoScope eSports
           </span>
