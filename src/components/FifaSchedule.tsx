@@ -120,10 +120,22 @@ function groupByDate(matches: Match[]): { date: string; matches: Match[] }[] {
   return Object.keys(map).sort().map(date => ({ date, matches: map[date] }));
 }
 
-function todayPageIndex(pages: { date: string; matches: Match[] }[][]): number {
+function todayPageIndex(pages: { date: string; matches: Match[] }[][], colsPerPage: number): number {
   const today = bdNow().toISOString().slice(0,10);
   const idx = pages.findIndex(pg => pg.some(d => d.date >= today));
   return idx >= 0 ? idx : 0;
+}
+
+// ─── Responsive cols per page ─────────────────────────────────────
+function useColsPerPage() {
+  const [cols, setCols] = useState(() => window.innerWidth < 640 ? 1 : 3);
+  useEffect(() => {
+    const update = () => setCols(window.innerWidth < 640 ? 1 : window.innerWidth < 1024 ? 1 : 3);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return cols;
 }
 
 // ─── Countdown ─────────────────────────────────────────────────────
@@ -155,37 +167,43 @@ function Countdown({ match }: { match: Match }) {
   const sc = totalSec % 60;
   const pad = (n: number) => String(n).padStart(2,"0");
 
+  // Always show Day, Hours, Min, Second — but only show Day col if d>0
   const units = d > 0
-    ? [{ v: pad(d), l:"D" }, { v: pad(h), l:"H" }, { v: pad(mi), l:"M" }]
-    : [{ v: pad(h), l:"H" }, { v: pad(mi), l:"M" }, { v: pad(sc), l:"S" }];
+    ? [{ v: pad(d), l:"Day" }, { v: pad(h), l:"Hours" }, { v: pad(mi), l:"Min" }, { v: pad(sc), l:"Second" }]
+    : [{ v: pad(h), l:"Hours" }, { v: pad(mi), l:"Min" }, { v: pad(sc), l:"Second" }];
 
   return (
-    <div className="flex items-center gap-0.5">
+    <div className="flex items-end gap-0" style={{willChange:"transform"}}>
       {units.map((u, i) => (
-        <div key={u.l} className="flex items-center">
-          <div className="flex flex-col items-center gap-0">
+        <div key={u.l} className="flex items-end">
+          <div className="flex flex-col items-center gap-0" style={{minWidth: d>0 ? "28px" : "32px"}}>
             <span style={{
-              fontFamily:"'Inter',monospace",
-              fontSize:"20px",
+              fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
+              fontSize: d>0 ? "18px" : "22px",
               fontWeight:800,
               lineHeight:1,
               color:"#fff",
               textShadow:"0 0 16px rgba(167,139,250,0.55)",
               letterSpacing:"-0.02em",
               fontVariantNumeric:"tabular-nums",
+              display:"block",
+              textAlign:"center",
             }}>{u.v}</span>
             <span style={{
               fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
-              fontSize:"8px",
+              fontSize:"7px",
               fontWeight:700,
-              letterSpacing:"0.14em",
+              letterSpacing:"0.10em",
               color:"rgba(167,139,250,0.65)",
               textTransform:"uppercase",
               marginTop:"2px",
+              display:"block",
+              textAlign:"center",
+              whiteSpace:"nowrap",
             }}>{u.l}</span>
           </div>
           {i < units.length - 1 && (
-            <span style={{color:"rgba(167,139,250,0.4)", fontSize:"16px", fontWeight:700, marginBottom:"8px", marginLeft:"1px", marginRight:"1px"}}>:</span>
+            <span style={{color:"rgba(167,139,250,0.4)", fontSize: d>0 ? "14px" : "18px", fontWeight:700, marginBottom:"10px", marginLeft:"1px", marginRight:"1px", lineHeight:1}}>:</span>
           )}
         </div>
       ))}
@@ -194,12 +212,13 @@ function Countdown({ match }: { match: Match }) {
 }
 
 // ─── Score display ────────────────────────────────────────────────
-function Score({ a, b, live }: { a: number; b: number; live?: boolean }) {
+function Score({ a, b, live, big }: { a: number; b: number; live?: boolean; big?: boolean }) {
+  const sz = big ? "22px" : "22px";
   return (
     <div className="flex items-center gap-1.5">
       <span style={{
         fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
-        fontSize:"22px",
+        fontSize:sz,
         fontWeight:800,
         color: live ? "#86efac" : "#fff",
         textShadow: live ? "0 0 12px rgba(74,222,128,0.6)" : "0 0 12px rgba(255,255,255,0.25)",
@@ -209,7 +228,7 @@ function Score({ a, b, live }: { a: number; b: number; live?: boolean }) {
       <span style={{color:"rgba(255,255,255,0.2)", fontSize:"14px", fontWeight:300}}>:</span>
       <span style={{
         fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
-        fontSize:"22px",
+        fontSize:sz,
         fontWeight:800,
         color: live ? "#86efac" : "#fff",
         textShadow: live ? "0 0 12px rgba(74,222,128,0.6)" : "0 0 12px rgba(255,255,255,0.25)",
@@ -240,8 +259,36 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
   const d = new Date(`${match.date}T${match.time}:00+06:00`);
   const timeLabel = d.toLocaleTimeString("en-BD", { hour:"2-digit", minute:"2-digit", hour12:true, timeZone:"Asia/Dhaka" });
 
+  // Hover/click score reveal for finished matches
+  const [showResult, setShowResult] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showResult) return;
+    const hide = (e: MouseEvent | TouchEvent) => {
+      if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
+        setShowResult(false);
+      }
+    };
+    document.addEventListener("mousedown", hide);
+    document.addEventListener("touchstart", hide);
+    return () => {
+      document.removeEventListener("mousedown", hide);
+      document.removeEventListener("touchstart", hide);
+    };
+  }, [showResult]);
+
+  const handleCardInteract = () => {
+    if (over && !live && hasScore) setShowResult(v => !v);
+  };
+
   return (
-    <div className="relative overflow-hidden rounded-xl transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.01]"
+    <div
+      ref={cardRef}
+      onClick={handleCardInteract}
+      onMouseEnter={() => { if (over && !live && hasScore) setShowResult(true); }}
+      onMouseLeave={() => setShowResult(false)}
+      className="relative overflow-hidden rounded-xl transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.01]"
       style={{
         background: live
           ? "linear-gradient(135deg,rgba(15,40,15,0.75),rgba(10,30,10,0.65))"
@@ -258,6 +305,9 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
           : isToday
           ? "0 0 14px rgba(139,92,246,0.10),0 2px 8px rgba(0,0,0,0.3)"
           : "0 1px 6px rgba(0,0,0,0.22)",
+        // Live card gets a pulse animation
+        animation: live ? "cardPulse 2.2s ease-in-out infinite" : "none",
+        cursor: over && !live && hasScore ? "pointer" : "default",
       }}>
 
       {/* Top shimmer */}
@@ -273,16 +323,17 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
       <div className="px-3 py-3">
         {/* Top row: stage badge + time + city */}
         <div className="mb-2.5 flex items-center justify-between gap-2">
+          {/* Stage · City then Time — time aligned right */}
           <span style={{
             background:ss.bg, border:`1px solid ${ss.border}`, color:ss.color,
             fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
             fontSize:"9px", fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase",
             borderRadius:"999px", padding:"2px 8px", display:"inline-block", lineHeight:"1.5",
           }}>{match.stage}</span>
-          <div className="flex items-center gap-1.5">
-            <span style={{fontFamily:"'Inter',sans-serif", fontSize:"10px", fontWeight:500, color:"rgba(255,255,255,0.38)"}}>{timeLabel}</span>
-            <span style={{color:"rgba(255,255,255,0.12)", fontSize:"10px"}}>·</span>
+          <div className="flex items-center gap-1.5 ml-auto">
             <span style={{fontFamily:"'Inter',sans-serif", fontSize:"10px", fontWeight:400, color:"rgba(255,255,255,0.22)"}}>{match.city}</span>
+            <span style={{color:"rgba(255,255,255,0.12)", fontSize:"10px"}}>·</span>
+            <span style={{fontFamily:"'Inter',sans-serif", fontSize:"10px", fontWeight:500, color:"rgba(255,255,255,0.38)"}}>{timeLabel}</span>
           </div>
         </div>
 
@@ -290,10 +341,13 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
         <div className="flex items-center justify-between gap-2">
           {/* Team A */}
           <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-            <img src={match.flagA} alt={match.teamA}
-              className="h-7 w-11 rounded-sm object-cover shadow-md sm:h-8 sm:w-12"
-              style={{ border:"1px solid rgba(255,255,255,0.10)" }}
-              onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
+            {/* Flag hidden on hover for finished, show nothing (flag hidden) */}
+            {!(over && !live && showResult) && (
+              <img src={match.flagA} alt={match.teamA}
+                className="h-7 w-11 rounded-sm object-cover shadow-md sm:h-8 sm:w-12"
+                style={{ border:"1px solid rgba(255,255,255,0.10)" }}
+                onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
+            )}
             <span style={{
               fontFamily:"'Inter',sans-serif", fontSize:"11px", fontWeight:600,
               color: over && !live ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.88)",
@@ -312,13 +366,13 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
                   <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"8px", fontWeight:700, letterSpacing:"0.14em", color:"#86efac", textTransform:"uppercase"}}>Live</span>
                 </div>
               </>
-            ) : over && hasScore ? (
-              <>
-                <Score a={match.scoreA!} b={match.scoreB!} />
-                <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"8px", fontWeight:600, letterSpacing:"0.12em", color:"rgba(255,255,255,0.22)", textTransform:"uppercase", marginTop:"2px"}}>FT</span>
-              </>
+            ) : over && hasScore && showResult ? (
+              /* Show result on hover/click for finished matches */
+              <Score a={match.scoreA!} b={match.scoreB!} big />
+            ) : over && !hasScore && showResult ? (
+              <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"20px", fontWeight:800, color:"rgba(255,255,255,0.25)", letterSpacing:"-0.01em"}}>-</span>
             ) : over ? (
-              <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.28)", textTransform:"uppercase"}}>FT</span>
+              <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.28)", textTransform:"uppercase"}}>Full Time</span>
             ) : (
               <Countdown match={match} />
             )}
@@ -326,10 +380,12 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
 
           {/* Team B */}
           <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-            <img src={match.flagB} alt={match.teamB}
-              className="h-7 w-11 rounded-sm object-cover shadow-md sm:h-8 sm:w-12"
-              style={{ border:"1px solid rgba(255,255,255,0.10)" }}
-              onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
+            {!(over && !live && showResult) && (
+              <img src={match.flagB} alt={match.teamB}
+                className="h-7 w-11 rounded-sm object-cover shadow-md sm:h-8 sm:w-12"
+                style={{ border:"1px solid rgba(255,255,255,0.10)" }}
+                onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
+            )}
             <span style={{
               fontFamily:"'Inter',sans-serif", fontSize:"11px", fontWeight:600,
               color: over && !live ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.88)",
@@ -350,6 +406,10 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
           0%,100%{box-shadow:inset 0 0 20px rgba(74,222,128,0.05)}
           50%{box-shadow:inset 0 0 32px rgba(74,222,128,0.12)}
         }
+        @keyframes cardPulse {
+          0%,100%{box-shadow:0 0 20px rgba(74,222,128,0.12),0 2px 10px rgba(0,0,0,0.4)}
+          50%{box-shadow:0 0 32px rgba(74,222,128,0.28),0 2px 18px rgba(0,0,0,0.5)}
+        }
       `}</style>
     </div>
   );
@@ -359,13 +419,12 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
 function DayColumn({ dayGroup, todayBD }: { dayGroup: { date: string; matches: Match[] }; todayBD: string }) {
   const isToday = dayGroup.date === todayBD;
   const d = new Date(dayGroup.date + "T12:00:00+06:00");
-  // Format: "Saturday · June 13 2026" — single line
   const weekday = d.toLocaleDateString("en-BD", { weekday:"long", timeZone:"Asia/Dhaka" });
   const fullDate = d.toLocaleDateString("en-BD", { month:"long", day:"numeric", year:"numeric", timeZone:"Asia/Dhaka" });
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-2.5">
-      {/* Day header — date + day on one clean line */}
+      {/* Day header */}
       <div className="rounded-lg px-3 py-2.5"
         style={{
           background: isToday ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.035)",
@@ -400,16 +459,30 @@ function DayColumn({ dayGroup, todayBD }: { dayGroup: { date: string; matches: M
 
 // ─── Main component ───────────────────────────────────────────────
 export default function FifaSchedule() {
+  const colsPerPage = useColsPerPage();
   const allDays = groupByDate(MATCHES);
-  const pages: { date: string; matches: Match[] }[][] = [];
-  for (let i = 0; i < allDays.length; i += 3) pages.push(allDays.slice(i, i + 3));
+
+  // Rebuild pages whenever colsPerPage changes
+  const pages = (() => {
+    const p: { date: string; matches: Match[] }[][] = [];
+    for (let i = 0; i < allDays.length; i += colsPerPage) p.push(allDays.slice(i, i + colsPerPage));
+    return p;
+  })();
 
   const todayBD = bdNow().toISOString().slice(0,10);
-  const [page, setPage] = useState(() => todayPageIndex(pages));
+  const [page, setPage] = useState(() => todayPageIndex(pages, colsPerPage));
   const [dir, setDir] = useState<1 | -1>(1);
   const [animKey, setAnimKey] = useState(0);
   const [, tick] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Reset page to today when colsPerPage changes
+  useEffect(() => {
+    const allDaysLocal = groupByDate(MATCHES);
+    const pagesLocal: { date: string; matches: Match[] }[][] = [];
+    for (let i = 0; i < allDaysLocal.length; i += colsPerPage) pagesLocal.push(allDaysLocal.slice(i, i + colsPerPage));
+    setPage(todayPageIndex(pagesLocal, colsPerPage));
+  }, [colsPerPage]);
 
   useEffect(() => {
     const id = setInterval(() => tick(t => t + 1), 30_000);
@@ -439,7 +512,6 @@ export default function FifaSchedule() {
     <section className="mt-10 sm:mt-12">
       {/* ── Section header ── */}
       <div className="mb-6">
-        {/* Big Space Grotesk header */}
         <div className="mb-1.5 flex items-center gap-3">
           <h2 style={{
             fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
@@ -460,14 +532,13 @@ export default function FifaSchedule() {
             </div>
           )}
         </div>
-        {/* Sub-header */}
         <p style={{
           fontFamily:"'Inter',sans-serif",
           fontSize:"13px",
           fontWeight:400,
           color:"rgba(255,255,255,0.38)",
           letterSpacing:"0.01em",
-        }}>Bangladesh Standard Time (UTC+6)</p>
+        }}>Based on Bangladesh Standard Time...............</p>
       </div>
 
       {/* Page range label */}
@@ -483,15 +554,17 @@ export default function FifaSchedule() {
       <div className="flex items-stretch gap-2 sm:gap-3">
         {/* Prev */}
         <button onClick={() => navigate(-1)} disabled={page === 0}
-          className="flex w-9 shrink-0 flex-col items-center justify-center rounded-xl transition-all duration-200 active:scale-95"
+          className="group flex w-9 shrink-0 flex-col items-center justify-center rounded-xl transition-all duration-200 active:scale-95"
           style={{
             background: page === 0 ? "rgba(255,255,255,0.02)" : "rgba(139,92,246,0.12)",
-            border: `1px solid ${page === 0 ? "rgba(255,255,255,0.05)" : "rgba(139,92,246,0.25)"}`,
+            border: "none",
             opacity: page === 0 ? 0.3 : 1,
           }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={page===0?"rgba(255,255,255,0.3)":"rgba(167,139,250,0.9)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
+          <span className="transition-transform duration-200 group-hover:-translate-x-0.5">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={page===0?"rgba(255,255,255,0.3)":"rgba(167,139,250,0.9)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6"/>
+            </svg>
+          </span>
         </button>
 
         {/* Days grid */}
@@ -500,6 +573,7 @@ export default function FifaSchedule() {
             style={{
               gridTemplateColumns: `repeat(${current.length},1fr)`,
               animation: `slideIn${dir > 0 ? "Right" : "Left"} 320ms cubic-bezier(.4,0,.2,1)`,
+              willChange: "transform, opacity",
             }}>
             {current.map(dayGroup => (
               <DayColumn key={dayGroup.date} dayGroup={dayGroup} todayBD={todayBD} />
@@ -509,15 +583,17 @@ export default function FifaSchedule() {
 
         {/* Next */}
         <button onClick={() => navigate(1)} disabled={page >= pages.length - 1}
-          className="flex w-9 shrink-0 flex-col items-center justify-center rounded-xl transition-all duration-200 active:scale-95"
+          className="group flex w-9 shrink-0 flex-col items-center justify-center rounded-xl transition-all duration-200 active:scale-95"
           style={{
             background: page >= pages.length-1 ? "rgba(255,255,255,0.02)" : "rgba(139,92,246,0.12)",
-            border: `1px solid ${page >= pages.length-1 ? "rgba(255,255,255,0.05)" : "rgba(139,92,246,0.25)"}`,
+            border: "none",
             opacity: page >= pages.length-1 ? 0.3 : 1,
           }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={page>=pages.length-1?"rgba(255,255,255,0.3)":"rgba(167,139,250,0.9)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
+          <span className="transition-transform duration-200 group-hover:translate-x-0.5">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={page>=pages.length-1?"rgba(255,255,255,0.3)":"rgba(167,139,250,0.9)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </span>
         </button>
       </div>
 
@@ -531,12 +607,13 @@ export default function FifaSchedule() {
               height: "6px",
               background: i === page ? "rgba(139,92,246,0.8)" : "rgba(255,255,255,0.15)",
               boxShadow: i === page ? "0 0 8px rgba(139,92,246,0.5)" : "none",
+              border: "none",
             }} />
         ))}
       </div>
 
       <p className="mt-4 text-center" style={{fontFamily:"'Inter',sans-serif", fontSize:"10px", color:"rgba(255,255,255,0.18)", fontWeight:400}}>
-        All times Bangladesh Standard Time · Knockout bracket TBD after group stage
+        Based on Bangladesh Standard Time · Knockout bracket TBD after group stage
       </p>
 
       <style>{`

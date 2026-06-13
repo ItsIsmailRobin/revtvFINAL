@@ -59,10 +59,8 @@ export default function Player({
   const [controlsVisible, setControlsVisible] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // True for a short moment after the user toggles fullscreen. Used to
-  // show a loading overlay during the brief black-frame period on
-  // Android before the native fullscreen player takes over.
-  const [fsTransitioning, setFsTransitioning] = useState(false);
+  // "entering" | "exiting" | null — shown briefly during fullscreen transition.
+  const [fsTransitioning, setFsTransitioning] = useState<"entering" | "exiting" | null>(null);
   const [gestureLevel, setGestureLevel] = useState<{
     type: "volume" | "brightness" | null;
     value: number;
@@ -483,12 +481,7 @@ export default function Player({
       // Ensure the video has playsinline for iOS inline playback
       v.setAttribute("playsinline", "");
 
-      // Show a transition overlay so the user doesn't see a black
-      // flash on Android while the native fullscreen player loads.
-      setFsTransitioning(true);
-      window.setTimeout(() => setFsTransitioning(false), 800);
-
-      // Detect if we're in any kind of fullscreen
+      // Detect if we're in any kind of fullscreen BEFORE showing overlay
       const inContainerFs = !!(
         doc.fullscreenElement === container ||
         doc.webkitFullscreenElement === container
@@ -498,6 +491,11 @@ export default function Player({
         doc.webkitFullscreenElement === video
       );
       const isInFs = inContainerFs || inVideoFs;
+
+      // Show a transition overlay so the user doesn't see a black
+      // flash on Android while the native fullscreen player loads.
+      setFsTransitioning(isInFs ? "exiting" : "entering");
+      window.setTimeout(() => setFsTransitioning(null), 800);
 
       if (isInFs) {
         // Exit: use the standard API
@@ -559,6 +557,8 @@ export default function Player({
     const inFs = !!(doc.fullscreenElement || doc.webkitFullscreenElement);
 
     if (inFs) {
+      setFsTransitioning("exiting");
+      window.setTimeout(() => setFsTransitioning(null), 700);
       try {
         if (doc.exitFullscreen) await doc.exitFullscreen();
         else if (doc.webkitExitFullscreen) await doc.webkitExitFullscreen();
@@ -567,6 +567,9 @@ export default function Player({
       armHide();
       return;
     }
+
+    setFsTransitioning("entering");
+    window.setTimeout(() => setFsTransitioning(null), 700);
 
     // ---- Desktop: use the standard Fullscreen API on the container.
     // This keeps our custom UI and 5-second auto-hide timer visible.
@@ -880,7 +883,7 @@ export default function Player({
               />
             </div>
             <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-white/70">
-              Entering fullscreen
+              {fsTransitioning === "exiting" ? "Exiting Fullscreen" : "Entering Fullscreen"}
             </span>
           </div>
         </div>

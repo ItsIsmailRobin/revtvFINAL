@@ -139,11 +139,11 @@ export default function App() {
         {/* ── Main grid: player left, sidebar right ── */}
         <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-6">
 
-          {/* Left column: player + footer */}
+          {/* Left column: player + footer (desktop only footer here) */}
           <div className="flex flex-col gap-0">
             <Player channel={activeChannel} onStreamError={handleStreamError} />
-            {/* Footer left-aligned under the player */}
-            <div className="mt-0">
+            {/* Footer under player — desktop only */}
+            <div className="mt-0 hidden lg:block">
               <Footer />
             </div>
           </div>
@@ -156,7 +156,7 @@ export default function App() {
           </aside>
         </section>
 
-        {/* Mobile sidebar */}
+        {/* Mobile sidebar + footer below it */}
         <section className="mt-4 sm:mt-6 lg:hidden">
           <div className="rounded-2xl border shadow-none" style={PANEL_STYLE}>
             <CategoryHeader groupsLength={groups.length} isOpen={categoriesOpen} onToggle={() => setCategoriesOpen(v => !v)} />
@@ -173,6 +173,10 @@ export default function App() {
                 </>
               )}
             </div>
+          </div>
+          {/* Footer shown below channel list on mobile */}
+          <div className="mt-2">
+            <Footer />
           </div>
         </section>
 
