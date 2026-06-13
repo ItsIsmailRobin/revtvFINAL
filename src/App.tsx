@@ -11,12 +11,13 @@ import { parseM3U, getUniqueGroups, type Channel } from "./utils/parseM3U";
 const PLAYLIST_URL =
   "https://raw.githubusercontent.com/ItsIsmailRobin/playlisttv/refs/heads/main/playlist.m3u";
 
-// More transparent sidebar — glass feel
+// Glass sidebar — more visible glass effect with proper transparency
 const PANEL_STYLE: React.CSSProperties = {
-  borderColor: "rgba(255,255,255,0.06)",
-  backgroundColor: "rgba(10,5,22,0.55)",
-  backdropFilter: "blur(16px)",
-  WebkitBackdropFilter: "blur(16px)",
+  borderColor: "rgba(255,255,255,0.10)",
+  backgroundColor: "rgba(10,5,22,0.45)",
+  backdropFilter: "blur(20px) saturate(1.4)",
+  WebkitBackdropFilter: "blur(20px) saturate(1.4)",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.07), 0 8px 32px rgba(0,0,0,0.35)",
 };
 
 function CategoryHeader({ groupsLength, isOpen, onToggle }: { groupsLength:number; isOpen:boolean; onToggle:()=>void }) {
@@ -136,7 +137,7 @@ export default function App() {
       <main className="relative mx-auto w-full max-w-[1600px] px-2 pb-8 pt-3 sm:px-4 sm:pt-4 lg:px-6">
 
         {/* ── Main grid: player left, sidebar right ── */}
-        <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-6">
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-6">
 
           {/* Left column: player + footer */}
           <div className="flex flex-col gap-0">

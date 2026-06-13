@@ -1,38 +1,52 @@
 import { useEffect, useState } from "react";
 
 function formatBDTime() {
-  const utcMs = Date.now() + new Date().getTimezoneOffset() * 60_000;
-  const bd = new Date(utcMs + 6 * 3600_000);
-  const h24 = bd.getHours(), mm = String(bd.getMinutes()).padStart(2,"0"), ss = String(bd.getSeconds()).padStart(2,"0");
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60_000;
+  const bd = new Date(utcMs + 6 * 60 * 60_000);
+  const h24 = bd.getHours();
+  const mm = String(bd.getMinutes()).padStart(2, "0");
+  const ss = String(bd.getSeconds()).padStart(2, "0");
   const ampm = h24 >= 12 ? "PM" : "AM";
-  const h12 = String(((h24 + 11) % 12) + 1).padStart(2,"0");
-  return { time:`${h12}:${mm}:${ss}`, ampm };
+  const h12 = ((h24 + 11) % 12) + 1;
+  const hh = String(h12).padStart(2, "0");
+  return { time: `${hh}:${mm}:${ss}`, ampm };
 }
 
 export default function Footer() {
   const [{ time, ampm }, setState] = useState(formatBDTime);
+
   useEffect(() => {
     const id = window.setInterval(() => setState(formatBDTime()), 1000);
     return () => window.clearInterval(id);
   }, []);
 
   return (
-    <footer className="flex flex-col items-start gap-1.5 px-1 pb-4 pt-3 sm:gap-2">
-      {/* Clock */}
-      <div className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1" aria-label={`Time ${time} ${ampm}`}>
-        <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
-          <span className="absolute inset-0 rounded-full bg-white/80" style={{ animation:"dotPulse 1.4s ease-in-out infinite" }} />
+    <footer className="footer-root flex flex-col items-start gap-1.5 px-1 pb-4 pt-3 sm:gap-2">
+      {/* Clock pill — hover → bigger + white glow */}
+      <div
+        className="footer-clock group inline-flex cursor-default items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 backdrop-blur-md transition-all duration-300 hover:border-white/30 hover:bg-white/[0.07] hover:shadow-[0_0_18px_rgba(255,255,255,0.22)] hover:scale-105"
+        aria-label={`Time ${time} ${ampm}`}
+      >
+        <span className="relative flex h-3 w-3 shrink-0 items-center justify-center">
+          <span className="absolute inset-0 rounded-full bg-white/85" style={{ animation: "dotPulse 1.4s ease-in-out infinite" }} />
           <span className="absolute inset-[3px] rounded-full bg-white/95" />
         </span>
-        <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-white/45">BD</span>
-        <span className="h-2.5 w-px bg-white/12" />
-        <span className="font-mono text-[12px] font-medium tabular-nums text-white/75">{time}</span>
-        <span className="text-[10px] font-semibold text-white/45">{ampm}</span>
+        <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-white/55 transition-colors duration-300 group-hover:text-white/80">
+          TIME
+        </span>
+        <span className="h-2.5 w-px bg-white/15" />
+        <span className="font-mono text-[13px] font-medium tabular-nums text-white/80 transition-colors duration-300 group-hover:text-white" style={{ fontVariantNumeric: "tabular-nums" }}>
+          {time}
+        </span>
+        <span className="text-[11px] font-semibold uppercase text-white/55 transition-colors duration-300 group-hover:text-white/80">
+          {ampm}
+        </span>
       </div>
 
       {/* Credits row */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <div className="flex cursor-default items-center gap-1.5 text-[10px] uppercase tracking-[0.18em] text-white/30 transition-colors hover:text-white/60">
+        <div className="group flex cursor-default items-center gap-1.5 text-[10px] uppercase tracking-[0.18em] text-white/30 transition-colors duration-300 hover:text-white/70">
           <span>Created By</span>
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
           <span>Revenger</span>
@@ -50,8 +64,8 @@ export default function Footer() {
 
       <style>{`
         @keyframes dotPulse {
-          0%,100% { opacity:.45; transform:scale(.85); }
-          50%      { opacity:1;   transform:scale(1.1); }
+          0%, 100% { opacity: 0.45; transform: scale(0.85); }
+          50%       { opacity: 1;   transform: scale(1.1); }
         }
       `}</style>
     </footer>

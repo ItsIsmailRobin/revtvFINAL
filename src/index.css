@@ -33,6 +33,11 @@ body {
   min-height: 100dvh;
 }
 
+/* Space Grotesk for all heading elements */
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Space Grotesk", "Space Grotesk Fallback", sans-serif;
+}
+
 /* Re-enable selection inside input/textarea for usability */
 input,
 textarea,

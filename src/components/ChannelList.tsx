@@ -82,33 +82,29 @@ export default function ChannelList({
               {String(i + 1).padStart(2, "0")}
             </div>
 
-            {/* Logo */}
-            <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-black/40 ring-1 ring-white/10 sm:h-12 sm:w-12">
+            {/* Logo — round crop, transparent bg */}
+            <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-transparent sm:h-12 sm:w-12">
               {ch.logo ? (
                 <img
                   src={ch.logo}
                   alt={ch.name}
                   loading="lazy"
                   referrerPolicy="no-referrer"
-                  className="h-full w-full object-contain p-1.5 transition-transform duration-500 group-hover:scale-110"
+                  className="h-full w-full rounded-full object-contain transition-transform duration-500 group-hover:scale-110"
+                  style={{ background: "transparent" }}
                   onError={(e) => {
                     const el = e.target as HTMLImageElement;
                     el.style.display = "none";
                     const parent = el.parentElement!;
-                    parent.classList.add(
-                      "flex",
-                      "items-center",
-                      "justify-center"
-                    );
+                    parent.classList.add("flex", "items-center", "justify-center");
                     const initial = document.createElement("span");
-                    initial.className =
-                      "text-sm font-semibold text-white/60 sm:text-base";
+                    initial.className = "text-sm font-semibold text-white/60 sm:text-base";
                     initial.textContent = ch.name.charAt(0).toUpperCase();
                     parent.appendChild(initial);
                   }}
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-white/60 sm:text-base">
+                <div className="flex h-full w-full items-center justify-center rounded-full text-sm font-semibold text-white/60 sm:text-base">
                   {ch.name.charAt(0).toUpperCase()}
                 </div>
               )}

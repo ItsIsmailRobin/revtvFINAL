@@ -18,11 +18,12 @@ export default function Header() {
 
       {/* Live Playlist pill — right-aligned, full glow treatment */}
       <button onClick={handleLivePlaylistClick} aria-label="Live Playlist — click to refresh"
-        className="group flex cursor-pointer items-center gap-2 rounded-full px-3.5 py-2 transition-all duration-300 hover:scale-105 active:scale-95"
+        className="group flex cursor-pointer items-center gap-2 px-3.5 py-2 transition-all duration-300 hover:scale-105 active:scale-95"
         style={{
           background: "rgba(16,185,129,0.08)",
           border: "1px solid rgba(52,211,153,0.25)",
           boxShadow: "0 0 12px rgba(52,211,153,0.12), inset 0 1px 0 rgba(255,255,255,0.06)",
+          borderRadius: "8px",
         }}>
         {/* Dot with ping */}
         <span className="relative flex h-2 w-2 shrink-0">

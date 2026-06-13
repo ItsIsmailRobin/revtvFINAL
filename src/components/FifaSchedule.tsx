@@ -8,7 +8,7 @@ interface Match {
   time: string;      // HH:MM  24h BD
   teamA: string;
   teamB: string;
-  flagA: string;     // PNG flag URL
+  flagA: string;
   flagB: string;
   venue: string;
   city: string;
@@ -16,13 +16,9 @@ interface Match {
   scoreB?: number;
 }
 
-// ─── Flag helper — flagcdn.com PNG by ISO code ────────────────────
 const f = (code: string) => `https://flagcdn.com/w40/${code.toLowerCase()}.png`;
 
-// ─── Full FIFA 2026 schedule (BD time = UTC+6) ───────────────────
-// Group stage: June 11 – July 3 · Knockouts: July 6 – July 26
 const MATCHES: Match[] = [
-  // GROUP STAGE — 48 matches across 8 groups (A–H), 6 matches/group
   { id:1,  stage:"Group A", date:"2026-06-12", time:"06:00",  teamA:"Mexico",       flagA:f("mx"), teamB:"Ecuador",      flagB:f("ec"), city:"LA",     venue:"SoFi Stadium" },
   { id:2,  stage:"Group B", date:"2026-06-12", time:"23:00",  teamA:"USA",          flagA:f("us"), teamB:"Canada",       flagB:f("ca"), city:"Dallas", venue:"AT&T Stadium" },
   { id:3,  stage:"Group C", date:"2026-06-13", time:"03:00",  teamA:"Spain",        flagA:f("es"), teamB:"Uruguay",      flagB:f("uy"), city:"NY",     venue:"MetLife Stadium" },
@@ -118,21 +114,19 @@ function matchStart(m: Match) { return new Date(`${m.date}T${m.time}:00+06:00`);
 function isOver(m: Match)  { return matchStart(m) < bdNow(); }
 function isLive(m: Match)  { const s = matchStart(m).getTime(), n = bdNow().getTime(); return n >= s && n <= s + 110*60000; }
 
-// ─── Group matches by date ────────────────────────────────────────
 function groupByDate(matches: Match[]): { date: string; matches: Match[] }[] {
   const map: Record<string, Match[]> = {};
   for (const m of matches) (map[m.date] ??= []).push(m);
   return Object.keys(map).sort().map(date => ({ date, matches: map[date] }));
 }
 
-// ─── Find page index for today ────────────────────────────────────
 function todayPageIndex(pages: { date: string; matches: Match[] }[][]): number {
   const today = bdNow().toISOString().slice(0,10);
   const idx = pages.findIndex(pg => pg.some(d => d.date >= today));
   return idx >= 0 ? idx : 0;
 }
 
-// ─── Countdown ────────────────────────────────────────────────────
+// ─── Countdown ─────────────────────────────────────────────────────
 function Countdown({ match }: { match: Match }) {
   const [ms, setMs] = useState(() => matchStart(match).getTime() - bdNow().getTime());
   useEffect(() => {
@@ -141,21 +135,24 @@ function Countdown({ match }: { match: Match }) {
   }, [match]);
 
   if (isLive(match)) return (
-    <div className="flex items-center justify-center gap-2">
-      <span className="relative flex h-2.5 w-2.5">
-        <span className="absolute inset-0 animate-ping rounded-full bg-green-400 opacity-80" />
-        <span className="relative h-2.5 w-2.5 rounded-full bg-green-400" style={{boxShadow:"0 0 8px #4ade80,0 0 16px #4ade80"}} />
+    <div className="flex items-center justify-center gap-1.5">
+      <span className="relative flex h-2 w-2 shrink-0">
+        <span className="absolute inset-0 animate-ping rounded-full bg-green-400 opacity-75" />
+        <span className="relative h-2 w-2 rounded-full bg-green-400" style={{boxShadow:"0 0 6px #4ade80,0 0 12px #4ade80"}} />
       </span>
-      <span className="text-sm font-black uppercase tracking-widest text-green-300" style={{textShadow:"0 0 12px rgba(74,222,128,0.8)"}}>LIVE</span>
+      <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"13px", fontWeight:700, letterSpacing:"0.12em", color:"#86efac", textShadow:"0 0 10px rgba(74,222,128,0.7)"}}>LIVE</span>
     </div>
   );
 
   if (ms <= 0) return (
-    <div className="text-center font-bold text-white/30 text-xs uppercase tracking-widest">Full Time</div>
+    <div style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.25)", textTransform:"uppercase"}}>Full Time</div>
   );
 
-  const s = Math.floor(ms / 1000);
-  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), mi = Math.floor((s % 3600) / 60), sc = s % 60;
+  const totalSec = Math.floor(ms / 1000);
+  const d = Math.floor(totalSec / 86400);
+  const h = Math.floor((totalSec % 86400) / 3600);
+  const mi = Math.floor((totalSec % 3600) / 60);
+  const sc = totalSec % 60;
   const pad = (n: number) => String(n).padStart(2,"0");
 
   const units = d > 0
@@ -163,18 +160,32 @@ function Countdown({ match }: { match: Match }) {
     : [{ v: pad(h), l:"H" }, { v: pad(mi), l:"M" }, { v: pad(sc), l:"S" }];
 
   return (
-    <div className="flex items-end gap-1">
+    <div className="flex items-center gap-0.5">
       {units.map((u, i) => (
-        <div key={u.l} className="flex items-end">
-          <div className="flex flex-col items-center">
-            <span className="font-mono text-[22px] font-black leading-none tabular-nums text-white" style={{
-              fontFamily:"'SF Mono','Fira Code','Cascadia Code',monospace",
-              textShadow:"0 0 20px rgba(167,139,250,0.6)",
+        <div key={u.l} className="flex items-center">
+          <div className="flex flex-col items-center gap-0">
+            <span style={{
+              fontFamily:"'Inter',monospace",
+              fontSize:"20px",
+              fontWeight:800,
+              lineHeight:1,
+              color:"#fff",
+              textShadow:"0 0 16px rgba(167,139,250,0.55)",
+              letterSpacing:"-0.02em",
+              fontVariantNumeric:"tabular-nums",
             }}>{u.v}</span>
-            <span className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.15em] text-violet-400/70">{u.l}</span>
+            <span style={{
+              fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
+              fontSize:"8px",
+              fontWeight:700,
+              letterSpacing:"0.14em",
+              color:"rgba(167,139,250,0.65)",
+              textTransform:"uppercase",
+              marginTop:"2px",
+            }}>{u.l}</span>
           </div>
           {i < units.length - 1 && (
-            <span className="mb-4 mx-0.5 text-lg font-black text-violet-400/50 leading-none">:</span>
+            <span style={{color:"rgba(167,139,250,0.4)", fontSize:"16px", fontWeight:700, marginBottom:"8px", marginLeft:"1px", marginRight:"1px"}}>:</span>
           )}
         </div>
       ))}
@@ -183,17 +194,33 @@ function Countdown({ match }: { match: Match }) {
 }
 
 // ─── Score display ────────────────────────────────────────────────
-function Score({ a, b }: { a: number; b: number }) {
+function Score({ a, b, live }: { a: number; b: number; live?: boolean }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="font-mono text-[26px] font-black text-white" style={{textShadow:"0 0 16px rgba(255,255,255,0.3)"}}>{a}</span>
-      <span className="text-base text-white/25 font-light">—</span>
-      <span className="font-mono text-[26px] font-black text-white" style={{textShadow:"0 0 16px rgba(255,255,255,0.3)"}}>{b}</span>
+    <div className="flex items-center gap-1.5">
+      <span style={{
+        fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
+        fontSize:"22px",
+        fontWeight:800,
+        color: live ? "#86efac" : "#fff",
+        textShadow: live ? "0 0 12px rgba(74,222,128,0.6)" : "0 0 12px rgba(255,255,255,0.25)",
+        lineHeight:1,
+        letterSpacing:"-0.01em",
+      }}>{a}</span>
+      <span style={{color:"rgba(255,255,255,0.2)", fontSize:"14px", fontWeight:300}}>:</span>
+      <span style={{
+        fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
+        fontSize:"22px",
+        fontWeight:800,
+        color: live ? "#86efac" : "#fff",
+        textShadow: live ? "0 0 12px rgba(74,222,128,0.6)" : "0 0 12px rgba(255,255,255,0.25)",
+        lineHeight:1,
+        letterSpacing:"-0.01em",
+      }}>{b}</span>
     </div>
   );
 }
 
-// ─── Stage badge style ────────────────────────────────────────────
+// ─── Stage badge ──────────────────────────────────────────────────
 const STAGE_STYLE: Record<string, { bg: string; border: string; color: string }> = {
   "⭐ Final":      { bg:"rgba(251,191,36,0.15)", border:"rgba(251,191,36,0.4)", color:"#fbbf24" },
   "Semi-Final":    { bg:"rgba(167,139,250,0.12)", border:"rgba(167,139,250,0.4)", color:"#c4b5fd" },
@@ -202,7 +229,7 @@ const STAGE_STYLE: Record<string, { bg: string; border: string; color: string }>
   "Round of 32":   { bg:"rgba(79,82,221,0.08)", border:"rgba(79,82,221,0.25)", color:"#6366f1" },
 };
 function stageStyle(stage: string) {
-  return STAGE_STYLE[stage] ?? { bg:"rgba(255,255,255,0.05)", border:"rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.5)" };
+  return STAGE_STYLE[stage] ?? { bg:"rgba(255,255,255,0.05)", border:"rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.45)" };
 }
 
 // ─── Match card ───────────────────────────────────────────────────
@@ -214,97 +241,114 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
   const timeLabel = d.toLocaleTimeString("en-BD", { hour:"2-digit", minute:"2-digit", hour12:true, timeZone:"Asia/Dhaka" });
 
   return (
-    <div className="relative overflow-hidden rounded-2xl transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.01]"
+    <div className="relative overflow-hidden rounded-xl transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.01]"
       style={{
         background: live
-          ? "linear-gradient(135deg,rgba(15,40,15,0.7),rgba(10,30,10,0.6))"
+          ? "linear-gradient(135deg,rgba(15,40,15,0.75),rgba(10,30,10,0.65))"
           : over
-          ? "rgba(255,255,255,0.025)"
+          ? "rgba(255,255,255,0.02)"
           : isToday
-          ? "linear-gradient(135deg,rgba(139,92,246,0.14),rgba(79,42,201,0.08))"
-          : "rgba(255,255,255,0.04)",
-        border: `1px solid ${live ? "rgba(74,222,128,0.35)" : isToday ? "rgba(139,92,246,0.30)" : over ? "rgba(255,255,255,0.05)" : "rgba(139,92,246,0.15)"}`,
+          ? "linear-gradient(135deg,rgba(139,92,246,0.13),rgba(79,42,201,0.07))"
+          : "rgba(255,255,255,0.035)",
+        border: `1px solid ${live ? "rgba(74,222,128,0.30)" : isToday ? "rgba(139,92,246,0.28)" : over ? "rgba(255,255,255,0.05)" : "rgba(139,92,246,0.13)"}`,
         boxShadow: live
-          ? "0 0 24px rgba(74,222,128,0.14),0 4px 16px rgba(0,0,0,0.4)"
+          ? "0 0 20px rgba(74,222,128,0.12),0 2px 10px rgba(0,0,0,0.4)"
           : final
-          ? "0 0 24px rgba(251,191,36,0.10),0 4px 16px rgba(0,0,0,0.4)"
+          ? "0 0 20px rgba(251,191,36,0.08),0 2px 10px rgba(0,0,0,0.4)"
           : isToday
-          ? "0 0 16px rgba(139,92,246,0.12),0 4px 12px rgba(0,0,0,0.3)"
-          : "0 2px 8px rgba(0,0,0,0.25)",
+          ? "0 0 14px rgba(139,92,246,0.10),0 2px 8px rgba(0,0,0,0.3)"
+          : "0 1px 6px rgba(0,0,0,0.22)",
       }}>
 
-      {/* Top shimmer line */}
+      {/* Top shimmer */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px"
-        style={{ background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.14),transparent)" }} />
+        style={{ background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.10),transparent)" }} />
 
-      {/* Live glow pulse overlay */}
+      {/* Live pulse overlay */}
       {live && (
-        <div className="pointer-events-none absolute inset-0 rounded-2xl"
-          style={{ boxShadow:"inset 0 0 30px rgba(74,222,128,0.08)", animation:"liveGlow 2s ease-in-out infinite" }} />
+        <div className="pointer-events-none absolute inset-0 rounded-xl"
+          style={{ boxShadow:"inset 0 0 28px rgba(74,222,128,0.07)", animation:"liveGlow 2s ease-in-out infinite" }} />
       )}
 
-      <div className="px-4 py-3">
-        {/* Stage + time row */}
+      <div className="px-3 py-3">
+        {/* Top row: stage badge + time + city */}
         <div className="mb-2.5 flex items-center justify-between gap-2">
-          <span className="rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest"
-            style={{ background:ss.bg, border:`1px solid ${ss.border}`, color:ss.color }}>{match.stage}</span>
-          <div className="flex items-center gap-1.5 text-right">
-            <span className="text-[10px] text-white/35">{timeLabel} BD</span>
-            <span className="text-white/15">·</span>
-            <span className="text-[10px] text-white/25">{match.city}</span>
+          <span style={{
+            background:ss.bg, border:`1px solid ${ss.border}`, color:ss.color,
+            fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
+            fontSize:"9px", fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase",
+            borderRadius:"999px", padding:"2px 8px", display:"inline-block", lineHeight:"1.5",
+          }}>{match.stage}</span>
+          <div className="flex items-center gap-1.5">
+            <span style={{fontFamily:"'Inter',sans-serif", fontSize:"10px", fontWeight:500, color:"rgba(255,255,255,0.38)"}}>{timeLabel}</span>
+            <span style={{color:"rgba(255,255,255,0.12)", fontSize:"10px"}}>·</span>
+            <span style={{fontFamily:"'Inter',sans-serif", fontSize:"10px", fontWeight:400, color:"rgba(255,255,255,0.22)"}}>{match.city}</span>
           </div>
         </div>
 
-        {/* Teams row */}
+        {/* Teams + score row */}
         <div className="flex items-center justify-between gap-2">
           {/* Team A */}
           <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-            <div className="relative">
-              <img src={match.flagA} alt={match.teamA} className="h-8 w-12 rounded object-cover shadow-lg sm:h-9 sm:w-14"
-                style={{ border:"1px solid rgba(255,255,255,0.12)" }}
-                onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
-            </div>
-            <span className={`w-full truncate text-center text-[11px] font-bold leading-tight ${over ? "text-white/50" : "text-white/90"}`}>
-              {match.teamA}
-            </span>
+            <img src={match.flagA} alt={match.teamA}
+              className="h-7 w-11 rounded-sm object-cover shadow-md sm:h-8 sm:w-12"
+              style={{ border:"1px solid rgba(255,255,255,0.10)" }}
+              onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
+            <span style={{
+              fontFamily:"'Inter',sans-serif", fontSize:"11px", fontWeight:600,
+              color: over && !live ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.88)",
+              textAlign:"center", lineHeight:"1.2",
+              maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", display:"block",
+            }}>{match.teamA}</span>
           </div>
 
-          {/* Centre */}
-          <div className="flex shrink-0 flex-col items-center gap-1 px-2">
-            {over && hasScore ? <Score a={match.scoreA!} b={match.scoreB!} /> :
-             over ? (
-               <div className="text-[11px] font-bold uppercase tracking-widest text-white/25">FT</div>
-             ) : (
-               <Countdown match={match} />
-             )}
-            {over && !live && (
-              <span className="text-[9px] font-semibold uppercase tracking-widest text-white/25">
-                {hasScore ? "Final Score" : "Full Time"}
-              </span>
+          {/* Centre: score or countdown */}
+          <div className="flex shrink-0 flex-col items-center gap-0.5 px-1">
+            {live && hasScore ? (
+              <>
+                <Score a={match.scoreA!} b={match.scoreB!} live />
+                <div className="flex items-center gap-1 mt-0.5">
+                  <span className="h-1.5 w-1.5 animate-ping rounded-full bg-green-400 opacity-80" />
+                  <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"8px", fontWeight:700, letterSpacing:"0.14em", color:"#86efac", textTransform:"uppercase"}}>Live</span>
+                </div>
+              </>
+            ) : over && hasScore ? (
+              <>
+                <Score a={match.scoreA!} b={match.scoreB!} />
+                <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"8px", fontWeight:600, letterSpacing:"0.12em", color:"rgba(255,255,255,0.22)", textTransform:"uppercase", marginTop:"2px"}}>FT</span>
+              </>
+            ) : over ? (
+              <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.28)", textTransform:"uppercase"}}>FT</span>
+            ) : (
+              <Countdown match={match} />
             )}
           </div>
 
           {/* Team B */}
           <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-            <div className="relative">
-              <img src={match.flagB} alt={match.teamB} className="h-8 w-12 rounded object-cover shadow-lg sm:h-9 sm:w-14"
-                style={{ border:"1px solid rgba(255,255,255,0.12)" }}
-                onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
-            </div>
-            <span className={`w-full truncate text-center text-[11px] font-bold leading-tight ${over ? "text-white/50" : "text-white/90"}`}>
-              {match.teamB}
-            </span>
+            <img src={match.flagB} alt={match.teamB}
+              className="h-7 w-11 rounded-sm object-cover shadow-md sm:h-8 sm:w-12"
+              style={{ border:"1px solid rgba(255,255,255,0.10)" }}
+              onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
+            <span style={{
+              fontFamily:"'Inter',sans-serif", fontSize:"11px", fontWeight:600,
+              color: over && !live ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.88)",
+              textAlign:"center", lineHeight:"1.2",
+              maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", display:"block",
+            }}>{match.teamB}</span>
           </div>
         </div>
 
         {/* Venue */}
-        <div className="mt-2 text-center text-[9px] text-white/20">{match.venue}</div>
+        <div className="mt-2 text-center" style={{fontFamily:"'Inter',sans-serif", fontSize:"9px", color:"rgba(255,255,255,0.17)", fontWeight:400}}>
+          {match.venue}
+        </div>
       </div>
 
       <style>{`
         @keyframes liveGlow {
-          0%,100%{box-shadow:inset 0 0 20px rgba(74,222,128,0.06)}
-          50%{box-shadow:inset 0 0 35px rgba(74,222,128,0.14)}
+          0%,100%{box-shadow:inset 0 0 20px rgba(74,222,128,0.05)}
+          50%{box-shadow:inset 0 0 32px rgba(74,222,128,0.12)}
         }
       `}</style>
     </div>
@@ -315,35 +359,39 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
 function DayColumn({ dayGroup, todayBD }: { dayGroup: { date: string; matches: Match[] }; todayBD: string }) {
   const isToday = dayGroup.date === todayBD;
   const d = new Date(dayGroup.date + "T12:00:00+06:00");
+  // Format: "Saturday · June 13 2026" — single line
   const weekday = d.toLocaleDateString("en-BD", { weekday:"long", timeZone:"Asia/Dhaka" });
-  const monthDay = d.toLocaleDateString("en-BD", { month:"short", day:"numeric", timeZone:"Asia/Dhaka" });
+  const fullDate = d.toLocaleDateString("en-BD", { month:"long", day:"numeric", year:"numeric", timeZone:"Asia/Dhaka" });
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-3">
-      {/* Day header */}
-      <div className="flex flex-col items-center gap-1 rounded-xl py-2.5 px-3"
+    <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+      {/* Day header — date + day on one clean line */}
+      <div className="rounded-lg px-3 py-2.5"
         style={{
-          background: isToday ? "rgba(139,92,246,0.18)" : "rgba(255,255,255,0.04)",
-          border: `1px solid ${isToday ? "rgba(139,92,246,0.40)" : "rgba(255,255,255,0.07)"}`,
-          boxShadow: isToday ? "0 0 20px rgba(139,92,246,0.15)" : "none",
+          background: isToday ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.035)",
+          border: `1px solid ${isToday ? "rgba(139,92,246,0.38)" : "rgba(255,255,255,0.07)"}`,
+          boxShadow: isToday ? "0 0 16px rgba(139,92,246,0.13)" : "none",
         }}>
-        {isToday && (
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-400" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-violet-300">Today</span>
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-400" />
-          </div>
-        )}
-        <span className={`text-xs font-bold ${isToday ? "text-violet-200" : "text-white/60"}`}>{weekday}</span>
-        <span className={`text-[11px] font-semibold ${isToday ? "text-violet-300/80" : "text-white/35"}`}>{monthDay}</span>
-        <span className="mt-0.5 rounded-full px-2 py-0.5 text-[9px] font-bold text-white/40"
-          style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.08)" }}>
-          {dayGroup.matches.length} match{dayGroup.matches.length !== 1 ? "es" : ""}
-        </span>
+        <div className="flex flex-col gap-0.5">
+          <span style={{
+            fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
+            fontSize:"12px",
+            fontWeight:700,
+            color: isToday ? "#c4b5fd" : "rgba(255,255,255,0.65)",
+            letterSpacing:"0.01em",
+          }}>{weekday}</span>
+          <span style={{
+            fontFamily:"'Inter',sans-serif",
+            fontSize:"11px",
+            fontWeight:500,
+            color: isToday ? "rgba(196,181,253,0.75)" : "rgba(255,255,255,0.35)",
+            letterSpacing:"0.01em",
+          }}>{fullDate}</span>
+        </div>
       </div>
 
       {/* Match cards */}
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-2">
         {dayGroup.matches.map(m => <MatchCard key={m.id} match={m} isToday={isToday} />)}
       </div>
     </div>
@@ -353,7 +401,6 @@ function DayColumn({ dayGroup, todayBD }: { dayGroup: { date: string; matches: M
 // ─── Main component ───────────────────────────────────────────────
 export default function FifaSchedule() {
   const allDays = groupByDate(MATCHES);
-  // Chunk into pages of 3 days
   const pages: { date: string; matches: Match[] }[][] = [];
   for (let i = 0; i < allDays.length; i += 3) pages.push(allDays.slice(i, i + 3));
 
@@ -364,7 +411,6 @@ export default function FifaSchedule() {
   const [, tick] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Tick every 30s for live detection
   useEffect(() => {
     const id = setInterval(() => tick(t => t + 1), 30_000);
     return () => clearInterval(id);
@@ -379,7 +425,6 @@ export default function FifaSchedule() {
   };
 
   const current = pages[page] ?? [];
-  // Find if any match today is live
   const hasLive = MATCHES.some(m => isLive(m));
 
   const pageStart = current[0]?.date ?? "";
@@ -391,37 +436,52 @@ export default function FifaSchedule() {
   };
 
   return (
-    <section className="mt-8 sm:mt-10">
-      {/* Section header */}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl text-xl"
-            style={{ background:"linear-gradient(135deg,rgba(139,92,246,0.3),rgba(99,62,221,0.2))", border:"1px solid rgba(139,92,246,0.35)", boxShadow:"0 0 16px rgba(139,92,246,0.2)" }}>⚽</div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-black text-white sm:text-lg">FIFA World Cup 2026</h2>
-              {hasLive && (
-                <div className="flex items-center gap-1.5 rounded-full px-2 py-0.5"
-                  style={{ background:"rgba(74,222,128,0.12)", border:"1px solid rgba(74,222,128,0.3)" }}>
-                  <span className="h-1.5 w-1.5 animate-ping rounded-full bg-green-400 opacity-80" />
-                  <span className="text-[9px] font-black uppercase tracking-widest text-green-300">Live</span>
-                </div>
-              )}
+    <section className="mt-10 sm:mt-12">
+      {/* ── Section header ── */}
+      <div className="mb-6">
+        {/* Big Space Grotesk header */}
+        <div className="mb-1.5 flex items-center gap-3">
+          <h2 style={{
+            fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
+            fontSize:"clamp(26px,4vw,40px)",
+            fontWeight:800,
+            letterSpacing:"-0.02em",
+            lineHeight:1.1,
+            background:"linear-gradient(135deg,#fff 30%,rgba(167,139,250,0.85) 100%)",
+            WebkitBackgroundClip:"text",
+            WebkitTextFillColor:"transparent",
+            backgroundClip:"text",
+          }}>FIFA 2026 Schedule</h2>
+          {hasLive && (
+            <div className="flex items-center gap-1.5 rounded-full px-2.5 py-1"
+              style={{ background:"rgba(74,222,128,0.12)", border:"1px solid rgba(74,222,128,0.28)" }}>
+              <span className="h-1.5 w-1.5 animate-ping rounded-full bg-green-400 opacity-80" />
+              <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"9px", fontWeight:700, letterSpacing:"0.12em", color:"#86efac", textTransform:"uppercase"}}>Live</span>
             </div>
-            <p className="text-[10px] font-medium uppercase tracking-widest text-white/30">Schedule · Bangladesh Standard Time (UTC+6)</p>
-          </div>
+          )}
         </div>
+        {/* Sub-header */}
+        <p style={{
+          fontFamily:"'Inter',sans-serif",
+          fontSize:"13px",
+          fontWeight:400,
+          color:"rgba(255,255,255,0.38)",
+          letterSpacing:"0.01em",
+        }}>Bangladesh Standard Time (UTC+6)</p>
+      </div>
 
-        {/* Page range label */}
-        <div className="text-right text-[11px] text-white/35">
+      {/* Page range label */}
+      <div className="mb-3 flex items-center justify-between">
+        <div />
+        <div style={{fontFamily:"'Inter',sans-serif", fontSize:"11px", color:"rgba(255,255,255,0.3)", fontWeight:500}}>
           <span>{fmtD(pageStart)}</span>
-          {pageStart !== pageEnd && <><span className="mx-1 text-white/20">–</span><span>{fmtD(pageEnd)}</span></>}
+          {pageStart !== pageEnd && <><span className="mx-1" style={{color:"rgba(255,255,255,0.15)"}}>–</span><span>{fmtD(pageEnd)}</span></>}
         </div>
       </div>
 
       {/* Navigation + content */}
       <div className="flex items-stretch gap-2 sm:gap-3">
-        {/* Prev arrow */}
+        {/* Prev */}
         <button onClick={() => navigate(-1)} disabled={page === 0}
           className="flex w-9 shrink-0 flex-col items-center justify-center rounded-xl transition-all duration-200 active:scale-95"
           style={{
@@ -447,7 +507,7 @@ export default function FifaSchedule() {
           </div>
         </div>
 
-        {/* Next arrow */}
+        {/* Next */}
         <button onClick={() => navigate(1)} disabled={page >= pages.length - 1}
           className="flex w-9 shrink-0 flex-col items-center justify-center rounded-xl transition-all duration-200 active:scale-95"
           style={{
@@ -475,8 +535,8 @@ export default function FifaSchedule() {
         ))}
       </div>
 
-      <p className="mt-4 text-center text-[10px] text-white/20">
-        All times in Bangladesh Standard Time · Bracket TBD after group stage
+      <p className="mt-4 text-center" style={{fontFamily:"'Inter',sans-serif", fontSize:"10px", color:"rgba(255,255,255,0.18)", fontWeight:400}}>
+        All times Bangladesh Standard Time · Knockout bracket TBD after group stage
       </p>
 
       <style>{`
