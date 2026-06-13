@@ -82,7 +82,23 @@ export default function Player({
   // may crop), "fill" (stretch to fill, no aspect ratio preservation),
   // "native" (use video's intrinsic size).
   type AspectMode = "contain" | "cover" | "fill" | "native";
-  const [aspectMode, setAspectMode] = useState<AspectMode>("contain");
+  const [aspectMode, setAspectMode] = useState<AspectMode>(() => {
+    // Restore the last-used aspect ratio (survives refresh & logo click)
+    try {
+      const saved = window.localStorage.getItem("revtv:aspectMode");
+      if (saved === "contain" || saved === "cover" || saved === "fill" || saved === "native") {
+        return saved;
+      }
+    } catch {}
+    return "contain";
+  });
+
+  // Remember the chosen aspect ratio mode
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("revtv:aspectMode", aspectMode);
+    } catch {}
+  }, [aspectMode]);
 
   // Status indicator — shows current volume / aspect ratio briefly
   // when the user changes them via keyboard, then fades out after 3s.
