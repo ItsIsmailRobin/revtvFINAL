@@ -45,6 +45,9 @@ export default function Player({
   });
   const touchStart = useRef<{ x: number; y: number; t: number } | null>(null);
   const isSwiping = useRef(false);
+  // Tracks whether the user deliberately paused — prevents auto-resume from
+  // firing when the user hits the pause button intentionally.
+  const userPausedRef = useRef(false);
 
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -171,6 +174,7 @@ export default function Player({
     setError(null);
     setLoading(true);
     setPlaying(false);
+    userPausedRef.current = false;
 
     // Track recovery attempts to avoid infinite loops
     let networkRetries = 0;
@@ -191,11 +195,11 @@ export default function Player({
     };
     const onPause = () => {
       setPlaying(false);
-      // If it paused on its own (not user-triggered) and is not ended,
-      // resume immediately so m3u8/live streams never stop.
+      // Only auto-resume if the stream paused on its own (not user-triggered)
+      // so manual pause works correctly. Loop/stall pauses have userPausedRef = false.
       window.setTimeout(() => {
         const v = videoRef.current;
-        if (!v || v.ended) return;
+        if (!v || v.ended || userPausedRef.current) return;
         if (v.paused) {
           v.play().catch(() => {});
         }
@@ -514,10 +518,12 @@ export default function Player({
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) {
+      userPausedRef.current = false;
       // On resume: jump to live edge so viewer gets the latest stream
       syncToLiveEdge();
       v.play().catch(() => {});
     } else {
+      userPausedRef.current = true;
       v.pause();
     }
     armHide();
