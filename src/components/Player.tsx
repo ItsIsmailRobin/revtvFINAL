@@ -512,6 +512,27 @@ export default function Player({
   // Tracks the last time we snapped to live edge — prevents spamming seeks.
   const lastLiveSnapRef = useRef<number>(0);
 
+  // Called by the ● LIVE button — always jumps to the absolute live edge
+  // with no debounce, no minimum-gap check. This is intentional: the user
+  // tapped it explicitly to catch up to real-time.
+  const jumpToLiveEdge = useCallback(() => {
+    const v = videoRef.current;
+    const hls = hlsRef.current;
+    if (!v) return;
+    let liveEdge: number | null = null;
+    if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
+      liveEdge = hls.liveSyncPosition;
+    } else if (v.seekable.length > 0) {
+      const end = v.seekable.end(v.seekable.length - 1);
+      if (isFinite(end)) liveEdge = end;
+    }
+    if (liveEdge != null) {
+      lastLiveSnapRef.current = Date.now();
+      v.currentTime = liveEdge;
+      if (v.paused) v.play().catch(() => {});
+    }
+  }, []);
+
   const syncToLiveEdge = useCallback(() => {
     const v = videoRef.current;
     const hls = hlsRef.current;
@@ -1226,7 +1247,12 @@ export default function Player({
           <div className="min-w-0 flex-1">
             {channel && (
               <>
-                <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 ">
+                <button
+                  type="button"
+                  onClick={jumpToLiveEdge}
+                  title="Jump to live edge"
+                  className="pointer-events-auto mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 transition-all duration-200 hover:border-red-500/40 hover:bg-red-500/10 active:scale-95 cursor-pointer"
+                >
                   <span className="relative flex h-1.5 w-1.5">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
                     <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
@@ -1234,7 +1260,7 @@ export default function Player({
                   <span className="text-[10px] font-semibold uppercase tracking-widest text-white/80">
                     Live
                   </span>
-                </div>
+                </button>
                 <h2 className="truncate text-sm font-semibold text-white sm:text-lg">
                   {channel.name}
                 </h2>
