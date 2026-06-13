@@ -130,14 +130,10 @@ export default function TagBar({
         </div>
         )}
 
-        {/* Scrollable tags area - the border fades on both sides. */}
+        {/* Scrollable tags area */}
         <div
           className="relative min-w-0 flex-1"
           style={{
-            maskImage:
-              "linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.5) 5%, rgba(0,0,0,1) 12%, rgba(0,0,0,1) 88%, rgba(0,0,0,0.5) 95%, transparent 100%)",
-            WebkitMaskImage:
-              "linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.5) 5%, rgba(0,0,0,1) 12%, rgba(0,0,0,1) 88%, rgba(0,0,0,0.5) 95%, transparent 100%)",
             overflow: "hidden",
             padding: "6px 0",
           }}
@@ -179,13 +175,10 @@ export default function TagBar({
                     transform: isHovering && !isActive ? "scale(1.04)" : "scale(1)",
                   }}
                   className={cn(
-                    "relative flex shrink-0 items-center whitespace-nowrap rounded-full px-3 py-1 text-[12px] font-medium transition-all duration-300 active:scale-95",
-                    isActive ? "overflow-visible" : "overflow-hidden"
+                    "relative flex shrink-0 items-center whitespace-nowrap rounded-full px-3 py-1 text-[12px] font-medium transition-all duration-300 active:scale-95"
                   )}
                 >
-                  {/* Animated gradient border. Opacity is controlled by
-                      isHovering state instead of group-hover CSS so it's
-                      reliable on iOS Safari. */}
+                  {/* Animated gradient border */}
                   <span
                     className={cn(
                       "pointer-events-none absolute -inset-px rounded-full transition-opacity duration-300",
@@ -197,7 +190,7 @@ export default function TagBar({
                     )}
                     style={{
                       background: isActive
-                        ? "linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(200,220,255,0.3) 50%, rgba(255,255,255,0.35) 100%)"
+                        ? "linear-gradient(135deg, rgba(255,255,255,0.35) 0%, rgba(200,220,255,0.2) 50%, rgba(255,255,255,0.30) 100%)"
                         : "linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.15) 100%)",
                       padding: "1px",
                       WebkitMask:
@@ -207,31 +200,26 @@ export default function TagBar({
                       animation: "borderShine 6s linear infinite",
                     }}
                   />
-                  {/* Subtle glass fill. Same state-based approach. */}
+                  {/* Glass fill */}
                   <span
                     className={cn(
                       "pointer-events-none absolute inset-0 rounded-full transition-opacity duration-300",
                       isActive
-                        ? "bg-white/[0.10] opacity-100"
+                        ? "opacity-100"
                         : isHovering
-                        ? "bg-white/[0.04] opacity-100"
-                        : "bg-white/[0.04] opacity-0"
+                        ? "opacity-100"
+                        : "opacity-0"
                     )}
+                    style={{
+                      background: isActive
+                        ? "rgba(255,255,255,0.10)"
+                        : "rgba(255,255,255,0.04)",
+                      backdropFilter: isActive ? "blur(8px)" : undefined,
+                      boxShadow: isActive
+                        ? "0 0 8px rgba(255,255,255,0.12), inset 0 1px 0 rgba(255,255,255,0.15)"
+                        : undefined,
+                    }}
                   />
-                  {/* Soft outer glow for active tag (replaces shadow) */}
-                  {isActive && (
-                    <span
-                      className="pointer-events-none absolute rounded-full"
-                      style={{
-                        inset: "-3px",
-                        background:
-                          "linear-gradient(135deg, rgba(167,139,250,0.5), rgba(236,72,153,0.4), rgba(56,189,248,0.5))",
-                        opacity: 0.7,
-                        filter: "blur(6px)",
-                        zIndex: -1,
-                      }}
-                    />
-                  )}
                   <span className="relative tracking-tight text-[12px]">
                     {tag}
                   </span>
