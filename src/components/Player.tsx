@@ -175,6 +175,7 @@ export default function Player({
     setLoading(true);
     setPlaying(false);
     userPausedRef.current = false;
+    lastLiveSnapRef.current = 0;
 
     // Track recovery attempts to avoid infinite loops
     let networkRetries = 0;
@@ -473,32 +474,40 @@ export default function Player({
   }, [armHide, playing]);
 
   // ---- actions ----
+  // Tracks the last time we snapped to live edge — prevents spamming seeks.
+  const lastLiveSnapRef = useRef<number>(0);
+
   const syncToLiveEdge = useCallback(() => {
     const v = videoRef.current;
     const hls = hlsRef.current;
     if (!v) return;
-    // For HLS streams: seek to live edge when resuming
+    const now = Date.now();
+    // Debounce: don't snap more than once every 8 seconds
+    if (now - lastLiveSnapRef.current < 8_000) return;
+    let liveEdge: number | null = null;
     if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
-      const diff = hls.liveSyncPosition - v.currentTime;
-      if (diff > 5) {
-        v.currentTime = hls.liveSyncPosition;
-      }
+      liveEdge = hls.liveSyncPosition;
     } else if (v.seekable.length > 0) {
       const end = v.seekable.end(v.seekable.length - 1);
-      if (isFinite(end) && end - v.currentTime > 5) {
-        v.currentTime = end;
-      }
+      if (isFinite(end)) liveEdge = end;
+    }
+    if (liveEdge == null) return;
+    if (liveEdge - v.currentTime > 10) {
+      lastLiveSnapRef.current = now;
+      v.currentTime = liveEdge;
     }
   }, []);
 
-  // Conservative live-edge keeper: only snaps forward if playing and 45s+ behind.
-  // This handles Toffee-style streams that silently stall without firing events.
-  // 45s threshold + 15s poll = no spam, no interruption for deliberate behind-viewing.
+  // Live-edge keeper: snaps forward if 10s+ behind. Runs every 30s (no spam).
+  // Also fires when user resumes after a manual pause via syncToLiveEdge() in togglePlay.
   useEffect(() => {
     const id = window.setInterval(() => {
       const v = videoRef.current;
       if (!v || v.paused || v.seeking) return;
       const hls = hlsRef.current;
+      const now = Date.now();
+      // Debounce: skip if we already snapped recently
+      if (now - lastLiveSnapRef.current < 8_000) return;
       let liveEdge: number | null = null;
       if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
         liveEdge = hls.liveSyncPosition;
@@ -507,7 +516,8 @@ export default function Player({
         if (isFinite(end)) liveEdge = end;
       }
       if (liveEdge == null) return;
-      if (liveEdge - v.currentTime > 45) {
+      if (liveEdge - v.currentTime > 10) {
+        lastLiveSnapRef.current = now;
         v.currentTime = liveEdge;
       }
     }, 30_000);
