@@ -38,7 +38,7 @@ export default function Header() {
 
   return (
     <header className="relative z-20 flex items-center justify-between border-b border-white/5 bg-black/50 px-4 py-3 sm:px-8 sm:py-4">
-      <div className="flex items-end gap-3 sm:gap-4">
+      <div className="flex items-center gap-3 sm:gap-4">
         <button onClick={handleLogoClick} aria-label="RevTV - Go to homepage"
           className="group block transition-all duration-300 hover:scale-105 active:scale-95">
           <img src="https://i.postimg.cc/RZGz0gz9/Logo.png" alt="RevTV"
@@ -47,8 +47,8 @@ export default function Header() {
             onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
         </button>
 
-        {/* Inline BD clock — no border, dot + HH:MM:SS AM/PM, bottom-aligned with logo */}
-        <div className="flex items-center gap-1.5 pb-0.5 pl-1 sm:pb-1">
+        {/* Inline BD clock — no border, dot + HH:MM:SS AM/PM */}
+        <div className="flex items-center gap-1.5 pl-1">
           <span className="relative inline-flex h-2 w-2 items-center justify-center shrink-0">
             <span
               className="absolute h-1.5 w-1.5 rounded-full"
@@ -61,13 +61,13 @@ export default function Header() {
           </span>
           <span
             className="font-semibold tabular-nums"
-            style={{ fontSize: "14px", color: "#ffffff", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}
+            style={{ fontSize: "15px", color: "#ffffff", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}
           >
             {bdClock.time}
           </span>
           <span
             className="font-semibold uppercase tracking-widest"
-            style={{ fontSize: "13px", color: "rgba(255,255,255,0.6)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight: 1 }}
+            style={{ fontSize: "14px", color: "rgba(255,255,255,0.6)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight: 1 }}
           >
             {bdClock.ampm}
           </span>

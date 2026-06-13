@@ -75,15 +75,25 @@ export default function Background() {
         background: "radial-gradient(ellipse 130% 130% at 50% 50%, transparent 55%, rgba(6,2,14,0.38) 100%)"
       }} />
 
-      {/* Static petals — zero GPU layers */}
+      {/* Static petals — zero GPU layers, phase-locked to wall-clock time
+          so every viewer (and every refresh) sees petals floating in
+          the exact same position at the exact same moment. */}
       <div className="absolute inset-0 overflow-hidden" aria-hidden>
-        {PETALS.map(p => (
-          <span key={p.id} className="absolute select-none" style={{
-            left: `${p.x}%`, top: `${p.y}%`,
-            fontSize: `${p.size}px`, opacity: p.opacity,
-            animation: `petalDrift ${p.dur}s linear ${p.delay}s infinite`,
-          }}>🌸</span>
-        ))}
+        {PETALS.map(p => {
+          // Anchor the animation's phase to absolute time (epoch seconds)
+          // rather than page-load time. A negative delay equal to
+          // (now mod duration) makes the animation appear to have been
+          // running continuously since the epoch — identical everywhere.
+          const nowSec = Date.now() / 1000;
+          const phase = ((nowSec + p.delay) % p.dur + p.dur) % p.dur;
+          return (
+            <span key={p.id} className="absolute select-none" style={{
+              left: `${p.x}%`, top: `${p.y}%`,
+              fontSize: `${p.size}px`, opacity: p.opacity,
+              animation: `petalDrift ${p.dur}s linear ${-phase}s infinite`,
+            }}>🌸</span>
+          );
+        })}
       </div>
 
       <style>{`
