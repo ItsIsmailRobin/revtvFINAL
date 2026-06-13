@@ -45,7 +45,7 @@ export function FooterCredits() {
           href="https://discord.gg/EttmFjhhq5"
           target="_blank"
           rel="noopener noreferrer"
-          className="group/discord flex items-center gap-1 transition-colors duration-300 hover:text-white/70"
+          className="group/discord flex items-center gap-1 transition-colors duration-300 hover:text-white"
         >
           <svg
             width="13"

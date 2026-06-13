@@ -136,6 +136,7 @@ export default function TagBar({
           style={{
             overflow: "hidden",
             padding: "6px 0",
+            borderRadius: "999px",
           }}
         >
           <div
