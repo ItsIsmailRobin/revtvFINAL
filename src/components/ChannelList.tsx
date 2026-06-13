@@ -16,12 +16,14 @@ export default function ChannelList({
 }: ChannelListProps) {
   if (loading) {
     return (
-      <div className="flex flex-col gap-2 px-3 py-3 sm:px-4">
+      <div className="flex flex-col px-3 pb-3 pt-1 sm:px-4" style={{ gap: "8px" }}>
         {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={i}
-            className="h-16 w-full animate-pulse rounded-xl border border-white/5 bg-white/[0.03]"
+            className="h-[60px] w-full animate-pulse rounded-xl border border-white/5 bg-white/[0.03]"
+            style={{ flexShrink: 0 }}
           />
+        ))}
         ))}
       </div>
     );
@@ -49,10 +51,11 @@ export default function ChannelList({
     );
   }
 
-  // Each channel card is ~72px tall (p-2.5 = 10px top+bottom, logo 40px, gap 8px between)
-  // 6 cards * ~72px + gaps ~= 448px. We keep old padding and cap at that height.
   return (
-    <div className="flex flex-col gap-2 px-3 py-3 sm:px-4" style={{ maxHeight: "456px", overflowY: "auto", scrollbarWidth: "none" }}>
+    <div
+      className="flex flex-col px-3 pb-3 pt-1 sm:px-4"
+      style={{ gap: "8px", overflowY: "auto", scrollbarWidth: "none", msOverflowStyle: "none" }}
+    >
       {channels.map((ch, i) => {
         const isActive = ch.id === activeId;
         return (
@@ -60,13 +63,12 @@ export default function ChannelList({
             key={ch.id}
             onClick={() => onSelect(ch)}
             style={{
-              animation: `chEnter 380ms cubic-bezier(.4,0,.2,1) ${Math.min(
-                i * 14,
-                280
-              )}ms both`,
+              animation: `chEnter 380ms cubic-bezier(.4,0,.2,1) ${Math.min(i * 14, 280)}ms both`,
+              flexShrink: 0,
             }}
             className={cn(
-              "group relative flex w-full items-center gap-3 overflow-hidden rounded-xl border p-2.5 text-left transition-all duration-300 sm:gap-4 sm:p-3",
+              "group relative flex w-full items-center gap-3 overflow-hidden rounded-xl border text-left transition-all duration-300",
+              "px-3 py-2.5",
               isActive
                 ? "border-white/40 bg-white/10"
                 : "border-white/[0.06] bg-white/[0.03] hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.07] active:scale-[0.99]"

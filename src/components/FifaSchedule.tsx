@@ -190,8 +190,8 @@ function Countdown({ match }: { match: Match }) {
 
   // Always show Day, Hours, Min, Second — but only show Day col if d>0
   const units = d > 0
-    ? [{ v: pad(d), l:"D" }, { v: pad(h), l:"H" }, { v: pad(mi), l:"M" }, { v: pad(sc), l:"S" }]
-    : [{ v: pad(h), l:"H" }, { v: pad(mi), l:"M" }, { v: pad(sc), l:"S" }];
+    ? [{ v: pad(d), l:"Day" }, { v: pad(h), l:"Hours" }, { v: pad(mi), l:"Min" }, { v: pad(sc), l:"Second" }]
+    : [{ v: pad(h), l:"Hours" }, { v: pad(mi), l:"Min" }, { v: pad(sc), l:"Second" }];
 
   const numSz = d > 0 ? "20px" : "24px";
   const colSz = d > 0 ? "16px" : "19px";
@@ -452,8 +452,8 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
           50%{box-shadow:inset 0 0 32px rgba(74,222,128,0.12)}
         }
         @keyframes cardPulseCPU {
-          0%,100%{outline:2px solid rgba(74,222,128,0.18); outline-offset:0px;}
-          50%{outline:2px solid rgba(74,222,128,0.50); outline-offset:2px;}
+          0%,100%{outline:2px solid rgba(74,222,128,0.15); outline-offset:0px;}
+          50%{outline:2px solid rgba(74,222,128,0.42); outline-offset:1px;}
         }
       `}</style>
     </div>
@@ -643,7 +643,20 @@ export default function FifaSchedule() {
         </button>
       </div>
 
-
+      {/* Page dots — hidden on mobile */}
+      <div className="mt-4 hidden items-center justify-center gap-1.5 sm:flex">
+        {pages.map((_, i) => (
+          <button key={i} onClick={() => { setDir(i > page ? 1 : -1); setAnimKey(k=>k+1); setPage(i); }}
+            className="rounded-full transition-all duration-300"
+            style={{
+              width: i === page ? "20px" : "6px",
+              height: "6px",
+              background: i === page ? "rgba(139,92,246,0.8)" : "rgba(255,255,255,0.15)",
+              boxShadow: i === page ? "0 0 8px rgba(139,92,246,0.5)" : "none",
+              border: "none",
+            }} />
+        ))}
+      </div>
 
       {/* Credits — centered under schedule */}
       <FooterCredits />

@@ -187,33 +187,9 @@ export default function Player({
       setPlaying(true);
     };
     const onWaiting = () => {
+      // Just show the loading spinner — do NOT auto-seek to live edge.
+      // The viewer may intentionally be behind; we only resume if paused.
       setLoading(true);
-      // Only seek to live edge if we're significantly behind — don't interrupt
-      // streams that are naturally buffering for a moment (like Toffee Live).
-      window.setTimeout(() => {
-        const v = videoRef.current;
-        const hls = hlsRef.current;
-        if (!v) return;
-        if (v.paused) {
-          // If still paused after grace period, try seeking to live and resuming
-          if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
-            v.currentTime = hls.liveSyncPosition;
-          } else if (v.seekable.length > 0) {
-            const end = v.seekable.end(v.seekable.length - 1);
-            if (isFinite(end)) v.currentTime = end;
-          }
-          v.play().catch(() => {});
-        } else {
-          // If playing but behind by more than 30s, sync to live edge
-          const live = hls?.liveSyncPosition;
-          if (live != null && isFinite(live) && live - v.currentTime > 30) {
-            v.currentTime = live;
-          } else if (v.seekable.length > 0) {
-            const end = v.seekable.end(v.seekable.length - 1);
-            if (isFinite(end) && end - v.currentTime > 30) v.currentTime = end;
-          }
-        }
-      }, 3000);
     };
     const onPause = () => setPlaying(false);
     const onError = () => {
@@ -221,19 +197,8 @@ export default function Player({
       if (channel) onStreamError?.(channel);
     };
     const onStalled = () => {
-      window.setTimeout(() => {
-        const v = videoRef.current;
-        const hls = hlsRef.current;
-        if (!v || !v.paused) return;
-        // Only seek if actually stalled and paused
-        if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
-          v.currentTime = hls.liveSyncPosition;
-        } else if (v.seekable.length > 0) {
-          const end = v.seekable.end(v.seekable.length - 1);
-          if (isFinite(end)) v.currentTime = end;
-        }
-        v.play().catch(() => {});
-      }, 4000);
+      // Let HLS.js handle stalls internally — do NOT force-seek to live.
+      // Forcing currentTime causes the pause/resume loop on some streams.
     };
     video.addEventListener("playing", onPlaying);
     video.addEventListener("waiting", onWaiting);
@@ -244,18 +209,18 @@ export default function Player({
     if (Hls.isSupported()) {
       const hls = new Hls({
         enableWorker: true,
-        lowLatencyMode: false,
-        backBufferLength: 60,
-        maxBufferLength: 20,
-        maxMaxBufferLength: 60,
-        maxBufferSize: 60 * 1000 * 1000,
+        lowLatencyMode: true,
+        backBufferLength: 30,
+        maxBufferLength: 8,
+        maxMaxBufferLength: 30,
+        maxBufferSize: 30 * 1000 * 1000,
         startLevel: -1,
         capLevelToPlayerSize: true,
         abrEwmaDefaultEstimate: 500000,
-        // Reasonable retries — fail fast enough to skip dead channels
-        fragLoadingMaxRetry: 3,
-        manifestLoadingMaxRetry: 3,
-        levelLoadingMaxRetry: 3,
+        // Fewer retries — fail faster so we can skip to next channel
+        fragLoadingMaxRetry: 2,
+        manifestLoadingMaxRetry: 2,
+        levelLoadingMaxRetry: 2,
         progressive: true,
       });
       hlsRef.current = hls;
@@ -408,22 +373,8 @@ export default function Player({
       video.addEventListener("webkitendfullscreen", onEnd as any);
     }
 
-    // When page becomes visible again (tab switch, background), sync to live
-    const onVisible = () => {
-      const v = videoRef.current;
-      const hls = hlsRef.current;
-      if (!v || v.paused) return;
-      if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
-        const diff = hls.liveSyncPosition - v.currentTime;
-        if (diff > 5) v.currentTime = hls.liveSyncPosition;
-      } else if (v.seekable.length > 0) {
-        const end = v.seekable.end(v.seekable.length - 1);
-        if (isFinite(end) && end - v.currentTime > 5) v.currentTime = end;
-      }
-    };
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") onVisible();
-    };
+    // No auto-seek on tab-visible — viewer controls when to go live.
+    const onVisibilityChange = () => {};
     document.addEventListener("visibilitychange", onVisibilityChange);
 
     return () => {
@@ -507,42 +458,19 @@ export default function Player({
     }
   }, []);
 
-  // ---- Catch up to live if we drift more than 30s behind (long pause,
-  // buffering stall, etc.) — only jump to live edge when truly far behind.
-  // Using a 30s threshold and 10s check interval to keep a good watching
-  // experience without spam-refreshing or interrupting normal playback.
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      const v = videoRef.current;
-      if (!v || v.paused || v.seeking) return;
-      const hls = hlsRef.current;
-      let liveEdge: number | null = null;
-      if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
-        liveEdge = hls.liveSyncPosition;
-      } else if (v.seekable.length > 0) {
-        const end = v.seekable.end(v.seekable.length - 1);
-        if (isFinite(end)) liveEdge = end;
-      }
-      if (liveEdge == null) return;
-      // Only snap to live if we're more than 30 seconds behind — never for tiny drift
-      if (liveEdge - v.currentTime > 30) {
-        v.currentTime = liveEdge;
-      }
-    }, 10_000);
-    return () => window.clearInterval(id);
-  }, []);
+  // Auto-seek removed: viewer stays at their position until they manually
+  // refresh or seek. No background interval polling the live edge.
 
   const togglePlay = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) {
-      syncToLiveEdge();
       v.play().catch(() => {});
     } else {
       v.pause();
     }
     armHide();
-  }, [armHide, syncToLiveEdge]);
+  }, [armHide]);
 
   const toggleMute = useCallback(() => {
     setMuted((m) => !m);
@@ -1488,34 +1416,39 @@ export default function Player({
             </span>
           </div>
 
-          {/* BD Clock pill — same size/style as Zap+Revenger */}
+          {/* BD Clock pill — identical size, border, font as Zap+Revenger pill */}
           <div
             className="flex items-center gap-1.5 rounded-full border px-2 py-0.5"
             style={{
-              borderColor: "rgba(255,255,255,0.12)",
-              backgroundColor: "rgba(255,255,255,0.05)",
+              borderColor: "rgba(255,255,255,0.18)",
+              backgroundColor: "rgba(255,255,255,0.06)",
             }}
           >
-            {/* Pulsing dot */}
-            <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center rounded-full"
-              style={{ border: "1px solid rgba(255,255,255,0.18)" }}>
-              <span className="absolute inset-0 rounded-full"
-                style={{ background: "rgba(255,255,255,0.80)", animation: "clockDotPulse 1.4s ease-in-out infinite" }} />
-              <span className="absolute h-[4px] w-[4px] rounded-full"
-                style={{ background: "rgba(255,255,255,0.95)" }} />
+            {/* Pulsing dot — same 12×12 container as zap icon */}
+            <span className="relative inline-flex h-3 w-3 shrink-0 items-center justify-center">
+              <span
+                className="absolute inset-0 rounded-full"
+                style={{ background: "rgba(255,255,255,0.55)", animation: "clockDotPulse 1.4s ease-in-out infinite" }}
+              />
+              <span
+                className="relative h-[5px] w-[5px] rounded-full"
+                style={{ background: "rgba(255,255,255,0.95)" }}
+              />
             </span>
+            {/* TIME label — same text-[10px] font-semibold uppercase tracking-widest as Revenger */}
             <span
               className="text-[10px] font-semibold uppercase tracking-widest"
-              style={{ color: "rgba(255,255,255,0.55)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight:1 }}
+              style={{ color: "rgba(255,255,255,0.50)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight: 1 }}
             >TIME</span>
             <span className="h-2.5 w-px" style={{ background: "rgba(255,255,255,0.15)" }} />
+            {/* Clock digits — same text-[10px] font-semibold as Revenger text */}
             <span
-              className="font-mono tabular-nums text-[10px] font-semibold"
-              style={{ color: "rgba(255,255,255,0.85)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", fontVariantNumeric:"tabular-nums", lineHeight:1 }}
+              className="text-[10px] font-semibold tabular-nums"
+              style={{ color: "rgba(255,255,255,0.88)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}
             >{bdClock.time}</span>
             <span
               className="text-[10px] font-semibold uppercase tracking-widest"
-              style={{ color: "rgba(255,255,255,0.55)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight:1 }}
+              style={{ color: "rgba(255,255,255,0.50)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight: 1 }}
             >{bdClock.ampm}</span>
           </div>
         </div>

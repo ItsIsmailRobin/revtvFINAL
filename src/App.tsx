@@ -11,13 +11,13 @@ import { parseM3U, getUniqueGroups, type Channel } from "./utils/parseM3U";
 const PLAYLIST_URL =
   "https://raw.githubusercontent.com/ItsIsmailRobin/playlisttv/refs/heads/main/playlist.m3u";
 
-// Glass sidebar — more visible glass effect with proper transparency
+// Glass sidebar — subtle glass, less vibrant, more transparent
 const PANEL_STYLE: React.CSSProperties = {
-  borderColor: "rgba(255,255,255,0.10)",
-  backgroundColor: "rgba(10,5,22,0.45)",
-  backdropFilter: "blur(20px) saturate(1.4)",
-  WebkitBackdropFilter: "blur(20px) saturate(1.4)",
-  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.07), 0 8px 32px rgba(0,0,0,0.35)",
+  borderColor: "rgba(255,255,255,0.07)",
+  backgroundColor: "rgba(8,4,18,0.32)",
+  backdropFilter: "blur(24px) saturate(1.15)",
+  WebkitBackdropFilter: "blur(24px) saturate(1.15)",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 24px rgba(0,0,0,0.25)",
 };
 
 function CategoryHeader({ groupsLength, isOpen, onToggle }: { groupsLength:number; isOpen:boolean; onToggle:()=>void }) {
@@ -137,17 +137,16 @@ export default function App() {
       <main className="relative mx-auto w-full max-w-[1600px] px-2 pb-8 pt-3 sm:px-4 sm:pt-4 lg:px-6">
 
         {/* ── Main grid: player left, sidebar right ── */}
-        <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-6">
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-6 lg:items-start">
 
-          {/* Left column: player + footer (desktop only footer here) */}
-          <div className="flex flex-col gap-0">
+          {/* Left column: player */}
+          <div className="flex flex-col">
             <Player channel={activeChannel} onStreamError={handleStreamError} />
-
           </div>
 
-          {/* Right column: sidebar (desktop) */}
-          <aside className="hidden lg:block">
-            <div className="rounded-2xl border shadow-none" style={PANEL_STYLE}>
+          {/* Right column: sidebar (desktop) — self-start keeps top aligned with player */}
+          <aside className="hidden self-start lg:block">
+            <div className="rounded-2xl border" style={PANEL_STYLE}>
               {sidebarContent}
             </div>
           </aside>
@@ -155,7 +154,7 @@ export default function App() {
 
         {/* Mobile sidebar + footer below it */}
         <section className="mt-4 sm:mt-6 lg:hidden">
-          <div className="rounded-2xl border shadow-none" style={PANEL_STYLE}>
+          <div className="rounded-2xl border" style={PANEL_STYLE}>
             <CategoryHeader groupsLength={groups.length} isOpen={categoriesOpen} onToggle={() => setCategoriesOpen(v => !v)} />
             <div className="scrollbar-hide max-h-[calc(100vh-10rem)] overflow-y-auto" style={{ scrollbarWidth:"none" }}>
               {categoriesOpen ? (
