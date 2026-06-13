@@ -16,15 +16,21 @@ export default function ChannelList({
   loading,
 }: ChannelListProps) {
   const activeRef = useRef<HTMLButtonElement>(null);
+  const scrolledIdRef = useRef<string | null>(null);
 
   // Scroll the active channel into view — e.g. after a page refresh
   // restores the last-watched channel, jump the list down to it.
+  // Only do this once per channel change — NOT every time the
+  // playlist data refreshes (e.g. "Update Playlist"), which would
+  // otherwise re-trigger the scroll and shift the screen on mobile/iOS.
   useEffect(() => {
     if (loading || !activeId) return;
+    if (scrolledIdRef.current === activeId) return;
+    scrolledIdRef.current = activeId;
     if (activeRef.current) {
       activeRef.current.scrollIntoView({ block: "center", behavior: "auto" });
     }
-  }, [activeId, loading, channels]);
+  }, [activeId, loading]);
 
   if (loading) {
     return (
