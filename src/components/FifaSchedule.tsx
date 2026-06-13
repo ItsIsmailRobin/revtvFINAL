@@ -184,9 +184,27 @@ function Countdown({ match }: { match: Match }) {
     </div>
   );
 
-  if (ms <= 0) return (
-    <div style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.25)", textTransform:"uppercase", textAlign:"center", lineHeight:1, padding:"2px 4px"}}>Full Time</div>
-  );
+  if (ms <= 0) {
+    const ongoing = isLive(match);
+    return ongoing ? (
+      <div className="flex items-center justify-center gap-1.5">
+        <span className="relative flex h-2 w-2 shrink-0">
+          <span className="absolute inset-0 rounded-full" style={{
+            backgroundColor: "rgba(139,92,246,0.7)",
+            animation: "livePulseRing 2s ease-in-out infinite",
+          }} />
+          <span className="relative h-2 w-2 rounded-full" style={{
+            backgroundColor: "#a78bfa",
+            boxShadow: "0 0 6px rgba(167,139,250,0.9), 0 0 14px rgba(139,92,246,0.6)",
+            animation: "liveDotGlow 2s ease-in-out infinite",
+          }} />
+        </span>
+        <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.10em", color:"#c4b5fd", textShadow:"0 0 10px rgba(167,139,250,0.8), 0 0 20px rgba(139,92,246,0.5)", animation:"liveLabelPulse 2s ease-in-out infinite"}}>Ongoing</span>
+      </div>
+    ) : (
+      <div style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.25)", textTransform:"uppercase", textAlign:"center", lineHeight:1, padding:"2px 4px"}}>Full Time</div>
+    );
+  }
 
   const totalSec = Math.floor(ms / 1000);
   const d = Math.floor(totalSec / 86400);
@@ -332,16 +350,16 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
           : isToday
           ? "linear-gradient(135deg,rgba(139,92,246,0.13),rgba(79,42,201,0.07))"
           : "rgba(255,255,255,0.035)",
-        border: `1px solid ${live ? "rgba(167,139,250,0.40)" : isToday ? "rgba(167,139,250,0.65)" : over ? "rgba(255,255,255,0.05)" : "rgba(139,92,246,0.13)"}`,
+        border: `1px solid ${live ? "rgba(167,139,250,0.55)" : isToday ? "rgba(167,139,250,0.65)" : over ? "rgba(255,255,255,0.05)" : "rgba(139,92,246,0.13)"}`,
         boxShadow: live
-          ? "0 0 20px rgba(139,92,246,0.22),0 0 40px rgba(139,92,246,0.10),0 2px 10px rgba(0,0,0,0.4)"
+          ? "0 0 12px rgba(167,139,250,0.55), 0 0 28px rgba(139,92,246,0.35), 0 0 55px rgba(139,92,246,0.18), inset 0 0 18px rgba(167,139,250,0.07)"
           : final
           ? "0 0 20px rgba(251,191,36,0.08),0 2px 10px rgba(0,0,0,0.4)"
           : isToday
           ? "0 0 20px rgba(139,92,246,0.25),0 0 40px rgba(139,92,246,0.12),0 2px 8px rgba(0,0,0,0.3)"
           : "0 1px 6px rgba(0,0,0,0.22)",
         // Live card gets a pulse animation
-        animation: live ? "cardPulseCPU 3s ease-in-out infinite" : "none",
+        animation: live ? "cardPulseCPU 2.5s ease-in-out infinite" : "none",
         cursor: canReveal ? "pointer" : "default",
       }}>
 
@@ -459,8 +477,8 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
           50%{box-shadow:inset 0 0 32px rgba(139,92,246,0.18)}
         }
         @keyframes cardPulseCPU {
-          0%,100%{outline:2px solid rgba(139,92,246,0.18); outline-offset:0px;}
-          50%{outline:2px solid rgba(167,139,250,0.5); outline-offset:1px;}
+          0%,100%{ box-shadow: 0 0 10px rgba(167,139,250,0.40), 0 0 22px rgba(139,92,246,0.22), 0 0 44px rgba(139,92,246,0.10), inset 0 0 14px rgba(167,139,250,0.05); border-color: rgba(167,139,250,0.40); }
+          50%    { box-shadow: 0 0 18px rgba(167,139,250,0.70), 0 0 38px rgba(139,92,246,0.45), 0 0 70px rgba(139,92,246,0.25), inset 0 0 22px rgba(167,139,250,0.12); border-color: rgba(192,168,255,0.75); }
         }
         @keyframes livePulseRing {
           0%   { transform: scale(1);   opacity: 0.8; }
@@ -537,15 +555,8 @@ export default function FifaSchedule() {
     return p;
   })();
 
-  // Reactive today — re-evaluates at midnight so current-day glow always tracks the real date
+  // Reactive today — single 30s interval drives both live-match ticks and current-day date refresh
   const [todayBD, setTodayBD] = useState(() => bdNow().toISOString().slice(0, 10));
-  useEffect(() => {
-    const updateToday = () => setTodayBD(bdNow().toISOString().slice(0, 10));
-    // tick every minute so midnight flip is caught quickly
-    const id = setInterval(updateToday, 60_000);
-    return () => clearInterval(id);
-  }, []);
-
   const [page, setPage] = useState(() => todayPageIndex(pages, colsPerPage));
   const [dir, setDir] = useState<1 | -1>(1);
   const [animKey, setAnimKey] = useState(0);
@@ -561,7 +572,10 @@ export default function FifaSchedule() {
   }, [colsPerPage]);
 
   useEffect(() => {
-    const id = setInterval(() => tick(t => t + 1), 30_000);
+    const id = setInterval(() => {
+      tick(t => t + 1);
+      setTodayBD(bdNow().toISOString().slice(0, 10)); // keep BD date in sync (catches midnight flip)
+    }, 30_000);
     return () => clearInterval(id);
   }, []);
 
