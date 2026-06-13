@@ -103,11 +103,20 @@ export default function App() {
   const refreshPlaylist = async () => {
     try {
       const res = await fetch(PLAYLIST_URL, { cache: "no-store" });
-      if (!res.ok) return;
+      if (!res.ok) {
+        window.dispatchEvent(new CustomEvent("revtv:refresh-error"));
+        return;
+      }
       const parsed = parseM3U(await res.text());
-      if (!parsed.length) return;
+      if (!parsed.length) {
+        window.dispatchEvent(new CustomEvent("revtv:refresh-error"));
+        return;
+      }
       setChannels(parsed);
-    } catch {}
+      window.dispatchEvent(new CustomEvent("revtv:refresh-done"));
+    } catch {
+      window.dispatchEvent(new CustomEvent("revtv:refresh-error"));
+    }
   };
 
   useEffect(() => {
