@@ -283,8 +283,8 @@ function Score({ a, b, live, big }: { a: number; b: number; live?: boolean; big?
         fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
         fontSize:sz,
         fontWeight:800,
-        color: live ? "#86efac" : "#fff",
-        textShadow: live ? "0 0 12px rgba(74,222,128,0.6)" : "0 0 12px rgba(255,255,255,0.25)",
+        color: live ? "#c4b5fd" : "#fff",
+        textShadow: live ? "0 0 12px rgba(167,139,250,0.7)" : "0 0 12px rgba(255,255,255,0.25)",
         lineHeight:1,
         letterSpacing:"-0.01em",
       }}>{a}</span>
@@ -293,8 +293,8 @@ function Score({ a, b, live, big }: { a: number; b: number; live?: boolean; big?
         fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
         fontSize:sz,
         fontWeight:800,
-        color: live ? "#86efac" : "#fff",
-        textShadow: live ? "0 0 12px rgba(74,222,128,0.6)" : "0 0 12px rgba(255,255,255,0.25)",
+        color: live ? "#c4b5fd" : "#fff",
+        textShadow: live ? "0 0 12px rgba(167,139,250,0.7)" : "0 0 12px rgba(255,255,255,0.25)",
         lineHeight:1,
         letterSpacing:"-0.01em",
       }}>{b}</span>
@@ -339,9 +339,8 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
 
   return (
     <div
-      onMouseEnter={() => { if (canReveal) setShowResult(true); }}
-      onMouseLeave={() => { if (canReveal) setShowResult(false); }}
-      className="relative overflow-hidden rounded-xl transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.01]"
+      onMouseEnter={() => { if (canReveal) setShowResult(true); }}\n      onMouseLeave={() => { if (canReveal) setShowResult(false); }}
+      className="relative rounded-xl transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.01]"
       style={{
         background: live
           ? "linear-gradient(135deg,rgba(60,20,100,0.75),rgba(40,10,80,0.65))"
@@ -352,13 +351,12 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
           : "rgba(255,255,255,0.035)",
         border: `1px solid ${live ? "rgba(167,139,250,0.55)" : isToday ? "rgba(167,139,250,0.65)" : over ? "rgba(255,255,255,0.05)" : "rgba(139,92,246,0.13)"}`,
         boxShadow: live
-          ? "0 0 12px rgba(167,139,250,0.55), 0 0 28px rgba(139,92,246,0.35), 0 0 55px rgba(139,92,246,0.18), inset 0 0 18px rgba(167,139,250,0.07)"
+          ? "inset 0 0 18px rgba(139,92,246,0.28), inset 0 0 40px rgba(139,92,246,0.14), inset 0 0 6px rgba(167,139,250,0.20)"
           : final
-          ? "0 0 20px rgba(251,191,36,0.08),0 2px 10px rgba(0,0,0,0.4)"
+          ? "inset 0 0 20px rgba(251,191,36,0.06)"
           : isToday
-          ? "0 0 20px rgba(139,92,246,0.25),0 0 40px rgba(139,92,246,0.12),0 2px 8px rgba(0,0,0,0.3)"
-          : "0 1px 6px rgba(0,0,0,0.22)",
-        // Live card gets a pulse animation
+          ? "inset 0 0 20px rgba(139,92,246,0.12)"
+          : "none",
         animation: live ? "cardPulseCPU 2.5s ease-in-out infinite" : "none",
         cursor: canReveal ? "pointer" : "default",
       }}>
@@ -367,10 +365,10 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px"
         style={{ background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.10),transparent)" }} />
 
-      {/* Live pulse overlay */}
+      {/* Live pulse overlay — inset glow only, no outer bleed */}
       {live && (
         <div className="pointer-events-none absolute inset-0 rounded-xl"
-          style={{ boxShadow:"inset 0 0 28px rgba(74,222,128,0.07)", animation:"liveGlow 2s ease-in-out infinite" }} />
+          style={{ animation:"liveGlow 2.5s ease-in-out infinite" }} />
       )}
 
       <div className="px-3 py-3">
@@ -417,10 +415,22 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
               <>
                 <Score a={match.scoreA!} b={match.scoreB!} live />
                 <div className="flex items-center gap-1 mt-0.5">
-                  <span className="h-1.5 w-1.5 animate-ping rounded-full bg-green-400 opacity-80" />
-                  <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"8px", fontWeight:700, letterSpacing:"0.14em", color:"#86efac", textTransform:"uppercase"}}>Live</span>
+                  <span className="relative flex h-1.5 w-1.5 shrink-0">
+                    <span className="absolute inset-0 rounded-full" style={{ backgroundColor:"rgba(139,92,246,0.7)", animation:"livePulseRing 2s ease-in-out infinite" }} />
+                    <span className="relative h-1.5 w-1.5 rounded-full" style={{ backgroundColor:"#a78bfa" }} />
+                  </span>
+                  <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"8px", fontWeight:700, letterSpacing:"0.14em", color:"#c4b5fd", textTransform:"uppercase"}}>Ongoing</span>
                 </div>
               </>
+            ) : live ? (
+              /* Live but no score yet */
+              <div className="flex items-center justify-center gap-1.5">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="absolute inset-0 rounded-full" style={{ backgroundColor:"rgba(139,92,246,0.7)", animation:"livePulseRing 2s ease-in-out infinite" }} />
+                  <span className="relative h-2 w-2 rounded-full" style={{ backgroundColor:"#a78bfa", boxShadow:"0 0 6px rgba(167,139,250,0.9)" }} />
+                </span>
+                <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.10em", color:"#c4b5fd", animation:"liveLabelPulse 2s ease-in-out infinite"}}>Ongoing</span>
+              </div>
             ) : over && hasScore ? (
               /* Crossfade between "Full Time" and the final result on hover (PC only) */
               <div className="relative flex items-center justify-center" style={{ minWidth:"56px", minHeight:"30px" }}>
@@ -473,12 +483,12 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
 
       <style>{`
         @keyframes liveGlow {
-          0%,100%{box-shadow:inset 0 0 20px rgba(139,92,246,0.06)}
-          50%{box-shadow:inset 0 0 32px rgba(139,92,246,0.18)}
+          0%,100%{ box-shadow: inset 0 0 16px rgba(139,92,246,0.15), inset 0 0 35px rgba(139,92,246,0.08) }
+          50%    { box-shadow: inset 0 0 28px rgba(167,139,250,0.32), inset 0 0 55px rgba(139,92,246,0.18) }
         }
         @keyframes cardPulseCPU {
-          0%,100%{ box-shadow: 0 0 10px rgba(167,139,250,0.40), 0 0 22px rgba(139,92,246,0.22), 0 0 44px rgba(139,92,246,0.10), inset 0 0 14px rgba(167,139,250,0.05); border-color: rgba(167,139,250,0.40); }
-          50%    { box-shadow: 0 0 18px rgba(167,139,250,0.70), 0 0 38px rgba(139,92,246,0.45), 0 0 70px rgba(139,92,246,0.25), inset 0 0 22px rgba(167,139,250,0.12); border-color: rgba(192,168,255,0.75); }
+          0%,100%{ box-shadow: inset 0 0 14px rgba(139,92,246,0.18), inset 0 0 30px rgba(139,92,246,0.09), inset 0 0 5px rgba(167,139,250,0.14); border-color: rgba(167,139,250,0.42); }
+          50%    { box-shadow: inset 0 0 28px rgba(139,92,246,0.38), inset 0 0 55px rgba(139,92,246,0.22), inset 0 0 10px rgba(167,139,250,0.30); border-color: rgba(192,168,255,0.72); }
         }
         @keyframes livePulseRing {
           0%   { transform: scale(1);   opacity: 0.8; }

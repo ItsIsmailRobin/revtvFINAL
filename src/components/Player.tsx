@@ -1063,6 +1063,8 @@ export default function Player({
             onDoubleClick={onVideoDoubleClick}
             className="h-full w-full cursor-pointer"
             playsInline
+            autoPlay
+            muted
             // @ts-ignore - webkit-playsinline is iOS-specific
             webkit-playsinline="true"
             style={{
