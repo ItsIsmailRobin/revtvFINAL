@@ -16,8 +16,8 @@ export default function ChannelList({
 }: ChannelListProps) {
   if (loading) {
     return (
-      <div className="flex flex-col px-3 pb-3 pt-1 sm:px-4" style={{ gap: "8px" }}>
-        {Array.from({ length: 8 }).map((_, i) => (
+      <div className="flex flex-col px-3 pb-3 pt-1" style={{ gap: "8px" }}>
+        {Array.from({ length: 7 }).map((_, i) => (
           <div
             key={i}
             className="h-[60px] w-full animate-pulse rounded-xl border border-white/5 bg-white/[0.03]"
@@ -52,7 +52,7 @@ export default function ChannelList({
 
   return (
     <div
-      className="flex flex-col px-3 pb-3 pt-1 sm:px-4"
+      className="flex flex-col px-3 pb-3 pt-1"
       style={{ gap: "8px", maxHeight: "420px", overflowY: "auto", scrollbarWidth: "none", msOverflowStyle: "none" }}
     >
       {channels.map((ch, i) => {

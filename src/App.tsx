@@ -22,7 +22,7 @@ const PANEL_STYLE: React.CSSProperties = {
 
 function CategoryHeader({ groupsLength, isOpen, onToggle }: { groupsLength:number; isOpen:boolean; onToggle:()=>void }) {
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-white/5 px-4 py-2">
+    <div className="flex items-center justify-between gap-2 border-b border-white/5 px-3 py-2">
       <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-white/50">Categories</h3>
       <button type="button" onClick={onToggle} aria-expanded={isOpen}
         className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-xs font-medium text-white/50 transition-all duration-200 hover:border-white/20 hover:bg-white/[0.07] hover:text-white/80 active:scale-95">
@@ -34,7 +34,7 @@ function CategoryHeader({ groupsLength, isOpen, onToggle }: { groupsLength:numbe
 
 function ChannelCount({ count, activeTag }: { count:number; activeTag:string }) {
   return (
-    <div className="flex items-center justify-between gap-2 px-4 py-2.5">
+    <div className="flex items-center justify-between gap-2 px-3 py-2">
       <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/35 sm:text-xs">{activeTag}</span>
       <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-white/50">{count}</span>
     </div>
@@ -134,10 +134,10 @@ export default function App() {
       <Background />
       <Header />
 
-      <main className="relative mx-auto w-full max-w-[1600px] px-2 pb-8 pt-3 sm:px-4 sm:pt-4 lg:px-6">
+      <main className="relative mx-auto w-full max-w-[1600px] px-3 pb-8 pt-3 sm:px-5 sm:pt-4 lg:px-8">
 
         {/* ── Main grid: player left, sidebar right ── */}
-        <section className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-6 lg:items-start">
+        <section className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-5 lg:items-start">
 
           {/* Left column: player */}
           <div className="flex flex-col">
@@ -153,7 +153,7 @@ export default function App() {
         </section>
 
         {/* Mobile sidebar + footer below it */}
-        <section className="mt-4 sm:mt-6 lg:hidden">
+        <section className="mt-3 sm:mt-4 lg:hidden">
           <div className="rounded-2xl border" style={PANEL_STYLE}>
             <CategoryHeader groupsLength={groups.length} isOpen={categoriesOpen} onToggle={() => setCategoriesOpen(v => !v)} />
             <div className="scrollbar-hide max-h-[calc(100vh-10rem)] overflow-y-auto" style={{ scrollbarWidth:"none" }}>
