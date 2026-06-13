@@ -24,7 +24,6 @@ export default function ChannelList({
             style={{ flexShrink: 0 }}
           />
         ))}
-        ))}
       </div>
     );
   }
