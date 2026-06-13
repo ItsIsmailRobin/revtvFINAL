@@ -1,0 +1,197 @@
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+  background: #05030a;
+  color: #fff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
+  /* Prevent text selection on the whole site */
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  /* Keep the body filling the viewport so the dark color extends
+     through any potential safe-area backgrounds */
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Space Grotesk for all heading elements */
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Space Grotesk", "Space Grotesk Fallback", sans-serif;
+}
+
+/* Re-enable selection inside input/textarea for usability */
+input,
+textarea,
+[contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Hide ALL scrollbars on the whole site — completely invisible
+   (no track, no thumb, no hover). Works on WebKit, Firefox, IE/Edge. */
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+*::-webkit-scrollbar-track {
+  display: none !important;
+}
+*::-webkit-scrollbar-thumb {
+  display: none !important;
+}
+*::-webkit-scrollbar-button {
+  display: none !important;
+}
+html {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+html::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* iOS Safari: prevent the safe-area backgrounds (top notch / bottom
+   home indicator) from showing white during fullscreen transitions. */
+html,
+body {
+  /* Covers iOS safe areas with the dark color */
+  padding: 0;
+  margin: 0;
+}
+
+/* On touch devices, remove stuck :hover states that linger after a tap.
+   This prevents the "faded box" hover effect from persisting on the
+   tag buttons and other interactive elements after a tap. */
+@media (hover: none), (pointer: coarse) {
+  button:hover,
+  a:hover,
+  [role="button"]:hover {
+    /* Reset hover effects on touch devices */
+  }
+  .group:hover .group-hover\:opacity-100 {
+    opacity: 0 !important;
+  }
+  .group:hover .group-hover\:scale-110 {
+    transform: none !important;
+  }
+  .group:hover .group-hover\:text-white {
+    color: inherit !important;
+  }
+  /* Only re-apply hover when the button is actively focused by a
+     real pointer (not touch) */
+  .group:where(:hover:active) .group-hover\:opacity-100 {
+    opacity: 1 !important;
+  }
+}
+
+/* Custom dark-mode range styling (volume slider) - white theme */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  width: 100%;
+  height: 100%;
+}
+
+/* WebKit (Chrome, Safari, Edge) track and thumb */
+input[type="range"]::-webkit-slider-runnable-track {
+  background: transparent;
+  height: 4px;
+  border-radius: 9999px;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: none;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  margin-top: -4px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.8);
+}
+input[type="range"]:active::-webkit-slider-thumb {
+  transform: scale(1.3);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 1);
+}
+
+/* Firefox track and thumb */
+input[type="range"]::-moz-range-track {
+  background: transparent;
+  height: 4px;
+  border-radius: 9999px;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: none;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+input[type="range"]::-moz-range-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.8);
+}
+input[type="range"]:active::-moz-range-thumb {
+  transform: scale(1.3);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 1);
+}
+
+/* Hide the focus outline since we have our own thumb styling */
+input[type="range"]:focus {
+  outline: none;
+}
+input[type="range"]:focus::-webkit-slider-thumb {
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.8);
+}
+input[type="range"]:focus::-moz-range-thumb {
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.8);
+}
+
+/* Disable tap highlight on mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Improve fullscreen video */
+video::-webkit-media-controls {
+  display: none !important;
+}
+video::-internal-media-controls-overlay-cast-button {
+  display: none !important;
+}
