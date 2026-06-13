@@ -49,8 +49,10 @@ export default function ChannelList({
     );
   }
 
+  // Each channel card is ~72px tall (p-2.5 = 10px top+bottom, logo 40px, gap 8px between)
+  // 6 cards * ~72px + gaps ~= 448px. We keep old padding and cap at that height.
   return (
-    <div className="flex flex-col gap-2 px-3 py-3 sm:px-4" style={{ maxHeight: "432px", overflowY: "auto", scrollbarWidth: "none" }}>
+    <div className="flex flex-col gap-2 px-3 py-3 sm:px-4" style={{ maxHeight: "456px", overflowY: "auto", scrollbarWidth: "none" }}>
       {channels.map((ch, i) => {
         const isActive = ch.id === activeId;
         return (

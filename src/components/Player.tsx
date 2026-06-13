@@ -188,30 +188,32 @@ export default function Player({
     };
     const onWaiting = () => {
       setLoading(true);
-      // When buffering stalls jump to live edge after a brief grace period
+      // Only seek to live edge if we're significantly behind — don't interrupt
+      // streams that are naturally buffering for a moment (like Toffee Live).
       window.setTimeout(() => {
         const v = videoRef.current;
         const hls = hlsRef.current;
         if (!v) return;
-        const seekToLive = () => {
+        if (v.paused) {
+          // If still paused after grace period, try seeking to live and resuming
           if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
             v.currentTime = hls.liveSyncPosition;
           } else if (v.seekable.length > 0) {
             const end = v.seekable.end(v.seekable.length - 1);
             if (isFinite(end)) v.currentTime = end;
           }
-        };
-        if (v.paused) { seekToLive(); v.play().catch(() => {}); }
-        else {
-          const hls = hlsRef.current;
+          v.play().catch(() => {});
+        } else {
+          // If playing but behind by more than 30s, sync to live edge
           const live = hls?.liveSyncPosition;
-          if (live != null && isFinite(live) && live - v.currentTime > 8) v.currentTime = live;
-          else if (v.seekable.length > 0) {
+          if (live != null && isFinite(live) && live - v.currentTime > 30) {
+            v.currentTime = live;
+          } else if (v.seekable.length > 0) {
             const end = v.seekable.end(v.seekable.length - 1);
-            if (isFinite(end) && end - v.currentTime > 8) v.currentTime = end;
+            if (isFinite(end) && end - v.currentTime > 30) v.currentTime = end;
           }
         }
-      }, 1500);
+      }, 3000);
     };
     const onPause = () => setPlaying(false);
     const onError = () => {
@@ -223,6 +225,7 @@ export default function Player({
         const v = videoRef.current;
         const hls = hlsRef.current;
         if (!v || !v.paused) return;
+        // Only seek if actually stalled and paused
         if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
           v.currentTime = hls.liveSyncPosition;
         } else if (v.seekable.length > 0) {
@@ -230,7 +233,7 @@ export default function Player({
           if (isFinite(end)) v.currentTime = end;
         }
         v.play().catch(() => {});
-      }, 2000);
+      }, 4000);
     };
     video.addEventListener("playing", onPlaying);
     video.addEventListener("waiting", onWaiting);
@@ -241,18 +244,18 @@ export default function Player({
     if (Hls.isSupported()) {
       const hls = new Hls({
         enableWorker: true,
-        lowLatencyMode: true,
-        backBufferLength: 30,
-        maxBufferLength: 8,
-        maxMaxBufferLength: 30,
-        maxBufferSize: 30 * 1000 * 1000,
+        lowLatencyMode: false,
+        backBufferLength: 60,
+        maxBufferLength: 20,
+        maxMaxBufferLength: 60,
+        maxBufferSize: 60 * 1000 * 1000,
         startLevel: -1,
         capLevelToPlayerSize: true,
         abrEwmaDefaultEstimate: 500000,
-        // Fewer retries — fail faster so we can skip to next channel
-        fragLoadingMaxRetry: 2,
-        manifestLoadingMaxRetry: 2,
-        levelLoadingMaxRetry: 2,
+        // Reasonable retries — fail fast enough to skip dead channels
+        fragLoadingMaxRetry: 3,
+        manifestLoadingMaxRetry: 3,
+        levelLoadingMaxRetry: 3,
         progressive: true,
       });
       hlsRef.current = hls;
@@ -504,11 +507,10 @@ export default function Player({
     }
   }, []);
 
-  // ---- Catch up to live if we drift more than 5s behind (long pause,
-  // buffering stall, etc.) — seek forward to the latest buffer so the
-  // viewer is never left watching a stale point in the stream. Runs
-  // quietly in the background and only acts on drift > 5s, so it never
-  // interrupts normal playback.
+  // ---- Catch up to live if we drift more than 30s behind (long pause,
+  // buffering stall, etc.) — only jump to live edge when truly far behind.
+  // Using a 30s threshold and 10s check interval to keep a good watching
+  // experience without spam-refreshing or interrupting normal playback.
   useEffect(() => {
     const id = window.setInterval(() => {
       const v = videoRef.current;
@@ -522,10 +524,11 @@ export default function Player({
         if (isFinite(end)) liveEdge = end;
       }
       if (liveEdge == null) return;
-      if (liveEdge - v.currentTime > 5) {
+      // Only snap to live if we're more than 30 seconds behind — never for tiny drift
+      if (liveEdge - v.currentTime > 30) {
         v.currentTime = liveEdge;
       }
-    }, 4000);
+    }, 10_000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -1507,12 +1510,12 @@ export default function Player({
             >TIME</span>
             <span className="h-2.5 w-px" style={{ background: "rgba(255,255,255,0.15)" }} />
             <span
-              className="font-mono tabular-nums text-[10px] font-medium"
-              style={{ color: "rgba(255,255,255,0.85)", fontVariantNumeric:"tabular-nums", lineHeight:1 }}
+              className="font-mono tabular-nums text-[10px] font-semibold"
+              style={{ color: "rgba(255,255,255,0.85)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", fontVariantNumeric:"tabular-nums", lineHeight:1 }}
             >{bdClock.time}</span>
             <span
-              className="text-[10px] font-semibold uppercase"
-              style={{ color: "rgba(255,255,255,0.55)", lineHeight:1 }}
+              className="text-[10px] font-semibold uppercase tracking-widest"
+              style={{ color: "rgba(255,255,255,0.55)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight:1 }}
             >{bdClock.ampm}</span>
           </div>
         </div>

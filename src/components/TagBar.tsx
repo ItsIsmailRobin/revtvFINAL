@@ -130,22 +130,24 @@ export default function TagBar({
         </div>
         )}
 
-        {/* Scrollable tags area - the border fades on both sides. */}
+        {/* Scrollable tags area - fade at ends but not clipping the glow */}
         <div
           className="relative min-w-0 flex-1"
           style={{
-            maskImage:
-              "linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.5) 6%, rgba(0,0,0,1) 14%, rgba(0,0,0,1) 86%, rgba(0,0,0,0.5) 94%, transparent 100%)",
-            WebkitMaskImage:
-              "linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.5) 6%, rgba(0,0,0,1) 14%, rgba(0,0,0,1) 86%, rgba(0,0,0,0.5) 94%, transparent 100%)",
+            maskImage: canLeft
+              ? "linear-gradient(90deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,1) 8%, rgba(0,0,0,1) 86%, rgba(0,0,0,0.5) 94%, transparent 100%)"
+              : "linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 86%, rgba(0,0,0,0.5) 94%, transparent 100%)",
+            WebkitMaskImage: canLeft
+              ? "linear-gradient(90deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,1) 8%, rgba(0,0,0,1) 86%, rgba(0,0,0,0.5) 94%, transparent 100%)"
+              : "linear-gradient(90deg, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 86%, rgba(0,0,0,0.5) 94%, transparent 100%)",
             overflow: "hidden",
-            padding: "4px 0",
+            padding: "6px 0",
           }}
         >
           <div
             ref={scrollRef}
             className="scrollbar-hide flex items-center gap-2 overflow-x-auto"
-            style={{ paddingLeft: "4px", paddingRight: "4px", paddingTop: "4px", paddingBottom: "4px" }}
+            style={{ paddingLeft: "6px", paddingRight: "6px", paddingTop: "4px", paddingBottom: "4px" }}
           >
             {tags.map((tag, idx) => {
               const isActive = tag === activeTag;
