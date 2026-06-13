@@ -1,51 +1,78 @@
+import { useMemo } from "react";
+
+// Deterministic-random helper seeded by page load so each refresh looks different
+function seededRand(seed: number) {
+  let s = seed;
+  return () => {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    return (s >>> 0) / 0xffffffff;
+  };
+}
+
 export default function Background() {
+  // New seed every render (page load / hard refresh) so blobs move around
+  const blobs = useMemo(() => {
+    const r = seededRand(Date.now() & 0xffff);
+
+    // Generate 5 random blobs — all pure purple/violet, zero pink/red hue
+    // x restricted to 10–90% to avoid heavy left or right edge bias
+    return Array.from({ length: 5 }, (_, i) => ({
+      id: i,
+      x: 10 + r() * 80,          // 10% – 90%
+      y: r() * 100,
+      rx: 50 + r() * 40,          // 50% – 90% ellipse radius x
+      ry: 40 + r() * 35,          // 40% – 75% ellipse radius y
+      // Hue strictly 255–280 (purple, not pink/red)
+      h: 255 + Math.floor(r() * 25),
+      s: 70 + Math.floor(r() * 20),
+      l: 35 + Math.floor(r() * 20),
+      a: 0.45 + r() * 0.30,
+    }));
+  }, []);
+
+  const midBlobs = useMemo(() => {
+    const r = seededRand((Date.now() & 0xffff) ^ 0xabcd);
+    return Array.from({ length: 3 }, (_, i) => ({
+      id: i,
+      x: 15 + r() * 70,
+      y: 20 + r() * 60,
+      rx: 35 + r() * 30,
+      ry: 25 + r() * 25,
+      h: 258 + Math.floor(r() * 20),
+      a: 0.22 + r() * 0.18,
+    }));
+  }, []);
+
+  const blobGrad = blobs
+    .map(b => `radial-gradient(ellipse ${b.rx}% ${b.ry}% at ${b.x}% ${b.y}%, hsla(${b.h},${b.s}%,${b.l}%,${b.a.toFixed(2)}) 0%, hsla(${b.h},${b.s}%,${b.l-8}%,${(b.a*0.35).toFixed(2)}) 42%, transparent 70%)`)
+    .join(",");
+
+  const midGrad = midBlobs
+    .map(b => `radial-gradient(ellipse ${b.rx}% ${b.ry}% at ${b.x}% ${b.y}%, hsla(${b.h},72%,42%,${b.a.toFixed(2)}) 0%, transparent 65%)`)
+    .join(",");
+
   return (
     <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" style={{ background: "#0a0220" }}>
 
-      {/* Full-coverage deep purple base — rich, no black bleed */}
+      {/* Deep purple base */}
       <div className="absolute inset-0" style={{
-        background: "linear-gradient(160deg,#100425 0%,#0a021f 30%,#0c0322 60%,#0a0220 100%)"
+        background: "linear-gradient(160deg,#0f0428 0%,#0a021f 30%,#0c0322 60%,#0a0220 100%)"
       }} />
 
-      {/* Large corner orbs — vivid, saturated, positioned to fill all corners */}
+      {/* Randomised main blobs — pure purple/violet hues only */}
+      <div className="absolute inset-0" style={{ background: blobGrad }} />
+
+      {/* Randomised mid-field accents */}
+      <div className="absolute inset-0" style={{ background: midGrad }} />
+
+      {/* Centre fill — softens gaps so no flat black patches */}
       <div className="absolute inset-0" style={{
-        background:
-          "radial-gradient(ellipse 85% 70% at -8% 2%,  rgba(168,75,255,0.72) 0%, rgba(140,50,240,0.32) 38%, transparent 68%)," +
-          "radial-gradient(ellipse 75% 65% at 110% 5%,  rgba(130,45,255,0.65) 0%, rgba(110,25,230,0.28) 38%, transparent 66%)," +
-          "radial-gradient(ellipse 80% 70% at -10% 102%,rgba(195,90,255,0.62) 0%, rgba(162,65,252,0.26) 38%, transparent 66%)," +
-          "radial-gradient(ellipse 75% 65% at 110% 98%, rgba(115,55,255,0.58) 0%, rgba(92,38,232,0.22) 38%, transparent 66%)," +
-          "radial-gradient(ellipse 60% 55% at 50% 50%,  rgba(145,65,255,0.28) 0%, transparent 68%)",
+        background: "radial-gradient(ellipse 90% 85% at 50% 50%, rgba(110,50,220,0.18) 0%, rgba(80,35,190,0.08) 50%, transparent 80%)"
       }} />
 
-      {/* Mid-field diagonal accents */}
+      {/* Very subtle dark vignette */}
       <div className="absolute inset-0" style={{
-        background:
-          "radial-gradient(ellipse 65% 32% at 76% 26%, rgba(185,85,255,0.36) 0%, transparent 62%)," +
-          "radial-gradient(ellipse 58% 30% at 24% 74%, rgba(122,48,255,0.32) 0%, transparent 60%)," +
-          "radial-gradient(ellipse 42% 22% at 62% 88%, rgba(205,95,255,0.24) 0%, transparent 52%)",
-      }} />
-
-      {/* Centre blend fill — softens the gaps between the corner orbs so
-          there are no flat dark/black patches in the middle of the screen */}
-      <div className="absolute inset-0" style={{
-        background:
-          "radial-gradient(ellipse 90% 85% at 50% 50%, rgba(120,55,235,0.22) 0%, rgba(90,40,200,0.10) 45%, transparent 78%)",
-      }} />
-
-      {/* Micro-glow texture dots */}
-      <div className="absolute inset-0" style={{
-        background:
-          "radial-gradient(circle 200px at 18% 38%,  rgba(165,78,255,0.22) 0%, transparent 100%)," +
-          "radial-gradient(circle 165px at 82% 55%,  rgba(132,58,255,0.20) 0%, transparent 100%)," +
-          "radial-gradient(circle 130px at 45% 22%,  rgba(205,115,255,0.18) 0%, transparent 100%)," +
-          "radial-gradient(circle 148px at 70% 80%,  rgba(112,48,255,0.19) 0%, transparent 100%)," +
-          "radial-gradient(circle 100px at 30% 60%,  rgba(180,80,255,0.14) 0%, transparent 100%)",
-      }} />
-
-      {/* Very subtle dark vignette — softened so edges blend smoothly
-          instead of dropping to flat black corners */}
-      <div className="absolute inset-0" style={{
-        background: "radial-gradient(ellipse 130% 130% at 50% 50%, transparent 55%, rgba(6,2,14,0.35) 100%)",
+        background: "radial-gradient(ellipse 130% 130% at 50% 50%, transparent 55%, rgba(6,2,14,0.38) 100%)"
       }} />
 
       {/* Static petals — zero GPU layers */}

@@ -86,7 +86,35 @@ export default function Player({
   const [statusVisible, setStatusVisible] = useState(false);
   const statusTimerRef = useRef<number | null>(null);
 
-  const showStatus = useCallback((msg: string) => {
+  // ── Inline BD clock ──────────────────────────────────────────────
+  const [bdClock, setBdClock] = useState(() => {
+    const now = new Date();
+    const utcMs = now.getTime() + now.getTimezoneOffset() * 60_000;
+    const bd = new Date(utcMs + 6 * 3600_000);
+    const h24 = bd.getHours();
+    const mm = String(bd.getMinutes()).padStart(2,"0");
+    const ss = String(bd.getSeconds()).padStart(2,"0");
+    const ampm = h24 >= 12 ? "PM" : "AM";
+    const h12 = ((h24 + 11) % 12) + 1;
+    return { time: `${String(h12).padStart(2,"0")}:${mm}:${ss}`, ampm };
+  });
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      const utcMs = now.getTime() + now.getTimezoneOffset() * 60_000;
+      const bd = new Date(utcMs + 6 * 3600_000);
+      const h24 = bd.getHours();
+      const mm = String(bd.getMinutes()).padStart(2,"0");
+      const ss = String(bd.getSeconds()).padStart(2,"0");
+      const ampm = h24 >= 12 ? "PM" : "AM";
+      const h12 = ((h24 + 11) % 12) + 1;
+      setBdClock({ time: `${String(h12).padStart(2,"0")}:${mm}:${ss}`, ampm });
+    };
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+    const showStatus = useCallback((msg: string) => {
     setStatusMessage(msg);
     setStatusVisible(true);
     if (statusTimerRef.current) window.clearTimeout(statusTimerRef.current);
@@ -158,15 +186,55 @@ export default function Player({
       setLoading(false);
       setPlaying(true);
     };
-    const onWaiting = () => setLoading(true);
+    const onWaiting = () => {
+      setLoading(true);
+      // When buffering stalls jump to live edge after a brief grace period
+      window.setTimeout(() => {
+        const v = videoRef.current;
+        const hls = hlsRef.current;
+        if (!v) return;
+        const seekToLive = () => {
+          if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
+            v.currentTime = hls.liveSyncPosition;
+          } else if (v.seekable.length > 0) {
+            const end = v.seekable.end(v.seekable.length - 1);
+            if (isFinite(end)) v.currentTime = end;
+          }
+        };
+        if (v.paused) { seekToLive(); v.play().catch(() => {}); }
+        else {
+          const hls = hlsRef.current;
+          const live = hls?.liveSyncPosition;
+          if (live != null && isFinite(live) && live - v.currentTime > 8) v.currentTime = live;
+          else if (v.seekable.length > 0) {
+            const end = v.seekable.end(v.seekable.length - 1);
+            if (isFinite(end) && end - v.currentTime > 8) v.currentTime = end;
+          }
+        }
+      }, 1500);
+    };
     const onPause = () => setPlaying(false);
     const onError = () => {
       setLoading(false);
-      // Native video error (non-HLS) — skip immediately
       if (channel) onStreamError?.(channel);
+    };
+    const onStalled = () => {
+      window.setTimeout(() => {
+        const v = videoRef.current;
+        const hls = hlsRef.current;
+        if (!v || !v.paused) return;
+        if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
+          v.currentTime = hls.liveSyncPosition;
+        } else if (v.seekable.length > 0) {
+          const end = v.seekable.end(v.seekable.length - 1);
+          if (isFinite(end)) v.currentTime = end;
+        }
+        v.play().catch(() => {});
+      }, 2000);
     };
     video.addEventListener("playing", onPlaying);
     video.addEventListener("waiting", onWaiting);
+    video.addEventListener("stalled", onStalled);
     video.addEventListener("pause", onPause);
     video.addEventListener("error", onError);
 
@@ -254,6 +322,7 @@ export default function Player({
       window.clearTimeout(skipTimer);
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("stalled", onStalled);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("error", onError);
       if (hlsRef.current) {
@@ -1372,9 +1441,9 @@ export default function Player({
           </div>
         </div>
 
-        {/* lucide lucide-zap (with the dot animation baked in)
-            + Revenger. Format: ⚡(anim) Revenger. Color #34bf80. */}
+        {/* lucide lucide-zap + Revenger pill | BD clock pill */}
         <div className="mt-2.5 flex items-center gap-2 sm:mt-3">
+          {/* Zap + Revenger */}
           <div
             className="flex items-center gap-1.5 rounded-full border px-2 py-0.5"
             style={{
@@ -1382,7 +1451,6 @@ export default function Player({
               backgroundColor: "rgba(52,191,128,0.10)",
             }}
           >
-            {/* Zap icon with a pulsing dot inside it (combined animation) */}
             <span className="relative inline-flex h-3 w-3 items-center justify-center">
               <svg
                 width="12"
@@ -1397,7 +1465,6 @@ export default function Player({
               >
                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
               </svg>
-              {/* Pulsing green dot overlaid on the zap icon */}
               <span
                 className="absolute h-1 w-1 rounded-full"
                 style={{
@@ -1417,6 +1484,37 @@ export default function Player({
               Revenger
             </span>
           </div>
+
+          {/* BD Clock pill — same size/style as Zap+Revenger */}
+          <div
+            className="flex items-center gap-1.5 rounded-full border px-2 py-0.5"
+            style={{
+              borderColor: "rgba(255,255,255,0.12)",
+              backgroundColor: "rgba(255,255,255,0.05)",
+            }}
+          >
+            {/* Pulsing dot */}
+            <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center rounded-full"
+              style={{ border: "1px solid rgba(255,255,255,0.18)" }}>
+              <span className="absolute inset-0 rounded-full"
+                style={{ background: "rgba(255,255,255,0.80)", animation: "clockDotPulse 1.4s ease-in-out infinite" }} />
+              <span className="absolute h-[4px] w-[4px] rounded-full"
+                style={{ background: "rgba(255,255,255,0.95)" }} />
+            </span>
+            <span
+              className="text-[10px] font-semibold uppercase tracking-widest"
+              style={{ color: "rgba(255,255,255,0.55)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight:1 }}
+            >TIME</span>
+            <span className="h-2.5 w-px" style={{ background: "rgba(255,255,255,0.15)" }} />
+            <span
+              className="font-mono tabular-nums text-[10px] font-medium"
+              style={{ color: "rgba(255,255,255,0.85)", fontVariantNumeric:"tabular-nums", lineHeight:1 }}
+            >{bdClock.time}</span>
+            <span
+              className="text-[10px] font-semibold uppercase"
+              style={{ color: "rgba(255,255,255,0.55)", lineHeight:1 }}
+            >{bdClock.ampm}</span>
+          </div>
         </div>
       </div>
 
@@ -1431,6 +1529,10 @@ export default function Player({
         @keyframes zapDotPulse {
           0%, 100% { opacity: 0.4; transform: translate(-50%, -50%) scale(0.7); }
           50%      { opacity: 1;   transform: translate(-50%, -50%) scale(1.3); }
+        }
+        @keyframes clockDotPulse {
+          0%, 100% { opacity: 0.45; transform: scale(0.85); }
+          50%       { opacity: 1;   transform: scale(1.1); }
         }
         @keyframes gesturePop {
           0% { opacity: 0; transform: scale(0.92); }

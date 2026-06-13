@@ -142,10 +142,7 @@ export default function App() {
           {/* Left column: player + footer (desktop only footer here) */}
           <div className="flex flex-col gap-0">
             <Player channel={activeChannel} onStreamError={handleStreamError} />
-            {/* Footer under player — desktop only */}
-            <div className="mt-0 hidden lg:block">
-              <Footer />
-            </div>
+
           </div>
 
           {/* Right column: sidebar (desktop) */}
@@ -174,10 +171,7 @@ export default function App() {
               )}
             </div>
           </div>
-          {/* Clock — outside the categories panel, centered (mobile only) */}
-          <div className="flex w-full items-center justify-center">
-            <Footer />
-          </div>
+
         </section>
 
         {error && (

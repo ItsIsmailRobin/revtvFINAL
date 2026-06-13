@@ -20,90 +20,110 @@ interface Match {
 const f = (code: string) => `https://flagcdn.com/w40/${code.toLowerCase()}.png`;
 
 const MATCHES: Match[] = [
-  { id:1,  stage:"Group A", date:"2026-06-12", time:"06:00",  teamA:"Mexico",       flagA:f("mx"), teamB:"Ecuador",      flagB:f("ec"), city:"LA",     venue:"SoFi Stadium" },
-  { id:2,  stage:"Group B", date:"2026-06-12", time:"23:00",  teamA:"USA",          flagA:f("us"), teamB:"Canada",       flagB:f("ca"), city:"Dallas", venue:"AT&T Stadium" },
-  { id:3,  stage:"Group C", date:"2026-06-13", time:"03:00",  teamA:"Spain",        flagA:f("es"), teamB:"Uruguay",      flagB:f("uy"), city:"NY",     venue:"MetLife Stadium" },
-  { id:4,  stage:"Group D", date:"2026-06-13", time:"21:00",  teamA:"Argentina",    flagA:f("ar"), teamB:"Saudi Arabia", flagB:f("sa"), city:"LA",     venue:"Rose Bowl" },
-  { id:5,  stage:"Group E", date:"2026-06-14", time:"00:00",  teamA:"France",       flagA:f("fr"), teamB:"Colombia",     flagB:f("co"), city:"SF",     venue:"Levi's Stadium" },
-  { id:6,  stage:"Group F", date:"2026-06-14", time:"03:00",  teamA:"Germany",      flagA:f("de"), teamB:"Japan",        flagB:f("jp"), city:"LA",     venue:"SoFi Stadium" },
-  { id:7,  stage:"Group G", date:"2026-06-14", time:"21:00",  teamA:"England",      flagA:f("gb-eng"), teamB:"Senegal", flagB:f("sn"), city:"Boston", venue:"Gillette Stadium" },
-  { id:8,  stage:"Group H", date:"2026-06-15", time:"00:00",  teamA:"Portugal",     flagA:f("pt"), teamB:"Ivory Coast",  flagB:f("ci"), city:"Dallas", venue:"AT&T Stadium" },
-  { id:9,  stage:"Group A", date:"2026-06-15", time:"03:00",  teamA:"Argentina",    flagA:f("ar"), teamB:"South Africa", flagB:f("za"), city:"Miami",  venue:"Hard Rock Stadium" },
-  { id:10, stage:"Group B", date:"2026-06-15", time:"21:00",  teamA:"Brazil",       flagA:f("br"), teamB:"Croatia",      flagB:f("hr"), city:"LA",     venue:"SoFi Stadium" },
-  { id:11, stage:"Group C", date:"2026-06-16", time:"00:00",  teamA:"Netherlands",  flagA:f("nl"), teamB:"Qatar",        flagB:f("qa"), city:"Philly", venue:"Lincoln Financial" },
-  { id:12, stage:"Group D", date:"2026-06-16", time:"03:00",  teamA:"Morocco",      flagA:f("ma"), teamB:"Ukraine",      flagB:f("ua"), city:"SF",     venue:"Levi's Stadium" },
-  { id:13, stage:"Group E", date:"2026-06-16", time:"21:00",  teamA:"Belgium",      flagA:f("be"), teamB:"Mexico",       flagB:f("mx"), city:"NY",     venue:"MetLife Stadium" },
-  { id:14, stage:"Group F", date:"2026-06-17", time:"00:00",  teamA:"Italy",        flagA:f("it"), teamB:"Ecuador",      flagB:f("ec"), city:"Dallas", venue:"AT&T Stadium" },
-  { id:15, stage:"Group G", date:"2026-06-17", time:"03:00",  teamA:"Australia",    flagA:f("au"), teamB:"Colombia",     flagB:f("co"), city:"LA",     venue:"SoFi Stadium" },
-  { id:16, stage:"Group H", date:"2026-06-17", time:"21:00",  teamA:"South Korea",  flagA:f("kr"), teamB:"Poland",       flagB:f("pl"), city:"Boston", venue:"Gillette Stadium" },
-  { id:17, stage:"Group A", date:"2026-06-18", time:"00:00",  teamA:"Canada",       flagA:f("ca"), teamB:"Senegal",      flagB:f("sn"), city:"Miami",  venue:"Hard Rock Stadium" },
-  { id:18, stage:"Group B", date:"2026-06-18", time:"03:00",  teamA:"Spain",        flagA:f("es"), teamB:"Saudi Arabia", flagB:f("sa"), city:"SF",     venue:"Levi's Stadium" },
-  { id:19, stage:"Group C", date:"2026-06-18", time:"21:00",  teamA:"USA",          flagA:f("us"), teamB:"Ghana",        flagB:f("gh"), city:"NY",     venue:"MetLife Stadium" },
-  { id:20, stage:"Group D", date:"2026-06-19", time:"00:00",  teamA:"France",       flagA:f("fr"), teamB:"Japan",        flagB:f("jp"), city:"LA",     venue:"Rose Bowl" },
-  { id:21, stage:"Group E", date:"2026-06-19", time:"03:00",  teamA:"Germany",      flagA:f("de"), teamB:"Uruguay",      flagB:f("uy"), city:"Philly", venue:"Lincoln Financial" },
-  { id:22, stage:"Group F", date:"2026-06-19", time:"21:00",  teamA:"England",      flagA:f("gb-eng"), teamB:"Qatar",   flagB:f("qa"), city:"Boston", venue:"Gillette Stadium" },
-  { id:23, stage:"Group G", date:"2026-06-20", time:"00:00",  teamA:"Portugal",     flagA:f("pt"), teamB:"Ivory Coast",  flagB:f("ci"), city:"Dallas", venue:"AT&T Stadium" },
-  { id:24, stage:"Group H", date:"2026-06-20", time:"03:00",  teamA:"Netherlands",  flagA:f("nl"), teamB:"Morocco",      flagB:f("ma"), city:"LA",     venue:"SoFi Stadium" },
-  { id:25, stage:"Group A", date:"2026-06-20", time:"21:00",  teamA:"Croatia",      flagA:f("hr"), teamB:"Ivory Coast",  flagB:f("ci"), city:"Miami",  venue:"Hard Rock Stadium" },
-  { id:26, stage:"Group B", date:"2026-06-21", time:"00:00",  teamA:"Brazil",       flagA:f("br"), teamB:"South Africa", flagB:f("za"), city:"NY",     venue:"MetLife Stadium" },
-  { id:27, stage:"Group C", date:"2026-06-21", time:"03:00",  teamA:"Belgium",      flagA:f("be"), teamB:"Poland",       flagB:f("pl"), city:"SF",     venue:"Levi's Stadium" },
-  { id:28, stage:"Group D", date:"2026-06-21", time:"21:00",  teamA:"Argentina",    flagA:f("ar"), teamB:"Colombia",     flagB:f("co"), city:"LA",     venue:"Rose Bowl" },
-  { id:29, stage:"Group E", date:"2026-06-22", time:"00:00",  teamA:"Mexico",       flagA:f("mx"), teamB:"Japan",        flagB:f("jp"), city:"Dallas", venue:"AT&T Stadium" },
-  { id:30, stage:"Group F", date:"2026-06-22", time:"03:00",  teamA:"Italy",        flagA:f("it"), teamB:"Ukraine",      flagB:f("ua"), city:"Philly", venue:"Lincoln Financial" },
-  { id:31, stage:"Group G", date:"2026-06-22", time:"21:00",  teamA:"Spain",        flagA:f("es"), teamB:"Ghana",        flagB:f("gh"), city:"Boston", venue:"Gillette Stadium" },
-  { id:32, stage:"Group H", date:"2026-06-23", time:"00:00",  teamA:"Australia",    flagA:f("au"), teamB:"Saudi Arabia", flagB:f("sa"), city:"LA",     venue:"SoFi Stadium" },
-  { id:33, stage:"Group A", date:"2026-06-23", time:"03:00",  teamA:"France",       flagA:f("fr"), teamB:"Netherlands",  flagB:f("nl"), city:"Miami",  venue:"Hard Rock Stadium" },
-  { id:34, stage:"Group B", date:"2026-06-23", time:"21:00",  teamA:"South Korea",  flagA:f("kr"), teamB:"Ecuador",      flagB:f("ec"), city:"NY",     venue:"MetLife Stadium" },
-  { id:35, stage:"Group C", date:"2026-06-24", time:"00:00",  teamA:"Portugal",     flagA:f("pt"), teamB:"Morocco",      flagB:f("ma"), city:"LA",     venue:"Rose Bowl" },
-  { id:36, stage:"Group D", date:"2026-06-24", time:"03:00",  teamA:"USA",          flagA:f("us"), teamB:"Uruguay",      flagB:f("uy"), city:"SF",     venue:"Levi's Stadium" },
-  { id:37, stage:"Group E", date:"2026-06-24", time:"21:00",  teamA:"England",      flagA:f("gb-eng"), teamB:"Croatia", flagB:f("hr"), city:"Dallas", venue:"AT&T Stadium" },
-  { id:38, stage:"Group F", date:"2026-06-25", time:"00:00",  teamA:"Brazil",       flagA:f("br"), teamB:"Belgium",      flagB:f("be"), city:"Philly", venue:"Lincoln Financial" },
-  { id:39, stage:"Group G", date:"2026-06-25", time:"03:00",  teamA:"Germany",      flagA:f("de"), teamB:"Qatar",        flagB:f("qa"), city:"Boston", venue:"Gillette Stadium" },
-  { id:40, stage:"Group H", date:"2026-06-25", time:"21:00",  teamA:"Colombia",     flagA:f("co"), teamB:"Ukraine",      flagB:f("ua"), city:"LA",     venue:"SoFi Stadium" },
-  { id:41, stage:"Group A", date:"2026-06-26", time:"00:00",  teamA:"Canada",       flagA:f("ca"), teamB:"Poland",       flagB:f("pl"), city:"Miami",  venue:"Hard Rock Stadium" },
-  { id:42, stage:"Group B", date:"2026-06-26", time:"03:00",  teamA:"Mexico",       flagA:f("mx"), teamB:"South Africa", flagB:f("za"), city:"LA",     venue:"Rose Bowl" },
-  { id:43, stage:"Group C", date:"2026-06-26", time:"21:00",  teamA:"Argentina",    flagA:f("ar"), teamB:"Ivory Coast",  flagB:f("ci"), city:"NY",     venue:"MetLife Stadium" },
-  { id:44, stage:"Group D", date:"2026-06-27", time:"00:00",  teamA:"Spain",        flagA:f("es"), teamB:"Croatia",      flagB:f("hr"), city:"SF",     venue:"Levi's Stadium" },
-  { id:45, stage:"Group E", date:"2026-06-27", time:"03:00",  teamA:"France",       flagA:f("fr"), teamB:"Saudi Arabia", flagB:f("sa"), city:"Dallas", venue:"AT&T Stadium" },
-  { id:46, stage:"Group F", date:"2026-06-27", time:"21:00",  teamA:"Italy",        flagA:f("it"), teamB:"Japan",        flagB:f("jp"), city:"Philly", venue:"Lincoln Financial" },
-  { id:47, stage:"Group G", date:"2026-06-28", time:"00:00",  teamA:"USA",          flagA:f("us"), teamB:"Portugal",     flagB:f("pt"), city:"LA",     venue:"Rose Bowl" },
-  { id:48, stage:"Group H", date:"2026-06-28", time:"03:00",  teamA:"Germany",      flagA:f("de"), teamB:"Morocco",      flagB:f("ma"), city:"NY",     venue:"MetLife Stadium" },
-  { id:49, stage:"Group A", date:"2026-06-29", time:"00:00",  teamA:"Ecuador",      flagA:f("ec"), teamB:"Australia",    flagB:f("au"), city:"Boston", venue:"Gillette Stadium" },
-  { id:50, stage:"Group B", date:"2026-06-29", time:"03:00",  teamA:"Canada",       flagA:f("ca"), teamB:"Ghana",        flagB:f("gh"), city:"LA",     venue:"SoFi Stadium" },
-  { id:51, stage:"Group C", date:"2026-06-30", time:"00:00",  teamA:"Netherlands",  flagA:f("nl"), teamB:"Uruguay",      flagB:f("uy"), city:"Dallas", venue:"AT&T Stadium" },
-  { id:52, stage:"Group D", date:"2026-06-30", time:"03:00",  teamA:"Brazil",       flagA:f("br"), teamB:"Qatar",        flagB:f("qa"), city:"Miami",  venue:"Hard Rock Stadium" },
-  { id:53, stage:"Group E", date:"2026-07-01", time:"00:00",  teamA:"Belgium",      flagA:f("be"), teamB:"Croatia",      flagB:f("hr"), city:"SF",     venue:"Levi's Stadium" },
-  { id:54, stage:"Group F", date:"2026-07-01", time:"03:00",  teamA:"England",      flagA:f("gb-eng"), teamB:"South Korea",flagB:f("kr"), city:"LA",  venue:"Rose Bowl" },
-  { id:55, stage:"Group G", date:"2026-07-02", time:"00:00",  teamA:"Argentina",    flagA:f("ar"), teamB:"Mexico",       flagB:f("mx"), city:"NY",     venue:"MetLife Stadium" },
-  { id:56, stage:"Group H", date:"2026-07-02", time:"03:00",  teamA:"Spain",        flagA:f("es"), teamB:"Saudi Arabia", flagB:f("sa"), city:"Philly", venue:"Lincoln Financial" },
-  { id:57, stage:"Group A", date:"2026-07-03", time:"00:00",  teamA:"Italy",        flagA:f("it"), teamB:"Colombia",     flagB:f("co"), city:"LA",     venue:"SoFi Stadium" },
-  { id:58, stage:"Group B", date:"2026-07-03", time:"03:00",  teamA:"France",       flagA:f("fr"), teamB:"Australia",    flagB:f("au"), city:"Boston", venue:"Gillette Stadium" },
-  // ROUND OF 32
-  { id:59, stage:"Round of 32", date:"2026-07-06", time:"03:00",  teamA:"1A", flagA:f("xx"), teamB:"2B", flagB:f("xx"), city:"NY",     venue:"MetLife Stadium" },
-  { id:60, stage:"Round of 32", date:"2026-07-06", time:"21:00",  teamA:"1B", flagA:f("xx"), teamB:"2A", flagB:f("xx"), city:"LA",     venue:"SoFi Stadium" },
-  { id:61, stage:"Round of 32", date:"2026-07-07", time:"03:00",  teamA:"1C", flagA:f("xx"), teamB:"2D", flagB:f("xx"), city:"Dallas", venue:"AT&T Stadium" },
-  { id:62, stage:"Round of 32", date:"2026-07-07", time:"21:00",  teamA:"1D", flagA:f("xx"), teamB:"2C", flagB:f("xx"), city:"LA",     venue:"Rose Bowl" },
-  { id:63, stage:"Round of 32", date:"2026-07-08", time:"03:00",  teamA:"1E", flagA:f("xx"), teamB:"2F", flagB:f("xx"), city:"Miami",  venue:"Hard Rock Stadium" },
-  { id:64, stage:"Round of 32", date:"2026-07-08", time:"21:00",  teamA:"1F", flagA:f("xx"), teamB:"2E", flagB:f("xx"), city:"SF",     venue:"Levi's Stadium" },
-  { id:65, stage:"Round of 32", date:"2026-07-09", time:"03:00",  teamA:"1G", flagA:f("xx"), teamB:"2H", flagB:f("xx"), city:"Philly", venue:"Lincoln Financial" },
-  { id:66, stage:"Round of 32", date:"2026-07-09", time:"21:00",  teamA:"1H", flagA:f("xx"), teamB:"2G", flagB:f("xx"), city:"Boston", venue:"Gillette Stadium" },
-  // ROUND OF 16
-  { id:67, stage:"Round of 16", date:"2026-07-11", time:"03:00",  teamA:"W59",flagA:f("xx"), teamB:"W60",flagB:f("xx"), city:"NY",     venue:"MetLife Stadium" },
-  { id:68, stage:"Round of 16", date:"2026-07-11", time:"21:00",  teamA:"W61",flagA:f("xx"), teamB:"W62",flagB:f("xx"), city:"LA",     venue:"SoFi Stadium" },
-  { id:69, stage:"Round of 16", date:"2026-07-12", time:"03:00",  teamA:"W63",flagA:f("xx"), teamB:"W64",flagB:f("xx"), city:"Dallas", venue:"AT&T Stadium" },
-  { id:70, stage:"Round of 16", date:"2026-07-12", time:"21:00",  teamA:"W65",flagA:f("xx"), teamB:"W66",flagB:f("xx"), city:"LA",     venue:"Rose Bowl" },
-  // QUARTER-FINALS
-  { id:71, stage:"Quarter-Final", date:"2026-07-16", time:"03:00", teamA:"W67",flagA:f("xx"), teamB:"W68",flagB:f("xx"), city:"NY",    venue:"MetLife Stadium" },
-  { id:72, stage:"Quarter-Final", date:"2026-07-16", time:"21:00", teamA:"W69",flagA:f("xx"), teamB:"W70",flagB:f("xx"), city:"LA",    venue:"SoFi Stadium" },
-  { id:73, stage:"Quarter-Final", date:"2026-07-17", time:"03:00", teamA:"W71",flagA:f("xx"), teamB:"W72",flagB:f("xx"), city:"Dallas",venue:"AT&T Stadium" },
-  { id:74, stage:"Quarter-Final", date:"2026-07-17", time:"21:00", teamA:"W73",flagA:f("xx"), teamB:"W74",flagB:f("xx"), city:"LA",    venue:"Rose Bowl" },
-  // SEMI-FINALS
-  { id:75, stage:"Semi-Final",    date:"2026-07-21", time:"05:30", teamA:"W71",flagA:f("xx"), teamB:"W72",flagB:f("xx"), city:"NY",    venue:"MetLife Stadium" },
-  { id:76, stage:"Semi-Final",    date:"2026-07-22", time:"05:30", teamA:"W73",flagA:f("xx"), teamB:"W74",flagB:f("xx"), city:"LA",    venue:"Rose Bowl" },
-  // 3RD PLACE
-  { id:77, stage:"3rd Place",     date:"2026-07-25", time:"04:00", teamA:"L75",flagA:f("xx"), teamB:"L76",flagB:f("xx"), city:"Dallas",venue:"AT&T Stadium" },
-  // FINAL
-  { id:78, stage:"⭐ Final",      date:"2026-07-26", time:"05:00", teamA:"W75",flagA:f("xx"), teamB:"W76",flagB:f("xx"), city:"NY",    venue:"MetLife Stadium" },
+  { id:1, stage:"Group A", date:"2026-06-12", time:"01:00", teamA:"Mexico", flagA:f("mx"), teamB:"South Africa", flagB:f("za"), city:"Mexico City", venue:"Estadio Azteca" },
+  { id:2, stage:"Group A", date:"2026-06-12", time:"08:00", teamA:"South Korea", flagA:f("kr"), teamB:"Czechia", flagB:f("cz"), city:"Zapopan", venue:"Estadio Akron" },
+  { id:3, stage:"Group B", date:"2026-06-13", time:"01:00", teamA:"Canada", flagA:f("ca"), teamB:"Bosnia & Herz.", flagB:f("ba"), city:"Toronto", venue:"BMO Field" },
+  { id:4, stage:"Group D", date:"2026-06-13", time:"07:00", teamA:"USA", flagA:f("us"), teamB:"Paraguay", flagB:f("py"), city:"Los Angeles", venue:"SoFi Stadium" },
+  { id:5, stage:"Group B", date:"2026-06-14", time:"01:00", teamA:"Qatar", flagA:f("qa"), teamB:"Switzerland", flagB:f("ch"), city:"Santa Clara", venue:"Levi's Stadium" },
+  { id:6, stage:"Group C", date:"2026-06-14", time:"04:00", teamA:"Brazil", flagA:f("br"), teamB:"Morocco", flagB:f("ma"), city:"East Rutherford", venue:"MetLife Stadium" },
+  { id:7, stage:"Group C", date:"2026-06-14", time:"07:00", teamA:"Haiti", flagA:f("ht"), teamB:"Scotland", flagB:f("gb-sct"), city:"Foxborough", venue:"Gillette Stadium" },
+  { id:8, stage:"Group D", date:"2026-06-14", time:"22:00", teamA:"Australia", flagA:f("au"), teamB:"Türkiye", flagB:f("tr"), city:"Vancouver", venue:"BC Place" },
+  { id:9, stage:"Group E", date:"2026-06-14", time:"23:00", teamA:"Germany", flagA:f("de"), teamB:"Curaçao", flagB:f("cw"), city:"Houston", venue:"NRG Stadium" },
+  { id:10, stage:"Group F", date:"2026-06-15", time:"02:00", teamA:"Netherlands", flagA:f("nl"), teamB:"Japan", flagB:f("jp"), city:"Arlington", venue:"AT&T Stadium" },
+  { id:11, stage:"Group E", date:"2026-06-15", time:"05:00", teamA:"Ivory Coast", flagA:f("ci"), teamB:"Ecuador", flagB:f("ec"), city:"Philadelphia", venue:"Lincoln Financial" },
+  { id:12, stage:"Group F", date:"2026-06-15", time:"08:00", teamA:"Sweden", flagA:f("se"), teamB:"Tunisia", flagB:f("tn"), city:"Monterrey", venue:"Estadio BBVA" },
+  { id:13, stage:"Group H", date:"2026-06-15", time:"22:00", teamA:"Spain", flagA:f("es"), teamB:"Cape Verde", flagB:f("cv"), city:"Atlanta", venue:"Mercedes-Benz Stadium" },
+  { id:14, stage:"Group G", date:"2026-06-16", time:"01:00", teamA:"Belgium", flagA:f("be"), teamB:"Egypt", flagB:f("eg"), city:"Seattle", venue:"Lumen Field" },
+  { id:15, stage:"Group H", date:"2026-06-16", time:"04:00", teamA:"Saudi Arabia", flagA:f("sa"), teamB:"Uruguay", flagB:f("uy"), city:"Miami", venue:"Hard Rock Stadium" },
+  { id:16, stage:"Group G", date:"2026-06-16", time:"07:00", teamA:"Iran", flagA:f("ir"), teamB:"New Zealand", flagB:f("nz"), city:"Los Angeles", venue:"SoFi Stadium" },
+  { id:17, stage:"Group I", date:"2026-06-17", time:"01:00", teamA:"France", flagA:f("fr"), teamB:"Senegal", flagB:f("sn"), city:"East Rutherford", venue:"MetLife Stadium" },
+  { id:18, stage:"Group I", date:"2026-06-17", time:"04:00", teamA:"Iraq", flagA:f("iq"), teamB:"Norway", flagB:f("no"), city:"Foxborough", venue:"Gillette Stadium" },
+  { id:19, stage:"Group J", date:"2026-06-17", time:"07:00", teamA:"Argentina", flagA:f("ar"), teamB:"Algeria", flagB:f("dz"), city:"Kansas City", venue:"Arrowhead Stadium" },
+  { id:20, stage:"Group J", date:"2026-06-17", time:"10:00", teamA:"Austria", flagA:f("at"), teamB:"Jordan", flagB:f("jo"), city:"Santa Clara", venue:"Levi's Stadium" },
+  { id:21, stage:"Group K", date:"2026-06-17", time:"23:00", teamA:"Portugal", flagA:f("pt"), teamB:"DR Congo", flagB:f("cd"), city:"Houston", venue:"NRG Stadium" },
+  { id:22, stage:"Group L", date:"2026-06-18", time:"02:00", teamA:"England", flagA:f("gb-eng"), teamB:"Croatia", flagB:f("hr"), city:"Arlington", venue:"AT&T Stadium" },
+  { id:23, stage:"Group L", date:"2026-06-18", time:"05:00", teamA:"Ghana", flagA:f("gh"), teamB:"Panama", flagB:f("pa"), city:"Toronto", venue:"BMO Field" },
+  { id:24, stage:"Group K", date:"2026-06-18", time:"08:00", teamA:"Uzbekistan", flagA:f("uz"), teamB:"Colombia", flagB:f("co"), city:"Mexico City", venue:"Estadio Azteca" },
+  { id:25, stage:"Group A", date:"2026-06-18", time:"22:00", teamA:"Czechia", flagA:f("cz"), teamB:"South Africa", flagB:f("za"), city:"Atlanta", venue:"Mercedes-Benz Stadium" },
+  { id:26, stage:"Group B", date:"2026-06-19", time:"01:00", teamA:"Switzerland", flagA:f("ch"), teamB:"Bosnia & Herz.", flagB:f("ba"), city:"Los Angeles", venue:"SoFi Stadium" },
+  { id:27, stage:"Group B", date:"2026-06-19", time:"04:00", teamA:"Canada", flagA:f("ca"), teamB:"Qatar", flagB:f("qa"), city:"Vancouver", venue:"BC Place" },
+  { id:28, stage:"Group A", date:"2026-06-19", time:"07:00", teamA:"Mexico", flagA:f("mx"), teamB:"South Korea", flagB:f("kr"), city:"Zapopan", venue:"Estadio Akron" },
+  { id:29, stage:"Group D", date:"2026-06-20", time:"01:00", teamA:"USA", flagA:f("us"), teamB:"Australia", flagB:f("au"), city:"Seattle", venue:"Lumen Field" },
+  { id:30, stage:"Group C", date:"2026-06-20", time:"04:00", teamA:"Scotland", flagA:f("gb-sct"), teamB:"Morocco", flagB:f("ma"), city:"Foxborough", venue:"Gillette Stadium" },
+  { id:31, stage:"Group C", date:"2026-06-20", time:"06:30", teamA:"Brazil", flagA:f("br"), teamB:"Haiti", flagB:f("ht"), city:"Philadelphia", venue:"Lincoln Financial" },
+  { id:32, stage:"Group D", date:"2026-06-20", time:"09:00", teamA:"Türkiye", flagA:f("tr"), teamB:"Paraguay", flagB:f("py"), city:"Santa Clara", venue:"Levi's Stadium" },
+  { id:33, stage:"Group F", date:"2026-06-20", time:"23:00", teamA:"Netherlands", flagA:f("nl"), teamB:"Sweden", flagB:f("se"), city:"Houston", venue:"NRG Stadium" },
+  { id:34, stage:"Group E", date:"2026-06-21", time:"02:00", teamA:"Germany", flagA:f("de"), teamB:"Ivory Coast", flagB:f("ci"), city:"Toronto", venue:"BMO Field" },
+  { id:35, stage:"Group E", date:"2026-06-21", time:"06:00", teamA:"Ecuador", flagA:f("ec"), teamB:"Curaçao", flagB:f("cw"), city:"Kansas City", venue:"Arrowhead Stadium" },
+  { id:36, stage:"Group F", date:"2026-06-21", time:"10:00", teamA:"Tunisia", flagA:f("tn"), teamB:"Japan", flagB:f("jp"), city:"Monterrey", venue:"Estadio BBVA" },
+  { id:37, stage:"Group H", date:"2026-06-21", time:"22:00", teamA:"Spain", flagA:f("es"), teamB:"Saudi Arabia", flagB:f("sa"), city:"Atlanta", venue:"Mercedes-Benz Stadium" },
+  { id:38, stage:"Group G", date:"2026-06-22", time:"01:00", teamA:"Belgium", flagA:f("be"), teamB:"Iran", flagB:f("ir"), city:"Los Angeles", venue:"SoFi Stadium" },
+  { id:39, stage:"Group H", date:"2026-06-22", time:"04:00", teamA:"Uruguay", flagA:f("uy"), teamB:"Cape Verde", flagB:f("cv"), city:"Miami", venue:"Hard Rock Stadium" },
+  { id:40, stage:"Group G", date:"2026-06-22", time:"07:00", teamA:"New Zealand", flagA:f("nz"), teamB:"Egypt", flagB:f("eg"), city:"Vancouver", venue:"BC Place" },
+  { id:41, stage:"Group J", date:"2026-06-22", time:"23:00", teamA:"Argentina", flagA:f("ar"), teamB:"Austria", flagB:f("at"), city:"Arlington", venue:"AT&T Stadium" },
+  { id:42, stage:"Group I", date:"2026-06-23", time:"03:00", teamA:"France", flagA:f("fr"), teamB:"Iraq", flagB:f("iq"), city:"Philadelphia", venue:"Lincoln Financial" },
+  { id:43, stage:"Group I", date:"2026-06-23", time:"06:00", teamA:"Norway", flagA:f("no"), teamB:"Senegal", flagB:f("sn"), city:"East Rutherford", venue:"MetLife Stadium" },
+  { id:44, stage:"Group J", date:"2026-06-23", time:"09:00", teamA:"Jordan", flagA:f("jo"), teamB:"Algeria", flagB:f("dz"), city:"Santa Clara", venue:"Levi's Stadium" },
+  { id:45, stage:"Group K", date:"2026-06-23", time:"23:00", teamA:"Portugal", flagA:f("pt"), teamB:"Uzbekistan", flagB:f("uz"), city:"Houston", venue:"NRG Stadium" },
+  { id:46, stage:"Group L", date:"2026-06-24", time:"02:00", teamA:"England", flagA:f("gb-eng"), teamB:"Ghana", flagB:f("gh"), city:"Foxborough", venue:"Gillette Stadium" },
+  { id:47, stage:"Group L", date:"2026-06-24", time:"05:00", teamA:"Panama", flagA:f("pa"), teamB:"Croatia", flagB:f("hr"), city:"Toronto", venue:"BMO Field" },
+  { id:48, stage:"Group K", date:"2026-06-24", time:"08:00", teamA:"Colombia", flagA:f("co"), teamB:"DR Congo", flagB:f("cd"), city:"Zapopan", venue:"Estadio Akron" },
+  { id:49, stage:"Group B", date:"2026-06-25", time:"01:00", teamA:"Switzerland", flagA:f("ch"), teamB:"Canada", flagB:f("ca"), city:"Vancouver", venue:"BC Place" },
+  { id:50, stage:"Group B", date:"2026-06-25", time:"01:00", teamA:"Bosnia & Herz.", flagA:f("ba"), teamB:"Qatar", flagB:f("qa"), city:"Seattle", venue:"Lumen Field" },
+  { id:51, stage:"Group C", date:"2026-06-25", time:"04:00", teamA:"Scotland", flagA:f("gb-sct"), teamB:"Brazil", flagB:f("br"), city:"Miami", venue:"Hard Rock Stadium" },
+  { id:52, stage:"Group C", date:"2026-06-25", time:"04:00", teamA:"Morocco", flagA:f("ma"), teamB:"Haiti", flagB:f("ht"), city:"Atlanta", venue:"Mercedes-Benz Stadium" },
+  { id:53, stage:"Group A", date:"2026-06-25", time:"07:00", teamA:"Czechia", flagA:f("cz"), teamB:"Mexico", flagB:f("mx"), city:"Mexico City", venue:"Estadio Azteca" },
+  { id:54, stage:"Group A", date:"2026-06-25", time:"07:00", teamA:"South Africa", flagA:f("za"), teamB:"South Korea", flagB:f("kr"), city:"Monterrey", venue:"Estadio BBVA" },
+  { id:55, stage:"Group E", date:"2026-06-26", time:"02:00", teamA:"Curaçao", flagA:f("cw"), teamB:"Ivory Coast", flagB:f("ci"), city:"Philadelphia", venue:"Lincoln Financial" },
+  { id:56, stage:"Group E", date:"2026-06-26", time:"02:00", teamA:"Ecuador", flagA:f("ec"), teamB:"Germany", flagB:f("de"), city:"East Rutherford", venue:"MetLife Stadium" },
+  { id:57, stage:"Group F", date:"2026-06-26", time:"05:00", teamA:"Japan", flagA:f("jp"), teamB:"Sweden", flagB:f("se"), city:"Arlington", venue:"AT&T Stadium" },
+  { id:58, stage:"Group F", date:"2026-06-26", time:"05:00", teamA:"Tunisia", flagA:f("tn"), teamB:"Netherlands", flagB:f("nl"), city:"Kansas City", venue:"Arrowhead Stadium" },
+  { id:59, stage:"Group D", date:"2026-06-26", time:"08:00", teamA:"Türkiye", flagA:f("tr"), teamB:"USA", flagB:f("us"), city:"Los Angeles", venue:"SoFi Stadium" },
+  { id:60, stage:"Group D", date:"2026-06-26", time:"08:00", teamA:"Paraguay", flagA:f("py"), teamB:"Australia", flagB:f("au"), city:"Santa Clara", venue:"Levi's Stadium" },
+  { id:61, stage:"Group I", date:"2026-06-27", time:"01:00", teamA:"Norway", flagA:f("no"), teamB:"France", flagB:f("fr"), city:"Foxborough", venue:"Gillette Stadium" },
+  { id:62, stage:"Group I", date:"2026-06-27", time:"01:00", teamA:"Senegal", flagA:f("sn"), teamB:"Iraq", flagB:f("iq"), city:"Toronto", venue:"BMO Field" },
+  { id:63, stage:"Group H", date:"2026-06-27", time:"06:00", teamA:"Cape Verde", flagA:f("cv"), teamB:"Saudi Arabia", flagB:f("sa"), city:"Houston", venue:"NRG Stadium" },
+  { id:64, stage:"Group H", date:"2026-06-27", time:"06:00", teamA:"Uruguay", flagA:f("uy"), teamB:"Spain", flagB:f("es"), city:"Zapopan", venue:"Estadio Akron" },
+  { id:65, stage:"Group G", date:"2026-06-27", time:"09:00", teamA:"Egypt", flagA:f("eg"), teamB:"Iran", flagB:f("ir"), city:"Seattle", venue:"Lumen Field" },
+  { id:66, stage:"Group G", date:"2026-06-27", time:"09:00", teamA:"New Zealand", flagA:f("nz"), teamB:"Belgium", flagB:f("be"), city:"Vancouver", venue:"BC Place" },
+  { id:67, stage:"Group L", date:"2026-06-28", time:"03:00", teamA:"Panama", flagA:f("pa"), teamB:"England", flagB:f("gb-eng"), city:"East Rutherford", venue:"MetLife Stadium" },
+  { id:68, stage:"Group L", date:"2026-06-28", time:"03:00", teamA:"Croatia", flagA:f("hr"), teamB:"Ghana", flagB:f("gh"), city:"Philadelphia", venue:"Lincoln Financial" },
+  { id:69, stage:"Group K", date:"2026-06-28", time:"05:30", teamA:"Colombia", flagA:f("co"), teamB:"Portugal", flagB:f("pt"), city:"Miami", venue:"Hard Rock Stadium" },
+  { id:70, stage:"Group K", date:"2026-06-28", time:"05:30", teamA:"DR Congo", flagA:f("cd"), teamB:"Uzbekistan", flagB:f("uz"), city:"Atlanta", venue:"Mercedes-Benz Stadium" },
+  { id:71, stage:"Group J", date:"2026-06-28", time:"08:00", teamA:"Algeria", flagA:f("dz"), teamB:"Austria", flagB:f("at"), city:"Kansas City", venue:"Arrowhead Stadium" },
+  { id:72, stage:"Group J", date:"2026-06-28", time:"08:00", teamA:"Jordan", flagA:f("jo"), teamB:"Argentina", flagB:f("ar"), city:"Arlington", venue:"AT&T Stadium" },
+  { id:73, stage:"Round of 32", date:"2026-06-29", time:"01:00", teamA:"R-up A", flagA:f("xx"), teamB:"R-up B", flagB:f("xx"), city:"Los Angeles", venue:"SoFi Stadium" },
+  { id:74, stage:"Round of 32", date:"2026-06-29", time:"23:00", teamA:"Win C", flagA:f("xx"), teamB:"R-up F", flagB:f("xx"), city:"Houston", venue:"NRG Stadium" },
+  { id:75, stage:"Round of 32", date:"2026-06-30", time:"02:30", teamA:"Win E", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"Foxborough", venue:"Gillette Stadium" },
+  { id:76, stage:"Round of 32", date:"2026-06-30", time:"07:00", teamA:"Win F", flagA:f("xx"), teamB:"R-up C", flagB:f("xx"), city:"Monterrey", venue:"Estadio BBVA" },
+  { id:77, stage:"Round of 32", date:"2026-06-30", time:"23:00", teamA:"R-up E", flagA:f("xx"), teamB:"R-up I", flagB:f("xx"), city:"Arlington", venue:"AT&T Stadium" },
+  { id:78, stage:"Round of 32", date:"2026-07-01", time:"03:00", teamA:"Win I", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"East Rutherford", venue:"MetLife Stadium" },
+  { id:79, stage:"Round of 32", date:"2026-07-01", time:"07:00", teamA:"Win A", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"Mexico City", venue:"Estadio Azteca" },
+  { id:80, stage:"Round of 32", date:"2026-07-01", time:"22:00", teamA:"Win L", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"Atlanta", venue:"Mercedes-Benz Stadium" },
+  { id:81, stage:"Round of 32", date:"2026-07-02", time:"02:00", teamA:"Win G", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"Seattle", venue:"Lumen Field" },
+  { id:82, stage:"Round of 32", date:"2026-07-02", time:"06:00", teamA:"Win D", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"Santa Clara", venue:"Levi's Stadium" },
+  { id:83, stage:"Round of 32", date:"2026-07-03", time:"01:00", teamA:"Win H", flagA:f("xx"), teamB:"R-up J", flagB:f("xx"), city:"Los Angeles", venue:"SoFi Stadium" },
+  { id:84, stage:"Round of 32", date:"2026-07-03", time:"05:00", teamA:"R-up K", flagA:f("xx"), teamB:"R-up L", flagB:f("xx"), city:"Toronto", venue:"BMO Field" },
+  { id:85, stage:"Round of 32", date:"2026-07-03", time:"09:00", teamA:"Win B", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"Vancouver", venue:"BC Place" },
+  { id:86, stage:"Round of 32", date:"2026-07-04", time:"00:00", teamA:"R-up D", flagA:f("xx"), teamB:"R-up G", flagB:f("xx"), city:"Arlington", venue:"AT&T Stadium" },
+  { id:87, stage:"Round of 32", date:"2026-07-04", time:"04:00", teamA:"Win J", flagA:f("xx"), teamB:"R-up H", flagB:f("xx"), city:"Miami", venue:"Hard Rock Stadium" },
+  { id:88, stage:"Round of 32", date:"2026-07-04", time:"07:30", teamA:"Win K", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"Kansas City", venue:"Arrowhead Stadium" },
+  { id:89, stage:"Round of 16", date:"2026-07-04", time:"23:00", teamA:"R32 Win", flagA:f("xx"), teamB:"R32 Win", flagB:f("xx"), city:"Houston", venue:"NRG Stadium" },
+  { id:90, stage:"Round of 16", date:"2026-07-05", time:"03:00", teamA:"R32 Win", flagA:f("xx"), teamB:"R32 Win", flagB:f("xx"), city:"Philadelphia", venue:"Lincoln Financial" },
+  { id:91, stage:"Round of 16", date:"2026-07-06", time:"02:00", teamA:"R32 Win", flagA:f("xx"), teamB:"R32 Win", flagB:f("xx"), city:"East Rutherford", venue:"MetLife Stadium" },
+  { id:92, stage:"Round of 16", date:"2026-07-06", time:"06:00", teamA:"R32 Win", flagA:f("xx"), teamB:"R32 Win", flagB:f("xx"), city:"Mexico City", venue:"Estadio Azteca" },
+  { id:93, stage:"Round of 16", date:"2026-07-07", time:"01:00", teamA:"R32 Win", flagA:f("xx"), teamB:"R32 Win", flagB:f("xx"), city:"Arlington", venue:"AT&T Stadium" },
+  { id:94, stage:"Round of 16", date:"2026-07-07", time:"06:00", teamA:"R32 Win", flagA:f("xx"), teamB:"R32 Win", flagB:f("xx"), city:"Seattle", venue:"Lumen Field" },
+  { id:95, stage:"Round of 16", date:"2026-07-07", time:"22:00", teamA:"R32 Win", flagA:f("xx"), teamB:"R32 Win", flagB:f("xx"), city:"Atlanta", venue:"Mercedes-Benz Stadium" },
+  { id:96, stage:"Round of 16", date:"2026-07-08", time:"02:00", teamA:"R32 Win", flagA:f("xx"), teamB:"R32 Win", flagB:f("xx"), city:"Vancouver", venue:"BC Place" },
+  { id:97, stage:"Quarter-Final", date:"2026-07-10", time:"02:00", teamA:"R16 Win", flagA:f("xx"), teamB:"R16 Win", flagB:f("xx"), city:"Foxborough", venue:"Gillette Stadium" },
+  { id:98, stage:"Quarter-Final", date:"2026-07-11", time:"01:00", teamA:"R16 Win", flagA:f("xx"), teamB:"R16 Win", flagB:f("xx"), city:"Los Angeles", venue:"SoFi Stadium" },
+  { id:99, stage:"Quarter-Final", date:"2026-07-12", time:"03:00", teamA:"R16 Win", flagA:f("xx"), teamB:"R16 Win", flagB:f("xx"), city:"Miami", venue:"Hard Rock Stadium" },
+  { id:100, stage:"Quarter-Final", date:"2026-07-12", time:"07:00", teamA:"R16 Win", flagA:f("xx"), teamB:"R16 Win", flagB:f("xx"), city:"Kansas City", venue:"Arrowhead Stadium" },
+  { id:101, stage:"Semi-Final", date:"2026-07-15", time:"01:00", teamA:"QF Win", flagA:f("xx"), teamB:"QF Win", flagB:f("xx"), city:"Arlington", venue:"AT&T Stadium" },
+  { id:102, stage:"Semi-Final", date:"2026-07-16", time:"01:00", teamA:"QF Win", flagA:f("xx"), teamB:"QF Win", flagB:f("xx"), city:"Atlanta", venue:"Mercedes-Benz Stadium" },
+  { id:103, stage:"3rd Place", date:"2026-07-19", time:"03:00", teamA:"SF Los.", flagA:f("xx"), teamB:"SF Los.", flagB:f("xx"), city:"Miami", venue:"Hard Rock Stadium" },
+  { id:104, stage:"⭐ Final", date:"2026-07-20", time:"01:00", teamA:"SF Win", flagA:f("xx"), teamB:"SF Win", flagB:f("xx"), city:"East Rutherford", venue:"MetLife Stadium" },
 ];
 
 // ─── Time helpers ─────────────────────────────────────────────────
@@ -212,7 +232,7 @@ function Countdown({ match }: { match: Match }) {
           </div>
           {/* Colon separator — aligned with the number row */}
           {i < units.length - 1 && (
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", width:"12px", height: numSz, marginBottom: "11px" }}>
+            <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"center", width:"12px", paddingTop:"2px", height: numSz }}>
               <span style={{
                 color:"rgba(167,139,250,0.45)",
                 fontSize: colSz,
@@ -305,13 +325,13 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
           : isToday
           ? "linear-gradient(135deg,rgba(139,92,246,0.13),rgba(79,42,201,0.07))"
           : "rgba(255,255,255,0.035)",
-        border: `1px solid ${live ? "rgba(74,222,128,0.30)" : isToday ? "rgba(139,92,246,0.28)" : over ? "rgba(255,255,255,0.05)" : "rgba(139,92,246,0.13)"}`,
+        border: `1px solid ${live ? "rgba(74,222,128,0.30)" : isToday ? "rgba(167,139,250,0.65)" : over ? "rgba(255,255,255,0.05)" : "rgba(139,92,246,0.13)"}`,
         boxShadow: live
           ? "0 0 20px rgba(74,222,128,0.12),0 2px 10px rgba(0,0,0,0.4)"
           : final
           ? "0 0 20px rgba(251,191,36,0.08),0 2px 10px rgba(0,0,0,0.4)"
           : isToday
-          ? "0 0 14px rgba(139,92,246,0.10),0 2px 8px rgba(0,0,0,0.3)"
+          ? "0 0 20px rgba(139,92,246,0.25),0 0 40px rgba(139,92,246,0.12),0 2px 8px rgba(0,0,0,0.3)"
           : "0 1px 6px rgba(0,0,0,0.22)",
         // Live card gets a pulse animation
         animation: live ? "cardPulseCPU 3s ease-in-out infinite" : "none",
@@ -536,8 +556,8 @@ export default function FifaSchedule() {
   return (
     <section className="mt-10 sm:mt-12">
       {/* ── Section header ── */}
-      <div className="mb-6">
-        <div className="mb-1.5 flex items-center gap-3">
+      <div className="mb-5 text-center sm:text-left">
+        <div className="mb-1.5 flex items-center justify-center gap-3 sm:justify-start">
           <h2 style={{
             fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
             fontSize:"clamp(26px,4vw,40px)",
@@ -563,11 +583,12 @@ export default function FifaSchedule() {
           fontWeight:400,
           color:"rgba(255,255,255,0.38)",
           letterSpacing:"0.01em",
+          marginTop:"4px",
         }}>Based on Bangladesh Standard Time</p>
       </div>
 
-      {/* Page range label */}
-      <div className="mb-3 flex items-center justify-between">
+      {/* Page range label — hidden on mobile */}
+      <div className="mb-3 hidden items-center justify-between sm:flex">
         <div />
         <div style={{fontFamily:"'Inter',sans-serif", fontSize:"11px", color:"rgba(255,255,255,0.3)", fontWeight:500}}>
           <span>{fmtD(pageStart)}</span>
@@ -637,11 +658,7 @@ export default function FifaSchedule() {
         ))}
       </div>
 
-      <p className="mt-4 text-center" style={{fontFamily:"'Inter',sans-serif", fontSize:"10px", color:"rgba(255,255,255,0.18)", fontWeight:400}}>
-        Based on Bangladesh Standard Time
-      </p>
-
-      {/* Credits — moved here, centered under the schedule note */}
+      {/* Credits — centered under schedule */}
       <FooterCredits />
 
       <style>{`
