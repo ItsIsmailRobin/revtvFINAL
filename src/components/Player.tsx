@@ -82,23 +82,51 @@ export default function Player({
   // may crop), "fill" (stretch to fill, no aspect ratio preservation),
   // "native" (use video's intrinsic size).
   type AspectMode = "contain" | "cover" | "fill" | "native";
-  const [aspectMode, setAspectMode] = useState<AspectMode>(() => {
-    // Restore the last-used aspect ratio (survives refresh & logo click)
+  const [aspectMode, setAspectMode] = useState<AspectMode>("contain");
+
+  // Per-channel aspect ratio memory:
+  // - On refresh / logo click, the same channel is restored — also
+  //   restore the aspect ratio it was last set to.
+  // - On switching to a different channel, always reset to default
+  //   ("contain"), even if returning to a previously-viewed channel.
+  const lastChannelIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!channel) return;
+    if (lastChannelIdRef.current === channel.id) return;
+    lastChannelIdRef.current = channel.id;
+
+    let restored: AspectMode | null = null;
     try {
-      const saved = window.localStorage.getItem("revtv:aspectMode");
-      if (saved === "contain" || saved === "cover" || saved === "fill" || saved === "native") {
-        return saved;
+      const raw = window.localStorage.getItem("revtv:aspect");
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (
+          saved &&
+          saved.channelId === channel.id &&
+          (saved.aspectMode === "contain" ||
+            saved.aspectMode === "cover" ||
+            saved.aspectMode === "fill" ||
+            saved.aspectMode === "native")
+        ) {
+          restored = saved.aspectMode;
+        }
       }
     } catch {}
-    return "contain";
-  });
 
-  // Remember the chosen aspect ratio mode
+    setAspectMode(restored ?? "contain");
+  }, [channel?.id]);
+
+  // Keep storage in sync with the current channel + aspect mode, so a
+  // refresh/logo click can restore it for THIS channel only.
   useEffect(() => {
+    if (!channel) return;
     try {
-      window.localStorage.setItem("revtv:aspectMode", aspectMode);
+      window.localStorage.setItem(
+        "revtv:aspect",
+        JSON.stringify({ channelId: channel.id, aspectMode })
+      );
     } catch {}
-  }, [aspectMode]);
+  }, [channel?.id, aspectMode]);
 
   // Status indicator — shows current volume / aspect ratio briefly
   // when the user changes them via keyboard, then fades out after 3s.
