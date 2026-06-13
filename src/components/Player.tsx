@@ -147,6 +147,9 @@ export default function Player({
   // when the user changes them via keyboard, then fades out after 3s.
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [statusVisible, setStatusVisible] = useState(false);
+  // True when the browser forced muted autoplay and we're waiting for a
+  // user gesture to unmute. Shows a one-tap "Tap to unmute" overlay.
+  const [needsUnmute, setNeedsUnmute] = useState(false);
   const statusTimerRef = useRef<number | null>(null);
 
     const showStatus = useCallback((msg: string) => {
@@ -228,15 +231,18 @@ export default function Player({
     };
     const onPause = () => {
       setPlaying(false);
-      // Only auto-resume if the stream paused on its own (not user-triggered)
-      // so manual pause works correctly. Loop/stall pauses have userPausedRef = false.
+      // Auto-resume ONLY if the stream stalled on its own (buffering gap,
+      // network hiccup, etc.) — never if the user intentionally paused.
+      // Use a longer delay (600ms) so that togglePlay's synchronous
+      // `userPausedRef.current = true` write always lands before this runs,
+      // even on slow Android JS threads.
       window.setTimeout(() => {
         const v = videoRef.current;
-        if (!v || v.ended || userPausedRef.current) return;
-        if (v.paused) {
-          v.play().catch(() => {});
-        }
-      }, 400);
+        if (!v || v.ended) return;
+        // Strict guard: if user paused, do nothing — wait for them to resume.
+        if (userPausedRef.current) return;
+        if (v.paused) v.play().catch(() => {});
+      }, 600);
     };
     const onEnded = () => {
       // For m3u8 streams set on loop — restart from beginning
@@ -250,11 +256,13 @@ export default function Player({
       if (channel) onStreamError?.(channel);
     };
     const onStalled = () => {
-      // After a short grace period, if still paused, resume at live edge
+      // Stream stalled (buffering). After grace period, snap to live edge
+      // and resume — but ONLY if the user hasn't manually paused.
       window.setTimeout(() => {
         const v = videoRef.current;
         const hls = hlsRef.current;
-        if (!v || !v.paused) return;
+        // Respect user pause — never auto-resume on stall if user paused.
+        if (!v || !v.paused || userPausedRef.current) return;
         if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
           v.currentTime = hls.liveSyncPosition;
         } else if (v.seekable.length > 0) {
@@ -297,13 +305,31 @@ export default function Player({
         video.muted = mutedRef.current;
         video.volume = volumeRef.current;
         video.play().catch(() => {
-          // Autoplay blocked — fall back to muted playback temporarily.
-          // Do NOT save this forced-muted state to localStorage; it's a
-          // browser autoplay restriction, not a user preference.
+          // Autoplay blocked with sound — try muted first (always works).
           video.muted = true;
-          mutedRef.current = true;
-          setMuted(true);
-          video.play().catch(() => {});
+          video.play().then(() => {
+            // Muted play succeeded. Now immediately try to unmute — on
+            // Android Chrome this often works right after the play() resolves
+            // because the gesture policy is satisfied by the play itself.
+            video.muted = false;
+            // If the browser re-mutes it, the 'volumechange' event fires and
+            // video.muted will be true — we catch that below via the interval.
+            // Give it 300ms; if still muted, show tap-to-unmute overlay.
+            setTimeout(() => {
+              if (video.muted) {
+                // Still forced-muted — need explicit user gesture.
+                mutedRef.current = true;
+                setMuted(true);
+                setNeedsUnmute(true);
+              } else {
+                // Unmute succeeded silently — restore saved volume.
+                video.volume = volumeRef.current;
+                mutedRef.current = false;
+                setMuted(false);
+                setNeedsUnmute(false);
+              }
+            }, 300);
+          }).catch(() => {});
         });
       });
       hls.on(Hls.Events.ERROR, (_e, data) => {
@@ -344,9 +370,21 @@ export default function Player({
       video.volume = volumeRef.current;
       video.play().catch(() => {
         video.muted = true;
-        mutedRef.current = true;
-        setMuted(true);
-        video.play().catch(() => {});
+        video.play().then(() => {
+          video.muted = false;
+          setTimeout(() => {
+            if (video.muted) {
+              mutedRef.current = true;
+              setMuted(true);
+              setNeedsUnmute(true);
+            } else {
+              video.volume = volumeRef.current;
+              mutedRef.current = false;
+              setMuted(false);
+              setNeedsUnmute(false);
+            }
+          }, 300);
+        }).catch(() => {});
       });
     } else {
       window.clearTimeout(skipTimer);
@@ -513,8 +551,7 @@ export default function Player({
   const lastLiveSnapRef = useRef<number>(0);
 
   // Called by the ● LIVE button — always jumps to the absolute live edge
-  // with no debounce, no minimum-gap check. This is intentional: the user
-  // tapped it explicitly to catch up to real-time.
+  // with no debounce. Seeks to live edge and ALWAYS resumes — never pauses.
   const jumpToLiveEdge = useCallback(() => {
     const v = videoRef.current;
     const hls = hlsRef.current;
@@ -529,7 +566,11 @@ export default function Player({
     if (liveEdge != null) {
       lastLiveSnapRef.current = Date.now();
       v.currentTime = liveEdge;
-      if (v.paused) v.play().catch(() => {});
+    }
+    // Always ensure playing — seeking must never pause the stream.
+    if (v.paused) {
+      userPausedRef.current = false;
+      v.play().catch(() => {});
     }
   }, []);
 
@@ -589,6 +630,9 @@ export default function Player({
       syncToLiveEdge();
       v.play().catch(() => {});
     } else {
+      // Set the ref BEFORE calling pause() — the 'pause' event fires
+      // synchronously inside pause() on some Android browsers, so the
+      // ref must already be true when onPause checks it.
       userPausedRef.current = true;
       v.pause();
     }
@@ -597,6 +641,7 @@ export default function Player({
 
   const toggleMute = useCallback(() => {
     setMuted((m) => !m);
+    setNeedsUnmute(false);
     armHide();
   }, [armHide]);
 
@@ -1234,6 +1279,29 @@ export default function Player({
         </div>
       )}
 
+      {/* Tap-to-unmute overlay — shown when browser forced muted autoplay */}
+      {needsUnmute && (
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-end justify-center pb-20">
+          <button
+            type="button"
+            className="pointer-events-auto flex items-center gap-2 rounded-full border border-white/20 bg-black/70 px-4 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition-all duration-200 hover:bg-black/90 active:scale-95"
+            onClick={(e) => {
+              e.stopPropagation();
+              const v = videoRef.current;
+              if (v) { v.muted = false; v.volume = volumeRef.current || 1; }
+              mutedRef.current = false;
+              setMuted(false);
+              setNeedsUnmute(false);
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+            </svg>
+            Tap to unmute
+          </button>
+        </div>
+      )}
+
       {/* Top overlay (channel info) */}
       <div
         className={cn(
@@ -1249,7 +1317,7 @@ export default function Player({
               <>
                 <button
                   type="button"
-                  onClick={jumpToLiveEdge}
+                  onClick={(e) => { e.stopPropagation(); jumpToLiveEdge(); }}
                   title="Jump to live edge"
                   className="pointer-events-auto mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 transition-all duration-200 hover:border-red-500/40 hover:bg-red-500/10 active:scale-95 cursor-pointer"
                 >
