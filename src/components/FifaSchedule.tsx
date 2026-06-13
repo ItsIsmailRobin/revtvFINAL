@@ -643,21 +643,6 @@ export default function FifaSchedule() {
         </button>
       </div>
 
-      {/* Page dots — hidden on mobile */}
-      <div className="mt-4 hidden items-center justify-center gap-1.5 sm:flex">
-        {pages.map((_, i) => (
-          <button key={i} onClick={() => { setDir(i > page ? 1 : -1); setAnimKey(k=>k+1); setPage(i); }}
-            className="rounded-full transition-all duration-300"
-            style={{
-              width: i === page ? "20px" : "6px",
-              height: "6px",
-              background: i === page ? "rgba(139,92,246,0.8)" : "rgba(255,255,255,0.15)",
-              boxShadow: i === page ? "0 0 8px rgba(139,92,246,0.5)" : "none",
-              border: "none",
-            }} />
-        ))}
-      </div>
-
       {/* Credits — centered under schedule */}
       <FooterCredits />
 

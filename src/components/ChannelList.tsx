@@ -53,7 +53,7 @@ export default function ChannelList({
   return (
     <div
       className="flex flex-col px-3 pb-3 pt-1 sm:px-4"
-      style={{ gap: "8px", overflowY: "auto", scrollbarWidth: "none", msOverflowStyle: "none" }}
+      style={{ gap: "8px", maxHeight: "420px", overflowY: "auto", scrollbarWidth: "none", msOverflowStyle: "none" }}
     >
       {channels.map((ch, i) => {
         const isActive = ch.id === activeId;

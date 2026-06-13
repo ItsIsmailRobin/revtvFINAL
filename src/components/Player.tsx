@@ -187,8 +187,6 @@ export default function Player({
       setPlaying(true);
     };
     const onWaiting = () => {
-      // Just show the loading spinner — do NOT auto-seek to live edge.
-      // The viewer may intentionally be behind; we only resume if paused.
       setLoading(true);
     };
     const onPause = () => setPlaying(false);
@@ -197,8 +195,19 @@ export default function Player({
       if (channel) onStreamError?.(channel);
     };
     const onStalled = () => {
-      // Let HLS.js handle stalls internally — do NOT force-seek to live.
-      // Forcing currentTime causes the pause/resume loop on some streams.
+      // After a short grace period, if still paused, resume at live edge
+      window.setTimeout(() => {
+        const v = videoRef.current;
+        const hls = hlsRef.current;
+        if (!v || !v.paused) return;
+        if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
+          v.currentTime = hls.liveSyncPosition;
+        } else if (v.seekable.length > 0) {
+          const end = v.seekable.end(v.seekable.length - 1);
+          if (isFinite(end)) v.currentTime = end;
+        }
+        v.play().catch(() => {});
+      }, 3500);
     };
     video.addEventListener("playing", onPlaying);
     video.addEventListener("waiting", onWaiting);
@@ -458,19 +467,41 @@ export default function Player({
     }
   }, []);
 
-  // Auto-seek removed: viewer stays at their position until they manually
-  // refresh or seek. No background interval polling the live edge.
+  // Conservative live-edge keeper: only snaps forward if playing and 45s+ behind.
+  // This handles Toffee-style streams that silently stall without firing events.
+  // 45s threshold + 15s poll = no spam, no interruption for deliberate behind-viewing.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const v = videoRef.current;
+      if (!v || v.paused || v.seeking) return;
+      const hls = hlsRef.current;
+      let liveEdge: number | null = null;
+      if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
+        liveEdge = hls.liveSyncPosition;
+      } else if (v.seekable.length > 0) {
+        const end = v.seekable.end(v.seekable.length - 1);
+        if (isFinite(end)) liveEdge = end;
+      }
+      if (liveEdge == null) return;
+      if (liveEdge - v.currentTime > 45) {
+        v.currentTime = liveEdge;
+      }
+    }, 15_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const togglePlay = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) {
+      // On resume: jump to live edge so viewer gets the latest stream
+      syncToLiveEdge();
       v.play().catch(() => {});
     } else {
       v.pause();
     }
     armHide();
-  }, [armHide]);
+  }, [armHide, syncToLiveEdge]);
 
   const toggleMute = useCallback(() => {
     setMuted((m) => !m);
@@ -1416,39 +1447,41 @@ export default function Player({
             </span>
           </div>
 
-          {/* BD Clock pill — identical size, border, font as Zap+Revenger pill */}
+          {/* BD Clock pill — same pill height as Zap+Revenger, +1px font size */}
           <div
-            className="flex items-center gap-1.5 rounded-full border px-2 py-0.5"
+            className="flex items-center gap-1.5 rounded-full border px-2"
             style={{
               borderColor: "rgba(255,255,255,0.18)",
               backgroundColor: "rgba(255,255,255,0.06)",
+              paddingTop: "2px",
+              paddingBottom: "2px",
             }}
           >
-            {/* Pulsing dot — same 12×12 container as zap icon */}
+            {/* Pulsing dot — same 12×12 container as zap icon span */}
             <span className="relative inline-flex h-3 w-3 shrink-0 items-center justify-center">
               <span
                 className="absolute inset-0 rounded-full"
-                style={{ background: "rgba(255,255,255,0.55)", animation: "clockDotPulse 1.4s ease-in-out infinite" }}
+                style={{ background: "rgba(255,255,255,0.30)", animation: "clockRingPulse 1.4s ease-in-out infinite" }}
               />
               <span
                 className="relative h-[5px] w-[5px] rounded-full"
-                style={{ background: "rgba(255,255,255,0.95)" }}
+                style={{ background: "rgba(255,255,255,0.95)", boxShadow: "0 0 4px rgba(255,255,255,0.6)" }}
               />
             </span>
-            {/* TIME label — same text-[10px] font-semibold uppercase tracking-widest as Revenger */}
+            {/* TIME label — 11px to match Revenger's effective rendered size */}
             <span
-              className="text-[10px] font-semibold uppercase tracking-widest"
-              style={{ color: "rgba(255,255,255,0.50)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight: 1 }}
+              className="font-semibold uppercase tracking-widest"
+              style={{ fontSize: "11px", color: "rgba(255,255,255,0.50)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight: 1 }}
             >TIME</span>
             <span className="h-2.5 w-px" style={{ background: "rgba(255,255,255,0.15)" }} />
-            {/* Clock digits — same text-[10px] font-semibold as Revenger text */}
+            {/* Clock digits — 11px, same font as Revenger */}
             <span
-              className="text-[10px] font-semibold tabular-nums"
-              style={{ color: "rgba(255,255,255,0.88)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}
+              className="font-semibold tabular-nums"
+              style={{ fontSize: "11px", color: "rgba(255,255,255,0.88)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}
             >{bdClock.time}</span>
             <span
-              className="text-[10px] font-semibold uppercase tracking-widest"
-              style={{ color: "rgba(255,255,255,0.50)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight: 1 }}
+              className="font-semibold uppercase tracking-widest"
+              style={{ fontSize: "11px", color: "rgba(255,255,255,0.50)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight: 1 }}
             >{bdClock.ampm}</span>
           </div>
         </div>
@@ -1466,9 +1499,10 @@ export default function Player({
           0%, 100% { opacity: 0.4; transform: translate(-50%, -50%) scale(0.7); }
           50%      { opacity: 1;   transform: translate(-50%, -50%) scale(1.3); }
         }
-        @keyframes clockDotPulse {
-          0%, 100% { opacity: 0.45; transform: scale(0.85); }
-          50%       { opacity: 1;   transform: scale(1.1); }
+        @keyframes clockRingPulse {
+          0%   { opacity: 0.6; transform: scale(0.7); }
+          50%  { opacity: 0;   transform: scale(1.8); }
+          100% { opacity: 0;   transform: scale(1.8); }
         }
         @keyframes gesturePop {
           0% { opacity: 0; transform: scale(0.92); }
