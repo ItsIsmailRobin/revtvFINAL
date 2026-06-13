@@ -339,7 +339,8 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
 
   return (
     <div
-      onMouseEnter={() => { if (canReveal) setShowResult(true); }}\n      onMouseLeave={() => { if (canReveal) setShowResult(false); }}
+      onMouseEnter={() => { if (canReveal) setShowResult(true); }}
+      onMouseLeave={() => { if (canReveal) setShowResult(false); }}
       className="relative rounded-xl transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.01]"
       style={{
         background: live
@@ -389,7 +390,7 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
         </div>
 
         {/* Teams + score row */}
-        <div className="flex items-center justify-between gap-2">
+        <div style={{ display:"flex", alignItems:"center", gap:"4px" }}>
           {/* Team A */}
           <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
             {/* Flag fades out smoothly while the result is revealed (PC hover only) */}
@@ -409,8 +410,8 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
             }}>{match.teamA}</span>
           </div>
 
-          {/* Centre: score or countdown */}
-          <div className="flex shrink-0 flex-col items-center gap-0.5 px-1">
+          {/* Centre: score or countdown — fixed width guarantees perfect centre alignment */}
+          <div style={{ width:"72px", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"2px", padding:"0 2px" }}>
             {live && hasScore ? (
               <>
                 <Score a={match.scoreA!} b={match.scoreB!} live />
@@ -424,7 +425,7 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
               </>
             ) : live ? (
               /* Live but no score yet */
-              <div className="flex items-center justify-center gap-1.5">
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:"6px", width:"100%" }}>
                 <span className="relative flex h-2 w-2 shrink-0">
                   <span className="absolute inset-0 rounded-full" style={{ backgroundColor:"rgba(139,92,246,0.7)", animation:"livePulseRing 2s ease-in-out infinite" }} />
                   <span className="relative h-2 w-2 rounded-full" style={{ backgroundColor:"#a78bfa", boxShadow:"0 0 6px rgba(167,139,250,0.9)" }} />
@@ -433,11 +434,11 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
               </div>
             ) : over && hasScore ? (
               /* Crossfade between "Full Time" and the final result on hover (PC only) */
-              <div className="relative flex items-center justify-center" style={{ minWidth:"56px", minHeight:"30px" }}>
+              <div style={{ position:"relative", display:"flex", alignItems:"center", justifyContent:"center", width:"100%", minHeight:"30px" }}>
                 <span style={{
                   position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center",
-                  fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700,
-                  letterSpacing:"0.12em", color:"rgba(255,255,255,0.28)", textTransform:"uppercase", textAlign:"center",
+                  fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"10px", fontWeight:700,
+                  letterSpacing:"0.08em", color:"rgba(255,255,255,0.28)", textTransform:"uppercase", textAlign:"center",
                   opacity: canReveal && showResult ? 0 : 1,
                   transition: "opacity 300ms ease",
                 }}>Full Time</span>
@@ -450,7 +451,7 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
                 </div>
               </div>
             ) : over ? (
-              <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.28)", textTransform:"uppercase", display:"block", textAlign:"center"}}>Full Time</span>
+              <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"10px", fontWeight:700, letterSpacing:"0.08em", color:"rgba(255,255,255,0.28)", textTransform:"uppercase", display:"block", textAlign:"center", width:"100%"}}>Full Time</span>
             ) : (
               <Countdown match={match} />
             )}
@@ -475,8 +476,12 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
           </div>
         </div>
 
-        {/* Venue */}
-        <div style={{fontFamily:"'Inter',sans-serif", fontSize:"9px", color:"rgba(255,255,255,0.17)", fontWeight:400, textAlign:"center", marginTop:"6px", letterSpacing:"0.01em"}}>
+        {/* Venue — always perfectly centred */}
+        <div style={{
+          fontFamily:"'Inter',sans-serif", fontSize:"9px", color:"rgba(255,255,255,0.17)",
+          fontWeight:400, textAlign:"center", marginTop:"6px", letterSpacing:"0.01em",
+          width:"100%", display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+        }}>
           {match.venue}
         </div>
       </div>
