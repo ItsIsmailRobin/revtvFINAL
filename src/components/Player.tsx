@@ -326,8 +326,27 @@ export default function Player({
       video.addEventListener("webkitendfullscreen", onEnd as any);
     }
 
+    // When page becomes visible again (tab switch, background), sync to live
+    const onVisible = () => {
+      const v = videoRef.current;
+      const hls = hlsRef.current;
+      if (!v || v.paused) return;
+      if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
+        const diff = hls.liveSyncPosition - v.currentTime;
+        if (diff > 5) v.currentTime = hls.liveSyncPosition;
+      } else if (v.seekable.length > 0) {
+        const end = v.seekable.end(v.seekable.length - 1);
+        if (isFinite(end) && end - v.currentTime > 5) v.currentTime = end;
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") onVisible();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     return () => {
       document.removeEventListener("fullscreenchange", onChange);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       document.removeEventListener("webkitfullscreenchange", onChange as any);
       window.removeEventListener("resize", detectMobile);
       if (video) {
@@ -388,13 +407,35 @@ export default function Player({
   }, [armHide, playing]);
 
   // ---- actions ----
+  const syncToLiveEdge = useCallback(() => {
+    const v = videoRef.current;
+    const hls = hlsRef.current;
+    if (!v) return;
+    // For HLS streams: seek to live edge when resuming
+    if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
+      const diff = hls.liveSyncPosition - v.currentTime;
+      if (diff > 5) {
+        v.currentTime = hls.liveSyncPosition;
+      }
+    } else if (v.seekable.length > 0) {
+      const end = v.seekable.end(v.seekable.length - 1);
+      if (isFinite(end) && end - v.currentTime > 5) {
+        v.currentTime = end;
+      }
+    }
+  }, []);
+
   const togglePlay = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (v.paused) v.play().catch(() => {});
-    else v.pause();
+    if (v.paused) {
+      syncToLiveEdge();
+      v.play().catch(() => {});
+    } else {
+      v.pause();
+    }
     armHide();
-  }, [armHide]);
+  }, [armHide, syncToLiveEdge]);
 
   const toggleMute = useCallback(() => {
     setMuted((m) => !m);
@@ -771,7 +812,7 @@ export default function Player({
         "mx-auto rounded-2xl border border-white/10 aspect-video max-h-[80vh] shadow-2xl shadow-violet-900/10"
   );
   const containerStyle: CSSProperties = {
-    background: "radial-gradient(circle at 50% 50%, #0a0612, #000 80%)",
+    background: "linear-gradient(160deg,#0d0520 0%,#060112 40%,#09021a 70%,#050010 100%)",
     touchAction: presentationFullscreen ? "none" : "manipulation",
   };
 
@@ -779,7 +820,7 @@ export default function Player({
     <div
       ref={containerRef}
       onMouseMove={armHide}
-      onMouseLeave={() => playing && setControlsVisible(false)}
+      onMouseLeave={() => { if (playing) armHide(); }}
       // Show controls on any touch on mobile (anywhere in the player).
       // The touch then re-hides after 5s via armHide.
       onTouchStart={(e) => {

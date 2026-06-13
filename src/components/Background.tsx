@@ -2,40 +2,42 @@ export default function Background() {
   return (
     <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" style={{ background: "#030108" }}>
 
-      {/* Full-coverage deep purple base — eliminates any white/grey areas */}
-      <div className="absolute inset-0" style={{ background: "linear-gradient(160deg,#0d0520 0%,#060112 35%,#09021a 65%,#05010f 100%)" }} />
-
-      {/* Large asymmetric orbs — vivid, saturated, scattered to all corners */}
+      {/* Full-coverage deep purple base — rich, no black bleed */}
       <div className="absolute inset-0" style={{
-        background:
-          "radial-gradient(ellipse 80% 65% at -5% 5%,  rgba(168,85,255,0.65) 0%, rgba(140,60,240,0.28) 40%, transparent 70%)," +
-          "radial-gradient(ellipse 70% 60% at 108% 8%,  rgba(130,50,255,0.58) 0%, rgba(110,30,230,0.22) 40%, transparent 68%)," +
-          "radial-gradient(ellipse 75% 65% at -8% 100%, rgba(190,100,255,0.55) 0%, rgba(160,70,250,0.20) 40%, transparent 68%)," +
-          "radial-gradient(ellipse 70% 60% at 108% 96%, rgba(110,60,255,0.52) 0%, rgba( 90,40,230,0.18) 40%, transparent 68%)," +
-          "radial-gradient(ellipse 55% 50% at 50% 50%,  rgba(140,70,255,0.22) 0%, transparent 70%)",
+        background: "linear-gradient(160deg,#100425 0%,#08011e 30%,#0b0220 60%,#060113 100%)"
       }} />
 
-      {/* Mid-field accent — diagonal smear for randomness */}
+      {/* Large corner orbs — vivid, saturated, positioned to fill all corners */}
       <div className="absolute inset-0" style={{
         background:
-          "radial-gradient(ellipse 60% 30% at 75% 28%, rgba(180,90,255,0.30) 0%, transparent 65%)," +
-          "radial-gradient(ellipse 55% 28% at 25% 72%, rgba(120,50,255,0.28) 0%, transparent 62%)," +
-          "radial-gradient(ellipse 40% 20% at 60% 85%, rgba(200,100,255,0.20) 0%, transparent 55%)",
+          "radial-gradient(ellipse 85% 70% at -8% 2%,  rgba(168,75,255,0.72) 0%, rgba(140,50,240,0.32) 38%, transparent 68%)," +
+          "radial-gradient(ellipse 75% 65% at 110% 5%,  rgba(130,45,255,0.65) 0%, rgba(110,25,230,0.28) 38%, transparent 66%)," +
+          "radial-gradient(ellipse 80% 70% at -10% 102%,rgba(195,90,255,0.62) 0%, rgba(162,65,252,0.26) 38%, transparent 66%)," +
+          "radial-gradient(ellipse 75% 65% at 110% 98%, rgba(115,55,255,0.58) 0%, rgba(92,38,232,0.22) 38%, transparent 66%)," +
+          "radial-gradient(ellipse 60% 55% at 50% 50%,  rgba(145,65,255,0.28) 0%, transparent 68%)",
       }} />
 
-      {/* Subtle noise-like micro-glow dots for texture */}
+      {/* Mid-field diagonal accents */}
       <div className="absolute inset-0" style={{
         background:
-          "radial-gradient(circle 180px at 18% 38%,  rgba(160,80,255,0.18) 0%, transparent 100%)," +
-          "radial-gradient(circle 150px at 82% 55%,  rgba(130,60,255,0.16) 0%, transparent 100%)," +
-          "radial-gradient(circle 120px at 45% 22%,  rgba(200,120,255,0.14) 0%, transparent 100%)," +
-          "radial-gradient(circle 140px at 70% 80%,  rgba(110,50,255,0.15) 0%, transparent 100%)",
+          "radial-gradient(ellipse 65% 32% at 76% 26%, rgba(185,85,255,0.36) 0%, transparent 62%)," +
+          "radial-gradient(ellipse 58% 30% at 24% 74%, rgba(122,48,255,0.32) 0%, transparent 60%)," +
+          "radial-gradient(ellipse 42% 22% at 62% 88%, rgba(205,95,255,0.24) 0%, transparent 52%)",
       }} />
 
-      {/* Subtle CSS blur overlay — adds depth without GPU compositing layers */}
+      {/* Micro-glow texture dots */}
       <div className="absolute inset-0" style={{
-        background: "rgba(8,2,20,0.18)",
-        backdropFilter: "blur(0px)", // intentionally 0 — piggyback the layer for future
+        background:
+          "radial-gradient(circle 200px at 18% 38%,  rgba(165,78,255,0.22) 0%, transparent 100%)," +
+          "radial-gradient(circle 165px at 82% 55%,  rgba(132,58,255,0.20) 0%, transparent 100%)," +
+          "radial-gradient(circle 130px at 45% 22%,  rgba(205,115,255,0.18) 0%, transparent 100%)," +
+          "radial-gradient(circle 148px at 70% 80%,  rgba(112,48,255,0.19) 0%, transparent 100%)," +
+          "radial-gradient(circle 100px at 30% 60%,  rgba(180,80,255,0.14) 0%, transparent 100%)",
+      }} />
+
+      {/* Very subtle dark vignette to prevent washed-out edges */}
+      <div className="absolute inset-0" style={{
+        background: "radial-gradient(ellipse 120% 120% at 50% 50%, transparent 40%, rgba(3,1,8,0.55) 100%)",
       }} />
 
       {/* Static petals — zero GPU layers */}

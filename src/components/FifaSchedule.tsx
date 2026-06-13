@@ -157,7 +157,7 @@ function Countdown({ match }: { match: Match }) {
   );
 
   if (ms <= 0) return (
-    <div style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.25)", textTransform:"uppercase"}}>Full Time</div>
+    <div style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.25)", textTransform:"uppercase", textAlign:"center", lineHeight:1, padding:"2px 4px"}}>Full Time</div>
   );
 
   const totalSec = Math.floor(ms / 1000);
@@ -172,38 +172,56 @@ function Countdown({ match }: { match: Match }) {
     ? [{ v: pad(d), l:"Day" }, { v: pad(h), l:"Hours" }, { v: pad(mi), l:"Min" }, { v: pad(sc), l:"Second" }]
     : [{ v: pad(h), l:"Hours" }, { v: pad(mi), l:"Min" }, { v: pad(sc), l:"Second" }];
 
+  const numSz = d > 0 ? "17px" : "20px";
+  const colSz = d > 0 ? "14px" : "17px";
+  const colW  = d > 0 ? "24px" : "28px";
+
   return (
-    <div className="flex items-end gap-0" style={{willChange:"transform"}}>
+    <div style={{ display:"flex", alignItems:"flex-start", gap:0 }}>
       {units.map((u, i) => (
-        <div key={u.l} className="flex items-end">
-          <div className="flex flex-col items-center gap-0" style={{minWidth: d>0 ? "28px" : "32px"}}>
+        <div key={u.l} style={{ display:"flex", alignItems:"flex-start" }}>
+          {/* Number + label column */}
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", width: colW }}>
             <span style={{
               fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
-              fontSize: d>0 ? "18px" : "22px",
+              fontSize: numSz,
               fontWeight:800,
-              lineHeight:1,
+              lineHeight:"1",
               color:"#fff",
               textShadow:"0 0 16px rgba(167,139,250,0.55)",
               letterSpacing:"-0.02em",
               fontVariantNumeric:"tabular-nums",
-              display:"block",
               textAlign:"center",
+              display:"block",
+              padding:"2px 0",
             }}>{u.v}</span>
             <span style={{
               fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
-              fontSize:"7px",
+              fontSize:"6.5px",
               fontWeight:700,
               letterSpacing:"0.10em",
               color:"rgba(167,139,250,0.65)",
               textTransform:"uppercase",
-              marginTop:"2px",
+              marginTop:"1px",
               display:"block",
               textAlign:"center",
               whiteSpace:"nowrap",
             }}>{u.l}</span>
           </div>
+          {/* Colon separator — aligned with the number row */}
           {i < units.length - 1 && (
-            <span style={{color:"rgba(167,139,250,0.4)", fontSize: d>0 ? "14px" : "18px", fontWeight:700, marginBottom:"10px", marginLeft:"1px", marginRight:"1px", lineHeight:1}}>:</span>
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", width:"10px", paddingTop:"1px" }}>
+              <span style={{
+                color:"rgba(167,139,250,0.45)",
+                fontSize: colSz,
+                fontWeight:700,
+                lineHeight:"1",
+                display:"block",
+                textAlign:"center",
+              }}>:</span>
+              {/* Invisible label spacer to keep colon vertically aligned with numbers */}
+              <span style={{ fontSize:"6.5px", display:"block", visibility:"hidden" }}>:</span>
+            </div>
           )}
         </div>
       ))}
@@ -306,7 +324,7 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
           ? "0 0 14px rgba(139,92,246,0.10),0 2px 8px rgba(0,0,0,0.3)"
           : "0 1px 6px rgba(0,0,0,0.22)",
         // Live card gets a pulse animation
-        animation: live ? "cardPulse 2.2s ease-in-out infinite" : "none",
+        animation: live ? "cardPulseCPU 3s ease-in-out infinite" : "none",
         cursor: over && !live && hasScore ? "pointer" : "default",
       }}>
 
@@ -372,7 +390,7 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
             ) : over && !hasScore && showResult ? (
               <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"20px", fontWeight:800, color:"rgba(255,255,255,0.25)", letterSpacing:"-0.01em"}}>-</span>
             ) : over ? (
-              <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.28)", textTransform:"uppercase"}}>Full Time</span>
+              <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.28)", textTransform:"uppercase", display:"block", textAlign:"center"}}>Full Time</span>
             ) : (
               <Countdown match={match} />
             )}
@@ -396,7 +414,7 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
         </div>
 
         {/* Venue */}
-        <div className="mt-2 text-center" style={{fontFamily:"'Inter',sans-serif", fontSize:"9px", color:"rgba(255,255,255,0.17)", fontWeight:400}}>
+        <div style={{fontFamily:"'Inter',sans-serif", fontSize:"9px", color:"rgba(255,255,255,0.17)", fontWeight:400, textAlign:"center", marginTop:"6px", letterSpacing:"0.01em"}}>
           {match.venue}
         </div>
       </div>
@@ -406,9 +424,9 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
           0%,100%{box-shadow:inset 0 0 20px rgba(74,222,128,0.05)}
           50%{box-shadow:inset 0 0 32px rgba(74,222,128,0.12)}
         }
-        @keyframes cardPulse {
-          0%,100%{box-shadow:0 0 20px rgba(74,222,128,0.12),0 2px 10px rgba(0,0,0,0.4)}
-          50%{box-shadow:0 0 32px rgba(74,222,128,0.28),0 2px 18px rgba(0,0,0,0.5)}
+        @keyframes cardPulseCPU {
+          0%,100%{outline:2px solid rgba(74,222,128,0.15); outline-offset:0px;}
+          50%{outline:2px solid rgba(74,222,128,0.42); outline-offset:1px;}
         }
       `}</style>
     </div>
@@ -538,7 +556,7 @@ export default function FifaSchedule() {
           fontWeight:400,
           color:"rgba(255,255,255,0.38)",
           letterSpacing:"0.01em",
-        }}>Based on Bangladesh Standard Time...............</p>
+        }}>Based on Bangladesh Standard Time</p>
       </div>
 
       {/* Page range label */}
