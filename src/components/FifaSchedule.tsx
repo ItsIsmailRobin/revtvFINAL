@@ -127,10 +127,16 @@ const MATCHES: Match[] = [
 ];
 
 // ─── Time helpers ─────────────────────────────────────────────────
-function bdNow() {
-  const utcMs = Date.now() + new Date().getTimezoneOffset() * 60_000;
-  return new Date(utcMs + 6 * 3600_000);
+// bdNow() returns the current moment as a real Date — used for numeric comparisons only.
+// matchStart() uses a +06:00 offset literal so comparisons are always in true UTC ms.
+function bdNow() { return new Date(); }
+
+// bdTodayStr() returns the current date in BD (Asia/Dhaka) as YYYY-MM-DD.
+// Uses Intl/toLocaleDateString so it's correct regardless of the user's browser timezone.
+function bdTodayStr(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" });
 }
+
 function matchStart(m: Match) { return new Date(`${m.date}T${m.time}:00+06:00`); }
 function isOver(m: Match)  { return matchStart(m) < bdNow(); }
 function isLive(m: Match)  { const s = matchStart(m).getTime(), n = bdNow().getTime(); return n >= s && n <= s + 110*60000; }
@@ -142,7 +148,7 @@ function groupByDate(matches: Match[]): { date: string; matches: Match[] }[] {
 }
 
 function todayPageIndex(pages: { date: string; matches: Match[] }[][], colsPerPage: number): number {
-  const today = bdNow().toISOString().slice(0,10);
+  const today = bdTodayStr();
   const idx = pages.findIndex(pg => pg.some(d => d.date >= today));
   return idx >= 0 ? idx : 0;
 }
@@ -344,21 +350,21 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
       className="relative rounded-xl transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.01]"
       style={{
         background: live
-          ? "linear-gradient(135deg,rgba(60,20,100,0.75),rgba(40,10,80,0.65))"
+          ? "linear-gradient(135deg,rgba(40,15,70,0.60),rgba(25,8,55,0.50))"
           : over
           ? "rgba(255,255,255,0.02)"
           : isToday
           ? "linear-gradient(135deg,rgba(139,92,246,0.13),rgba(79,42,201,0.07))"
           : "rgba(255,255,255,0.035)",
-        border: `1px solid ${live ? "rgba(167,139,250,0.55)" : isToday ? "rgba(167,139,250,0.65)" : over ? "rgba(255,255,255,0.05)" : "rgba(139,92,246,0.13)"}`,
+        border: `1px solid ${live ? "rgba(139,92,246,0.30)" : isToday ? "rgba(167,139,250,0.45)" : over ? "rgba(255,255,255,0.05)" : "rgba(139,92,246,0.13)"}`,
         boxShadow: live
-          ? "inset 0 0 18px rgba(139,92,246,0.28), inset 0 0 40px rgba(139,92,246,0.14), inset 0 0 6px rgba(167,139,250,0.20)"
+          ? "inset 0 0 12px rgba(139,92,246,0.12), inset 0 0 24px rgba(139,92,246,0.06)"
           : final
-          ? "inset 0 0 20px rgba(251,191,36,0.06)"
+          ? "inset 0 0 14px rgba(251,191,36,0.04)"
           : isToday
-          ? "inset 0 0 20px rgba(139,92,246,0.12)"
+          ? "inset 0 0 14px rgba(139,92,246,0.08)"
           : "none",
-        animation: live ? "cardPulseCPU 2.5s ease-in-out infinite" : "none",
+        animation: live ? "cardPulseCPU 4s ease-in-out infinite" : "none",
         cursor: canReveal ? "pointer" : "default",
       }}>
 
@@ -369,7 +375,7 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
       {/* Live pulse overlay — inset glow only, no outer bleed */}
       {live && (
         <div className="pointer-events-none absolute inset-0 rounded-xl"
-          style={{ animation:"liveGlow 2.5s ease-in-out infinite" }} />
+          style={{ animation:"liveGlow 4s ease-in-out infinite" }} />
       )}
 
       <div className="px-3 py-3">
@@ -488,12 +494,12 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
 
       <style>{`
         @keyframes liveGlow {
-          0%,100%{ box-shadow: inset 0 0 16px rgba(139,92,246,0.15), inset 0 0 35px rgba(139,92,246,0.08) }
-          50%    { box-shadow: inset 0 0 28px rgba(167,139,250,0.32), inset 0 0 55px rgba(139,92,246,0.18) }
+          0%,100%{ box-shadow: inset 0 0 10px rgba(139,92,246,0.08) }
+          50%    { box-shadow: inset 0 0 18px rgba(139,92,246,0.16) }
         }
         @keyframes cardPulseCPU {
-          0%,100%{ box-shadow: inset 0 0 14px rgba(139,92,246,0.18), inset 0 0 30px rgba(139,92,246,0.09), inset 0 0 5px rgba(167,139,250,0.14); border-color: rgba(167,139,250,0.42); }
-          50%    { box-shadow: inset 0 0 28px rgba(139,92,246,0.38), inset 0 0 55px rgba(139,92,246,0.22), inset 0 0 10px rgba(167,139,250,0.30); border-color: rgba(192,168,255,0.72); }
+          0%,100%{ box-shadow: inset 0 0 10px rgba(139,92,246,0.08), inset 0 0 20px rgba(139,92,246,0.04); border-color: rgba(139,92,246,0.28); }
+          50%    { box-shadow: inset 0 0 18px rgba(139,92,246,0.18), inset 0 0 36px rgba(139,92,246,0.08); border-color: rgba(167,139,250,0.50); }
         }
         @keyframes livePulseRing {
           0%   { transform: scale(1);   opacity: 0.8; }
@@ -571,7 +577,7 @@ export default function FifaSchedule() {
   })();
 
   // Reactive today — single 30s interval drives both live-match ticks and current-day date refresh
-  const [todayBD, setTodayBD] = useState(() => bdNow().toISOString().slice(0, 10));
+  const [todayBD, setTodayBD] = useState(() => bdTodayStr());
   const [page, setPage] = useState(() => todayPageIndex(pages, colsPerPage));
   const [dir, setDir] = useState<1 | -1>(1);
   const [animKey, setAnimKey] = useState(0);
@@ -587,11 +593,30 @@ export default function FifaSchedule() {
   }, [colsPerPage]);
 
   useEffect(() => {
+    // Refresh every 30s for live-match ticks
     const id = setInterval(() => {
       tick(t => t + 1);
-      setTodayBD(bdNow().toISOString().slice(0, 10)); // keep BD date in sync (catches midnight flip)
+      setTodayBD(bdTodayStr()); // always correct BD date via Intl API
     }, 30_000);
-    return () => clearInterval(id);
+
+    // Also schedule an exact flip at the next BD midnight so the glow switches immediately
+    const scheduleNextMidnight = () => {
+      const now = new Date();
+      const bdMidnight = new Date(now.toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" }) + "T00:00:00+06:00");
+      const nextMidnight = new Date(bdMidnight.getTime() + 24 * 3600_000);
+      const msUntilMidnight = nextMidnight.getTime() - now.getTime();
+      return setTimeout(() => {
+        setTodayBD(bdTodayStr());
+        tick(t => t + 1);
+        scheduleNextMidnight(); // reschedule for the next midnight
+      }, msUntilMidnight);
+    };
+    const midnightTimer = scheduleNextMidnight();
+
+    return () => {
+      clearInterval(id);
+      clearTimeout(midnightTimer);
+    };
   }, []);
 
   const navigate = (delta: 1 | -1) => {
