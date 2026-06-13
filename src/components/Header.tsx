@@ -87,8 +87,8 @@ export default function Header() {
           <span className="relative inline-flex h-2 w-2 rounded-full"
             style={{ backgroundColor: "#6614c4", boxShadow: "0 0 6px rgba(102,20,196,0.9), 0 0 12px rgba(102,20,196,0.5)" }} />
         </span>
-        {/* Text */}
-        <span className="text-[11px] font-bold uppercase tracking-widest"
+        {/* Text — hidden on phone, only the pulsing dot remains */}
+        <span className="hidden text-[11px] font-bold uppercase tracking-widest sm:inline"
           style={{ color: "#6614c4", animation: "updatePulse 2.4s ease-in-out infinite" }}>
           Update Playlist
         </span>

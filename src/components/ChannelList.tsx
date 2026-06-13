@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { Channel } from "../utils/parseM3U";
 import { cn } from "../utils/cn";
 
@@ -14,6 +15,17 @@ export default function ChannelList({
   onSelect,
   loading,
 }: ChannelListProps) {
+  const activeRef = useRef<HTMLButtonElement>(null);
+
+  // Scroll the active channel into view — e.g. after a page refresh
+  // restores the last-watched channel, jump the list down to it.
+  useEffect(() => {
+    if (loading || !activeId) return;
+    if (activeRef.current) {
+      activeRef.current.scrollIntoView({ block: "center", behavior: "auto" });
+    }
+  }, [activeId, loading, channels]);
+
   if (loading) {
     return (
       <div className="flex flex-col px-3 pb-3 pt-1" style={{ gap: "8px" }}>
@@ -60,6 +72,7 @@ export default function ChannelList({
         return (
           <button
             key={ch.id}
+            ref={isActive ? activeRef : null}
             onClick={() => onSelect(ch)}
             style={{
               animation: `chEnter 380ms cubic-bezier(.4,0,.2,1) ${Math.min(i * 14, 280)}ms both`,

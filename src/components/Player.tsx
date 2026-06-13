@@ -31,6 +31,7 @@ export default function Player({
 }: PlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const volumeWheelRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const hideTimerRef = useRef<number | null>(null);
   const gestureLayerRef = useRef<HTMLDivElement>(null);
@@ -518,12 +519,30 @@ export default function Player({
 
   const changeVolume = useCallback(
     (val: number) => {
-      const newVol = Math.max(0, Math.min(1, val));
+      const newVol = Math.round(Math.max(0, Math.min(1, val)) * 100) / 100;
       setVolume(newVol);
       if (newVol > 0 && muted) setMuted(false);
     },
     [muted]
   );
+
+  // PC: hovering the speaker icon and scrolling the mouse wheel acts
+  // as a volume +/- control. Attached as a native (non-passive)
+  // listener so preventDefault reliably stops page scroll.
+  useEffect(() => {
+    const el = volumeWheelRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const step = 0.05;
+      const current = muted ? 0 : volume;
+      const next = Math.round(Math.max(0, Math.min(1, current + (e.deltaY < 0 ? step : -step))) * 100) / 100;
+      setVolume(next);
+      if (next > 0 && muted) setMuted(false);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [volume, muted]);
 
   const toggleFullscreen = useCallback(async () => {
     const video = videoRef.current as HTMLVideoElement | null;
@@ -1240,12 +1259,13 @@ export default function Player({
             </svg>
           </button>
 
-          {/* Volume */}
-          <div className="group/vol flex items-center gap-1.5">
+          {/* Volume — hover + scroll wheel to adjust on PC */}
+          <div ref={volumeWheelRef} className="group/vol flex items-center gap-1.5">
             <button
               onClick={toggleMute}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white  transition-all duration-300 hover:scale-110 hover:border-white/30 hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
               aria-label={muted ? "Unmute" : "Mute"}
+              title="Scroll to adjust volume"
             >
               {muted || volume === 0 ? (
                 <svg
