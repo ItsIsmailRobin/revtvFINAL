@@ -135,17 +135,17 @@ export default function TagBar({
           className="relative min-w-0 flex-1"
           style={{
             maskImage:
-              "linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.5) 6%, rgba(0,0,0,1) 14%, rgba(0,0,0,1) 86%, rgba(0,0,0,0.5) 94%, transparent 100%)",
+              "linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.5) 5%, rgba(0,0,0,1) 12%, rgba(0,0,0,1) 88%, rgba(0,0,0,0.5) 95%, transparent 100%)",
             WebkitMaskImage:
-              "linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.5) 6%, rgba(0,0,0,1) 14%, rgba(0,0,0,1) 86%, rgba(0,0,0,0.5) 94%, transparent 100%)",
+              "linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.5) 5%, rgba(0,0,0,1) 12%, rgba(0,0,0,1) 88%, rgba(0,0,0,0.5) 95%, transparent 100%)",
             overflow: "hidden",
-            padding: "4px 0",
+            padding: "6px 0",
           }}
         >
           <div
             ref={scrollRef}
             className="scrollbar-hide flex items-center gap-2 overflow-x-auto"
-            style={{ paddingLeft: "4px", paddingRight: "4px", paddingTop: "4px", paddingBottom: "4px" }}
+            style={{ paddingLeft: "8px", paddingRight: "8px", paddingTop: "6px", paddingBottom: "6px" }}
           >
             {tags.map((tag, idx) => {
               const isActive = tag === activeTag;
@@ -179,7 +179,8 @@ export default function TagBar({
                     transform: isHovering && !isActive ? "scale(1.04)" : "scale(1)",
                   }}
                   className={cn(
-                    "relative flex shrink-0 items-center whitespace-nowrap rounded-full px-3 py-1 text-[12px] font-medium transition-all duration-300 active:scale-95"
+                    "relative flex shrink-0 items-center whitespace-nowrap rounded-full px-3 py-1 text-[12px] font-medium transition-all duration-300 active:scale-95",
+                    isActive ? "overflow-visible" : "overflow-hidden"
                   )}
                 >
                   {/* Animated gradient border. Opacity is controlled by
@@ -220,10 +221,14 @@ export default function TagBar({
                   {/* Soft outer glow for active tag (replaces shadow) */}
                   {isActive && (
                     <span
-                      className="pointer-events-none absolute -inset-0.5 rounded-full opacity-60 blur-md"
+                      className="pointer-events-none absolute rounded-full"
                       style={{
+                        inset: "-3px",
                         background:
-                          "linear-gradient(135deg, rgba(167,139,250,0.4), rgba(236,72,153,0.3), rgba(56,189,248,0.4))",
+                          "linear-gradient(135deg, rgba(167,139,250,0.5), rgba(236,72,153,0.4), rgba(56,189,248,0.5))",
+                        opacity: 0.7,
+                        filter: "blur(6px)",
+                        zIndex: -1,
                       }}
                     />
                   )}

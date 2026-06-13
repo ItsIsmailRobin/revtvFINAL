@@ -189,7 +189,25 @@ export default function Player({
     const onWaiting = () => {
       setLoading(true);
     };
-    const onPause = () => setPlaying(false);
+    const onPause = () => {
+      setPlaying(false);
+      // If it paused on its own (not user-triggered) and is not ended,
+      // resume immediately so m3u8/live streams never stop.
+      window.setTimeout(() => {
+        const v = videoRef.current;
+        if (!v || v.ended) return;
+        if (v.paused) {
+          v.play().catch(() => {});
+        }
+      }, 400);
+    };
+    const onEnded = () => {
+      // For m3u8 streams set on loop — restart from beginning
+      const v = videoRef.current;
+      if (!v) return;
+      v.currentTime = 0;
+      v.play().catch(() => {});
+    };
     const onError = () => {
       setLoading(false);
       if (channel) onStreamError?.(channel);
@@ -213,6 +231,7 @@ export default function Player({
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("stalled", onStalled);
     video.addEventListener("pause", onPause);
+    video.addEventListener("ended", onEnded);
     video.addEventListener("error", onError);
 
     if (Hls.isSupported()) {
@@ -301,6 +320,7 @@ export default function Player({
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("stalled", onStalled);
       video.removeEventListener("pause", onPause);
+      video.removeEventListener("ended", onEnded);
       video.removeEventListener("error", onError);
       if (hlsRef.current) {
         hlsRef.current.destroy();
@@ -486,7 +506,7 @@ export default function Player({
       if (liveEdge - v.currentTime > 45) {
         v.currentTime = liveEdge;
       }
-    }, 15_000);
+    }, 30_000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -1403,7 +1423,7 @@ export default function Player({
           </div>
         </div>
 
-        {/* lucide lucide-zap + Revenger pill | BD clock pill */}
+        {/* lucide lucide-zap + Revenger pill | Clock pill (ZAP style, white) */}
         <div className="mt-2.5 flex items-center gap-2 sm:mt-3">
           {/* Zap + Revenger */}
           <div
@@ -1447,41 +1467,37 @@ export default function Player({
             </span>
           </div>
 
-          {/* BD Clock pill — same pill height as Zap+Revenger, +1px font size */}
+          {/* Clock pill — ZAP REVENGER style, white, beside it */}
           <div
-            className="flex items-center gap-1.5 rounded-full border px-2"
+            className="flex items-center gap-1.5 rounded-full border px-2 py-0.5"
             style={{
-              borderColor: "rgba(255,255,255,0.18)",
-              backgroundColor: "rgba(255,255,255,0.06)",
-              paddingTop: "2px",
-              paddingBottom: "2px",
+              borderColor: "rgba(255,255,255,0.22)",
+              backgroundColor: "rgba(255,255,255,0.08)",
             }}
           >
-            {/* Pulsing dot — same 12×12 container as zap icon span */}
-            <span className="relative inline-flex h-3 w-3 shrink-0 items-center justify-center">
+            {/* White dot — same size/position as ZAP dot */}
+            <span className="relative inline-flex h-3 w-3 items-center justify-center">
               <span
-                className="absolute inset-0 rounded-full"
-                style={{ background: "rgba(255,255,255,0.30)", animation: "clockRingPulse 1.4s ease-in-out infinite" }}
-              />
-              <span
-                className="relative h-[5px] w-[5px] rounded-full"
-                style={{ background: "rgba(255,255,255,0.95)", boxShadow: "0 0 4px rgba(255,255,255,0.6)" }}
+                className="absolute h-1 w-1 rounded-full"
+                style={{
+                  backgroundColor: "#ffffff",
+                  top: "50%",
+                  left: "50%",
+                  transform: "translate(-50%, -50%)",
+                  boxShadow: "0 0 4px rgba(255,255,255,0.9)",
+                  animation: "clockDotPulse 1.4s ease-in-out infinite",
+                }}
               />
             </span>
-            {/* TIME label — 11px to match Revenger's effective rendered size */}
-            <span
-              className="font-semibold uppercase tracking-widest"
-              style={{ fontSize: "11px", color: "rgba(255,255,255,0.50)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight: 1 }}
-            >TIME</span>
-            <span className="h-2.5 w-px" style={{ background: "rgba(255,255,255,0.15)" }} />
-            {/* Clock digits — 11px, same font as Revenger */}
+            {/* HH:MM:SS */}
             <span
               className="font-semibold tabular-nums"
-              style={{ fontSize: "11px", color: "rgba(255,255,255,0.88)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}
+              style={{ fontSize: "10px", color: "#ffffff", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}
             >{bdClock.time}</span>
+            {/* AM/PM */}
             <span
               className="font-semibold uppercase tracking-widest"
-              style={{ fontSize: "11px", color: "rgba(255,255,255,0.50)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight: 1 }}
+              style={{ fontSize: "10px", color: "rgba(255,255,255,0.75)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight: 1 }}
             >{bdClock.ampm}</span>
           </div>
         </div>
@@ -1499,10 +1515,9 @@ export default function Player({
           0%, 100% { opacity: 0.4; transform: translate(-50%, -50%) scale(0.7); }
           50%      { opacity: 1;   transform: translate(-50%, -50%) scale(1.3); }
         }
-        @keyframes clockRingPulse {
-          0%   { opacity: 0.6; transform: scale(0.7); }
-          50%  { opacity: 0;   transform: scale(1.8); }
-          100% { opacity: 0;   transform: scale(1.8); }
+        @keyframes clockDotPulse {
+          0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(0.75); }
+          50%      { opacity: 1;   transform: translate(-50%, -50%) scale(1.35); }
         }
         @keyframes gesturePop {
           0% { opacity: 0; transform: scale(0.92); }
