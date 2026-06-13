@@ -1,10 +1,10 @@
 export default function Background() {
   return (
-    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" style={{ background: "#030108" }}>
+    <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" style={{ background: "#0a0220" }}>
 
       {/* Full-coverage deep purple base — rich, no black bleed */}
       <div className="absolute inset-0" style={{
-        background: "linear-gradient(160deg,#100425 0%,#08011e 30%,#0b0220 60%,#060113 100%)"
+        background: "linear-gradient(160deg,#100425 0%,#0a021f 30%,#0c0322 60%,#0a0220 100%)"
       }} />
 
       {/* Large corner orbs — vivid, saturated, positioned to fill all corners */}
@@ -25,6 +25,13 @@ export default function Background() {
           "radial-gradient(ellipse 42% 22% at 62% 88%, rgba(205,95,255,0.24) 0%, transparent 52%)",
       }} />
 
+      {/* Centre blend fill — softens the gaps between the corner orbs so
+          there are no flat dark/black patches in the middle of the screen */}
+      <div className="absolute inset-0" style={{
+        background:
+          "radial-gradient(ellipse 90% 85% at 50% 50%, rgba(120,55,235,0.22) 0%, rgba(90,40,200,0.10) 45%, transparent 78%)",
+      }} />
+
       {/* Micro-glow texture dots */}
       <div className="absolute inset-0" style={{
         background:
@@ -35,9 +42,10 @@ export default function Background() {
           "radial-gradient(circle 100px at 30% 60%,  rgba(180,80,255,0.14) 0%, transparent 100%)",
       }} />
 
-      {/* Very subtle dark vignette to prevent washed-out edges */}
+      {/* Very subtle dark vignette — softened so edges blend smoothly
+          instead of dropping to flat black corners */}
       <div className="absolute inset-0" style={{
-        background: "radial-gradient(ellipse 120% 120% at 50% 50%, transparent 40%, rgba(3,1,8,0.55) 100%)",
+        background: "radial-gradient(ellipse 130% 130% at 50% 50%, transparent 55%, rgba(6,2,14,0.35) 100%)",
       }} />
 
       {/* Static petals — zero GPU layers */}

@@ -49,6 +49,13 @@ export default function Player({
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
+  // Refs mirroring muted/volume so the channel-switch effect (which only
+  // re-runs on channel change) can read the latest user preference
+  // without forcing a full HLS re-attach on every mute/volume toggle.
+  const mutedRef = useRef(muted);
+  const volumeRef = useRef(volume);
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
+  useEffect(() => { volumeRef.current = volume; }, [volume]);
   const [brightness, setBrightness] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobileDevice, setIsMobileDevice] = useState(false);
@@ -184,13 +191,15 @@ export default function Player({
       hls.loadSource(channel.url);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        // Autoplay with sound — browsers allow this when user interacted;
-        // if blocked, fall back to muted autoplay
-        video.muted = false;
-        video.volume = 1;
+        // Preserve the user's current mute/volume preference across
+        // channel switches — don't force-unmute a muted player.
+        video.muted = mutedRef.current;
+        video.volume = volumeRef.current;
         video.play().catch(() => {
-          // Autoplay with sound blocked — try muted, then unmute on interaction
+          // Autoplay blocked — fall back to muted playback and keep the
+          // mute state in sync with the actual player.
           video.muted = true;
+          if (!mutedRef.current) setMuted(true);
           video.play().catch(() => {});
         });
       });
@@ -228,10 +237,11 @@ export default function Player({
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       // Native HLS (Safari/iOS)
       video.src = channel.url;
-      video.muted = false;
-      video.volume = 1;
+      video.muted = mutedRef.current;
+      video.volume = volumeRef.current;
       video.play().catch(() => {
         video.muted = true;
+        if (!mutedRef.current) setMuted(true);
         video.play().catch(() => {});
       });
     } else {
@@ -423,6 +433,31 @@ export default function Player({
         v.currentTime = end;
       }
     }
+  }, []);
+
+  // ---- Catch up to live if we drift more than 5s behind (long pause,
+  // buffering stall, etc.) — seek forward to the latest buffer so the
+  // viewer is never left watching a stale point in the stream. Runs
+  // quietly in the background and only acts on drift > 5s, so it never
+  // interrupts normal playback.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const v = videoRef.current;
+      if (!v || v.paused || v.seeking) return;
+      const hls = hlsRef.current;
+      let liveEdge: number | null = null;
+      if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
+        liveEdge = hls.liveSyncPosition;
+      } else if (v.seekable.length > 0) {
+        const end = v.seekable.end(v.seekable.length - 1);
+        if (isFinite(end)) liveEdge = end;
+      }
+      if (liveEdge == null) return;
+      if (liveEdge - v.currentTime > 5) {
+        v.currentTime = liveEdge;
+      }
+    }, 4000);
+    return () => window.clearInterval(id);
   }, []);
 
   const togglePlay = useCallback(() => {
@@ -1377,7 +1412,7 @@ export default function Player({
             </span>
             <span
               className="text-[10px] font-semibold uppercase tracking-widest"
-              style={{ color: "#34bf80" }}
+              style={{ color: "#34bf80", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif" }}
             >
               Revenger
             </span>

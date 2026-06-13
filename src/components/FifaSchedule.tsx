@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { FooterCredits } from "./Footer";
 
 // ─── Types ────────────────────────────────────────────────────────
 interface Match {
@@ -172,45 +173,46 @@ function Countdown({ match }: { match: Match }) {
     ? [{ v: pad(d), l:"Day" }, { v: pad(h), l:"Hours" }, { v: pad(mi), l:"Min" }, { v: pad(sc), l:"Second" }]
     : [{ v: pad(h), l:"Hours" }, { v: pad(mi), l:"Min" }, { v: pad(sc), l:"Second" }];
 
-  const numSz = d > 0 ? "17px" : "20px";
-  const colSz = d > 0 ? "14px" : "17px";
-  const colW  = d > 0 ? "24px" : "28px";
+  const numSz = d > 0 ? "20px" : "24px";
+  const colSz = d > 0 ? "16px" : "19px";
+  const colW  = d > 0 ? "30px" : "36px";
 
   return (
-    <div style={{ display:"flex", alignItems:"flex-start", gap:0 }}>
+    <div style={{ display:"flex", alignItems:"center", gap:0 }}>
       {units.map((u, i) => (
-        <div key={u.l} style={{ display:"flex", alignItems:"flex-start" }}>
+        <div key={u.l} style={{ display:"flex", alignItems:"center" }}>
           {/* Number + label column */}
-          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", width: colW }}>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"flex-start", width: colW }}>
             <span style={{
               fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
               fontSize: numSz,
               fontWeight:800,
-              lineHeight:"1",
+              lineHeight:"1.1",
               color:"#fff",
               textShadow:"0 0 16px rgba(167,139,250,0.55)",
               letterSpacing:"-0.02em",
               fontVariantNumeric:"tabular-nums",
               textAlign:"center",
               display:"block",
-              padding:"2px 0",
+              width:"100%",
             }}>{u.v}</span>
             <span style={{
               fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
-              fontSize:"6.5px",
+              fontSize:"7.5px",
               fontWeight:700,
               letterSpacing:"0.10em",
               color:"rgba(167,139,250,0.65)",
               textTransform:"uppercase",
-              marginTop:"1px",
+              marginTop:"2px",
               display:"block",
               textAlign:"center",
+              width:"100%",
               whiteSpace:"nowrap",
             }}>{u.l}</span>
           </div>
           {/* Colon separator — aligned with the number row */}
           {i < units.length - 1 && (
-            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", width:"10px", paddingTop:"1px" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", width:"12px", height: numSz, marginBottom: "11px" }}>
               <span style={{
                 color:"rgba(167,139,250,0.45)",
                 fontSize: colSz,
@@ -219,8 +221,6 @@ function Countdown({ match }: { match: Match }) {
                 display:"block",
                 textAlign:"center",
               }}>:</span>
-              {/* Invisible label spacer to keep colon vertically aligned with numbers */}
-              <span style={{ fontSize:"6.5px", display:"block", visibility:"hidden" }}>:</span>
             </div>
           )}
         </div>
@@ -277,35 +277,25 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
   const d = new Date(`${match.date}T${match.time}:00+06:00`);
   const timeLabel = d.toLocaleTimeString("en-BD", { hour:"2-digit", minute:"2-digit", hour12:true, timeZone:"Asia/Dhaka" });
 
-  // Hover/click score reveal for finished matches
+  // Hover-to-reveal result — PC (hover-capable) devices only
   const [showResult, setShowResult] = useState(false);
-  const cardRef = useRef<HTMLDivElement>(null);
+  const [canHover, setCanHover] = useState(false);
 
   useEffect(() => {
-    if (!showResult) return;
-    const hide = (e: MouseEvent | TouchEvent) => {
-      if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
-        setShowResult(false);
-      }
-    };
-    document.addEventListener("mousedown", hide);
-    document.addEventListener("touchstart", hide);
-    return () => {
-      document.removeEventListener("mousedown", hide);
-      document.removeEventListener("touchstart", hide);
-    };
-  }, [showResult]);
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
+    setCanHover(mq.matches);
+    const onChange = () => setCanHover(mq.matches);
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, []);
 
-  const handleCardInteract = () => {
-    if (over && !live && hasScore) setShowResult(v => !v);
-  };
+  const canReveal = over && !live && hasScore && canHover;
 
   return (
     <div
-      ref={cardRef}
-      onClick={handleCardInteract}
-      onMouseEnter={() => { if (over && !live && hasScore) setShowResult(true); }}
-      onMouseLeave={() => setShowResult(false)}
+      onMouseEnter={() => { if (canReveal) setShowResult(true); }}
+      onMouseLeave={() => { if (canReveal) setShowResult(false); }}
       className="relative overflow-hidden rounded-xl transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.01]"
       style={{
         background: live
@@ -325,7 +315,7 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
           : "0 1px 6px rgba(0,0,0,0.22)",
         // Live card gets a pulse animation
         animation: live ? "cardPulseCPU 3s ease-in-out infinite" : "none",
-        cursor: over && !live && hasScore ? "pointer" : "default",
+        cursor: canReveal ? "pointer" : "default",
       }}>
 
       {/* Top shimmer */}
@@ -359,13 +349,15 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
         <div className="flex items-center justify-between gap-2">
           {/* Team A */}
           <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-            {/* Flag hidden on hover for finished, show nothing (flag hidden) */}
-            {!(over && !live && showResult) && (
-              <img src={match.flagA} alt={match.teamA}
-                className="h-7 w-11 rounded-sm object-cover shadow-md sm:h-8 sm:w-12"
-                style={{ border:"1px solid rgba(255,255,255,0.10)" }}
-                onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
-            )}
+            {/* Flag fades out smoothly while the result is revealed (PC hover only) */}
+            <img src={match.flagA} alt={match.teamA}
+              className="h-7 w-11 rounded-sm object-cover shadow-md sm:h-8 sm:w-12"
+              style={{
+                border:"1px solid rgba(255,255,255,0.10)",
+                opacity: canReveal && showResult ? 0 : 1,
+                transition: "opacity 300ms ease",
+              }}
+              onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
             <span style={{
               fontFamily:"'Inter',sans-serif", fontSize:"11px", fontWeight:600,
               color: over && !live ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.88)",
@@ -384,11 +376,24 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
                   <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"8px", fontWeight:700, letterSpacing:"0.14em", color:"#86efac", textTransform:"uppercase"}}>Live</span>
                 </div>
               </>
-            ) : over && hasScore && showResult ? (
-              /* Show result on hover/click for finished matches */
-              <Score a={match.scoreA!} b={match.scoreB!} big />
-            ) : over && !hasScore && showResult ? (
-              <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"20px", fontWeight:800, color:"rgba(255,255,255,0.25)", letterSpacing:"-0.01em"}}>-</span>
+            ) : over && hasScore ? (
+              /* Crossfade between "Full Time" and the final result on hover (PC only) */
+              <div className="relative flex items-center justify-center" style={{ minWidth:"56px", minHeight:"30px" }}>
+                <span style={{
+                  position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center",
+                  fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700,
+                  letterSpacing:"0.12em", color:"rgba(255,255,255,0.28)", textTransform:"uppercase", textAlign:"center",
+                  opacity: canReveal && showResult ? 0 : 1,
+                  transition: "opacity 300ms ease",
+                }}>Full Time</span>
+                <div style={{
+                  position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center",
+                  opacity: canReveal && showResult ? 1 : 0,
+                  transition: "opacity 300ms ease",
+                }}>
+                  <Score a={match.scoreA!} b={match.scoreB!} big />
+                </div>
+              </div>
             ) : over ? (
               <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.28)", textTransform:"uppercase", display:"block", textAlign:"center"}}>Full Time</span>
             ) : (
@@ -398,12 +403,14 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
 
           {/* Team B */}
           <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-            {!(over && !live && showResult) && (
-              <img src={match.flagB} alt={match.teamB}
-                className="h-7 w-11 rounded-sm object-cover shadow-md sm:h-8 sm:w-12"
-                style={{ border:"1px solid rgba(255,255,255,0.10)" }}
-                onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
-            )}
+            <img src={match.flagB} alt={match.teamB}
+              className="h-7 w-11 rounded-sm object-cover shadow-md sm:h-8 sm:w-12"
+              style={{
+                border:"1px solid rgba(255,255,255,0.10)",
+                opacity: canReveal && showResult ? 0 : 1,
+                transition: "opacity 300ms ease",
+              }}
+              onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
             <span style={{
               fontFamily:"'Inter',sans-serif", fontSize:"11px", fontWeight:600,
               color: over && !live ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.88)",
@@ -615,8 +622,8 @@ export default function FifaSchedule() {
         </button>
       </div>
 
-      {/* Page dots */}
-      <div className="mt-4 flex items-center justify-center gap-1.5">
+      {/* Page dots — hidden on mobile */}
+      <div className="mt-4 hidden items-center justify-center gap-1.5 sm:flex">
         {pages.map((_, i) => (
           <button key={i} onClick={() => { setDir(i > page ? 1 : -1); setAnimKey(k=>k+1); setPage(i); }}
             className="rounded-full transition-all duration-300"
@@ -631,8 +638,11 @@ export default function FifaSchedule() {
       </div>
 
       <p className="mt-4 text-center" style={{fontFamily:"'Inter',sans-serif", fontSize:"10px", color:"rgba(255,255,255,0.18)", fontWeight:400}}>
-        Based on Bangladesh Standard Time · Knockout bracket TBD after group stage
+        Based on Bangladesh Standard Time
       </p>
+
+      {/* Credits — moved here, centered under the schedule note */}
+      <FooterCredits />
 
       <style>{`
         @keyframes slideInRight {

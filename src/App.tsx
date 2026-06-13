@@ -4,7 +4,7 @@ import Header from "./components/Header";
 import TagBar from "./components/TagBar";
 import ChannelList from "./components/ChannelList";
 import Player from "./components/Player";
-import Footer, { FooterCredits } from "./components/Footer";
+import Footer from "./components/Footer";
 import FifaSchedule from "./components/FifaSchedule";
 import { parseM3U, getUniqueGroups, type Channel } from "./utils/parseM3U";
 
@@ -173,17 +173,12 @@ export default function App() {
                 </>
               )}
             </div>
-            {/* Clock under categories on mobile */}
-            <div className="px-4 pt-1 pb-3 border-t border-white/5">
-              <Footer />
-            </div>
+          </div>
+          {/* Clock — outside the categories panel, centered (mobile only) */}
+          <div className="flex w-full items-center justify-center">
+            <Footer />
           </div>
         </section>
-
-        {/* Mobile footer credits - all the way at the bottom */}
-        <div className="lg:hidden mt-4">
-          <FooterCredits />
-        </div>
 
         {error && (
           <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">
