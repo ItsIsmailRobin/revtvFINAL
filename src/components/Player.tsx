@@ -318,7 +318,7 @@ export default function Player({
       // surfacing the spinner; if "playing" fires first, this is cancelled.
       if (isMobile) {
         window.clearTimeout(waitingTimer);
-        waitingTimer = window.setTimeout(() => setLoading(true), 2500);
+        waitingTimer = window.setTimeout(() => setLoading(true), 3500);
       } else {
         setLoading(true);
       }
@@ -392,36 +392,32 @@ export default function Player({
     video.addEventListener("error",   onError);
 
     // ── Autoplay-with-sound helper ──────────────────────────────────────
-    // PC & Android: try unmuted autoplay first. If the browser blocks it,
-    // fall back to muted autoplay, then immediately try to unmute (this
-    // often succeeds on Android Chrome right after a successful play()).
-    // If it's still muted after a short delay, show "Tap to unmute".
-    //
-    // iOS (Safari/WebView): iOS's autoplay-with-sound privacy rules mean the
-    // "play unmuted then recover" trick doesn't reliably work and can leave
-    // the player in a bad state. Go straight to muted autoplay (always
-    // allowed) and rely on the existing "Tap to unmute" overlay for the
-    // user to enable sound with one tap.
+    // Try unmuted autoplay first on EVERY platform, including iOS. Most
+    // browsers (and iOS Safari/WKWebView) DO allow unmuted autoplay when
+    // the user's previous session/preference was unmuted, or simply
+    // don't enforce the restriction as strictly as expected here — so
+    // attempting it first gives sound-on playback whenever possible.
+    // If the browser blocks it, fall back to muted autoplay (always
+    // allowed) and then immediately try to unmute — this often succeeds
+    // right after a successful play(). If still muted after a short
+    // delay, show the "Tap to unmute" overlay as a last resort.
     const attemptAutoplay = (v: HTMLVideoElement) => {
-      if (isIOS) {
-        v.muted = true;
-        mutedRef.current = true;
-        setMuted(true);
-        v.play().then(() => {
-          setNeedsUnmute(true);
-        }).catch(() => {});
-        return;
-      }
-
       v.muted = mutedRef.current;
       v.volume = volumeRef.current;
-      v.play().catch(() => {
+      v.play().then(() => {
+        if (v.muted) {
+          // Started muted by our own preference (user had muted it
+          // previously) — nothing to recover, no unmute prompt needed.
+          setNeedsUnmute(false);
+        }
+      }).catch(() => {
         // Autoplay blocked with sound — try muted first (always works).
         v.muted = true;
         v.play().then(() => {
           // Muted play succeeded. Now immediately try to unmute — on
-          // Android Chrome this often works right after the play() resolves
-          // because the gesture policy is satisfied by the play itself.
+          // Android Chrome and many WebViews this often works right
+          // after the play() resolves because the gesture policy is
+          // satisfied by the play itself.
           v.muted = false;
           // If the browser re-mutes it, the 'volumechange' event fires and
           // v.muted will be true — we catch that below via the timeout.
@@ -479,23 +475,26 @@ export default function Player({
         abrEwmaDefaultEstimate: isMobile ? 350_000 : 800_000, // initial BW guess
         // Less twitchy ABR on mobile — fewer quality switches means
         // fewer brief re-buffer blips while switching renditions.
-        abrBandWidthFactor:   isMobile ? 0.90 : 0.85,
-        abrBandWidthUpFactor: isMobile ? 0.70 : 0.60,
+        abrBandWidthFactor:   isMobile ? 0.95 : 0.85,
+        abrBandWidthUpFactor: isMobile ? 0.60 : 0.60,
         // Don't downswitch instantly on a single bad measurement.
-        abrEwmaFastLive:  isMobile ? 5.0 : 3.0,
-        abrEwmaSlowLive:  isMobile ? 9.0 : 9.0,
+        abrEwmaFastLive:  isMobile ? 7.0 : 3.0,
+        abrEwmaSlowLive:  isMobile ? 12.0 : 9.0,
 
         // ── Stall / nudge ─────────────────────────────────────────────
         // maxStarvationDelay: how long to wait with a buffer before
         // giving up and forcing a lower quality / stalling. A larger
         // value on mobile means HLS waits longer for the buffer to
         // refill instead of repeatedly bailing out.
-        maxStarvationDelay:  isMobile ? 6 : 2,
-        maxLoadingDelay:     isMobile ? 6 : 3,
-        // Internal HLS nudge: tiny seek when buffer gap detected
-        nudgeOffset:         0.2,
-        nudgeMaxRetry:       10,
-        highBufferWatchdogPeriod: 3, // check for buffer issues every 3s
+        maxStarvationDelay:  isMobile ? 8 : 2,
+        maxLoadingDelay:     isMobile ? 8 : 3,
+        // Internal HLS nudge: tiny seek when buffer gap detected.
+        // A smaller nudge on mobile = smaller, less noticeable
+        // micro-jump when bridging a gap (the "stuck for 1-2s then
+        // resumes" feeling is often this nudge firing repeatedly).
+        nudgeOffset:         isMobile ? 0.1 : 0.2,
+        nudgeMaxRetry:       isMobile ? 16 : 10,
+        highBufferWatchdogPeriod: isMobile ? 4 : 3, // check for buffer issues every Ns
 
         // ── Fragment loading ──────────────────────────────────────────
         // More retries + shorter delays = faster recovery from hiccups
