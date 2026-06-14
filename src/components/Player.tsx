@@ -234,7 +234,7 @@ export default function Player({
     // Skip timer: if stream doesn't produce a frame within N seconds, skip it
     const skipTimer = window.setTimeout(() => {
       if (channel) onStreamError?.(channel);
-    }, isMobile ? 12000 : 11000);
+    }, isMobile ? 15000 : 11000);
 
     // ── Helpers ──────────────────────────────────────────────────────────
     // Snap currentTime to the live edge. Safe to call any time.
@@ -260,7 +260,7 @@ export default function Player({
     // which was re-triggering scheduleRecover and causing a visible
     // loading→play→loading loop every couple of seconds.
     let recoverCooldownUntil = 0;
-    const RECOVER_COOLDOWN_MS = isMobile ? 4000 : 1500;
+    const RECOVER_COOLDOWN_MS = isMobile ? 5000 : 1500;
     let waitingTimer = 0;
 
     const scheduleRecover = (delayMs: number) => {
@@ -302,9 +302,9 @@ export default function Player({
     };
     const onPause    = () => {
       setPlaying(false);
-      if (!userPausedRef.current) scheduleRecover(700);
+      if (!userPausedRef.current) scheduleRecover(isMobile ? 1200 : 700);
     };
-    const onStalled  = () => { scheduleRecover(1000); };   // buffer empty — recover fast
+    const onStalled  = () => { scheduleRecover(isMobile ? 1500 : 1000); };   // buffer empty — recover
     const onEnded    = () => {
       const v = videoRef.current;
       if (!v) return;
@@ -322,7 +322,7 @@ export default function Player({
     // frozen stream on both mobile and PC.
     let lastTime  = -1;
     let frozenSec = 0;
-    const FROZEN_THRESHOLD = isMobile ? 5 : 4; // seconds before we act
+    const FROZEN_THRESHOLD = isMobile ? 6 : 4; // seconds before we act
     const frozenWatchdog = window.setInterval(() => {
       const v = videoRef.current;
       if (!v || v.paused || v.seeking || userPausedRef.current) {
@@ -404,39 +404,50 @@ export default function Player({
       // isMobile already declared above (used by skip timer + frozen threshold)
       const hls = new Hls({
         enableWorker:  true,
-        lowLatencyMode: true,
+        // Low-latency mode trims buffers to the bone to stay as close to
+        // the live edge as possible — great on a stable PC connection,
+        // but on mobile data/WiFi the slightest jitter then drains the
+        // buffer instantly and causes the loading→play→loading loop.
+        // Disable it on mobile and trade a couple of seconds of extra
+        // latency for a buffer big enough to absorb network hiccups.
+        lowLatencyMode: !isMobile,
 
         // ── Buffer sizing ─────────────────────────────────────────────
-        // Keep buffers reasonably sized so a brief network hiccup doesn't
-        // immediately drain the buffer and trigger a stall→reload loop.
-        // Previous mobile values (4-6s) were too tight for iOS/Android
-        // connections — the player would buffer just enough to start,
-        // play for ~2s, drain the buffer, stall, and reload. Bringing
-        // these closer to desktop fixes the "loads → plays 2s → loads"
-        // cycle while staying light enough for mobile memory limits.
-        backBufferLength:    isMobile ?  6 :  8,  // how much to keep behind currentTime
-        maxBufferLength:     isMobile ? 12 : 10,  // target ahead-buffer in seconds
-        maxMaxBufferLength:  isMobile ? 20 : 16,  // hard cap
-        maxBufferSize:       isMobile ?  10_000_000 : 12_000_000, // 10 MB / 12 MB
+        // Mobile gets a noticeably larger cushion than before so a brief
+        // drop in throughput doesn't immediately starve playback.
+        backBufferLength:    isMobile ?  8 :  8,  // how much to keep behind currentTime
+        maxBufferLength:     isMobile ? 20 : 10,  // target ahead-buffer in seconds
+        maxMaxBufferLength:  isMobile ? 30 : 16,  // hard cap
+        maxBufferSize:       isMobile ?  20_000_000 : 12_000_000, // 20 MB / 12 MB
 
         // ── Quality / ABR ─────────────────────────────────────────────
-        startLevel:          isMobile ? 0 : -1,  // mobile: lowest quality first, PC: auto
-        capLevelToPlayerSize: true,              // never load resolution > screen size
-        abrEwmaDefaultEstimate: isMobile ? 150_000 : 800_000, // initial BW guess
-        abrBandWidthFactor:   isMobile ? 0.80 : 0.85, // downgrade aggressively on drop
-        abrBandWidthUpFactor: isMobile ? 0.50 : 0.60, // upgrade conservatively
+        // Don't force the lowest rendition on mobile — some streams'
+        // lowest-quality renditions are themselves unstable/low-fps and
+        // cause more rebuffering than a mid-quality one would. Let HLS
+        // auto-select based on measured bandwidth instead, capped to the
+        // screen size.
+        startLevel:          -1,                 // auto on all platforms
+        capLevelToPlayerSize: true,               // never load resolution > screen size
+        abrEwmaDefaultEstimate: isMobile ? 500_000 : 800_000, // initial BW guess
+        // Less twitchy ABR on mobile — fewer quality switches means
+        // fewer brief re-buffer blips while switching renditions.
+        abrBandWidthFactor:   isMobile ? 0.90 : 0.85,
+        abrBandWidthUpFactor: isMobile ? 0.70 : 0.60,
+        // Don't downswitch instantly on a single bad measurement.
+        abrEwmaFastLive:  isMobile ? 5.0 : 3.0,
+        abrEwmaSlowLive:  isMobile ? 9.0 : 9.0,
 
         // ── Stall / nudge ─────────────────────────────────────────────
-        // maxStarvationDelay: start playback after this many seconds buffered
-        // Lower = starts faster but more stall risk. 1s on mobile was too
-        // aggressive — playback started before enough buffer existed to
-        // absorb network jitter, causing immediate rebuffering.
-        maxStarvationDelay:  isMobile ? 3 : 2,
-        maxLoadingDelay:     isMobile ? 4 : 3,
+        // maxStarvationDelay: how long to wait with a buffer before
+        // giving up and forcing a lower quality / stalling. A larger
+        // value on mobile means HLS waits longer for the buffer to
+        // refill instead of repeatedly bailing out.
+        maxStarvationDelay:  isMobile ? 6 : 2,
+        maxLoadingDelay:     isMobile ? 6 : 3,
         // Internal HLS nudge: tiny seek when buffer gap detected
         nudgeOffset:         0.2,
         nudgeMaxRetry:       10,
-        highBufferWatchdogPeriod: 2, // check for buffer issues every 2s
+        highBufferWatchdogPeriod: 3, // check for buffer issues every 3s
 
         // ── Fragment loading ──────────────────────────────────────────
         // More retries + shorter delays = faster recovery from hiccups
@@ -449,10 +460,11 @@ export default function Player({
         fragLoadingMaxRetryTimeout: 4000,
 
         // ── Live sync ─────────────────────────────────────────────────
-        // Slightly larger live window on mobile gives more cushion
-        // against jitter before we need to snap/recover.
-        liveSyncDurationCount:       isMobile ? 3 : 2,
-        liveMaxLatencyDurationCount: isMobile ? 5 : 4,
+        // A larger live window on mobile means we sit a bit further
+        // from the live edge but with much more cushion against jitter,
+        // instead of constantly chasing the edge and stalling.
+        liveSyncDurationCount:       isMobile ? 4 : 2,
+        liveMaxLatencyDurationCount: isMobile ? 8 : 4,
         // Drift tolerance before HLS snaps to live edge internally
         maxFragLookUpTolerance: 0.2,
 
@@ -1250,14 +1262,14 @@ export default function Player({
         </div>
       )}
 
-      {/* Paused overlay — blurs the player and pops in a glass play
-          button whenever playback is paused (manual pause or
-          auto-pause). Clicking it resumes playback. Hidden while
+      {/* Paused overlay — light glass blur over the still-visible frame,
+          with an iOS-style frosted play button that scales/fades in
+          smoothly. Clicking anywhere resumes playback. Hidden while
           loading/transitioning so it doesn't fight those overlays. */}
       {channel && !playing && !loading && !error && !fsTransitioning && (
         <div
-          className="absolute inset-0 z-20 flex items-center justify-center bg-black/30 backdrop-blur-md transition-opacity duration-300"
-          style={{ animation: "fadeInOverlay 220ms ease forwards" }}
+          className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 backdrop-blur-[2px] transition-opacity duration-300"
+          style={{ animation: "fadeInOverlay 260ms ease forwards" }}
           onClick={(e) => { e.stopPropagation(); togglePlay(); }}
           onDoubleClick={onVideoDoubleClick}
         >
@@ -1266,15 +1278,22 @@ export default function Player({
             onClick={(e) => { e.stopPropagation(); togglePlay(); }}
             aria-label="Play"
             data-player-control
-            className="group flex h-16 w-16 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white shadow-2xl backdrop-blur-xl transition-all duration-300 hover:scale-110 hover:bg-white/20 active:scale-95 sm:h-20 sm:w-20"
-            style={{ animation: "gesturePop 280ms cubic-bezier(.34,1.56,.64,1) both" }}
+            className="group flex h-16 w-16 items-center justify-center rounded-full border text-white transition-transform duration-200 ease-out hover:scale-105 active:scale-95 sm:h-[72px] sm:w-[72px]"
+            style={{
+              animation: "glassPop 420ms cubic-bezier(.22,1,.36,1) both",
+              background: "rgba(255,255,255,0.12)",
+              borderColor: "rgba(255,255,255,0.25)",
+              backdropFilter: "blur(20px) saturate(180%)",
+              WebkitBackdropFilter: "blur(20px) saturate(180%)",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.3)",
+            }}
           >
             <svg
-              width="28"
-              height="28"
+              width="26"
+              height="26"
               viewBox="0 0 24 24"
               fill="currentColor"
-              className="ml-1 transition-transform duration-300 group-hover:scale-110 sm:h-8 sm:w-8"
+              className="ml-1 transition-transform duration-200 ease-out group-hover:scale-110 sm:h-7 sm:w-7"
             >
               <polygon points="5 3 19 12 5 21 5 3" />
             </svg>
@@ -1785,6 +1804,13 @@ export default function Player({
         }
         @keyframes gesturePop {
           0% { opacity: 0; transform: scale(0.92); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+        /* iOS-glass style pop for the pause/play button — gentle
+           scale + fade with a soft overshoot, no harsh bounce. */
+        @keyframes glassPop {
+          0%   { opacity: 0; transform: scale(0.8); }
+          60%  { opacity: 1; transform: scale(1.04); }
           100% { opacity: 1; transform: scale(1); }
         }
       `}</style>
