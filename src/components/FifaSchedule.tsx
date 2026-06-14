@@ -684,11 +684,11 @@ export default function FifaSchedule() {
         </div>
       </div>
 
-      {/* Navigation + content */}
-      <div className="flex items-stretch gap-2 sm:gap-3">
-        {/* Prev */}
+      {/* Navigation + content — arrows absolute so NO overflow:hidden ancestor kills the card glows */}
+      <div style={{ position:"relative", paddingLeft:"44px", paddingRight:"44px" }}>
+        {/* Prev arrow */}
         <button onClick={() => navigate(-1)} disabled={page === 0}
-          className="group flex w-9 shrink-0 flex-col items-center justify-center rounded-xl transition-all duration-200 active:scale-95"
+          className="group absolute left-0 top-0 bottom-0 z-10 flex w-9 flex-col items-center justify-center rounded-xl transition-all duration-200 active:scale-95"
           style={{
             background: page === 0 ? "rgba(255,255,255,0.02)" : "rgba(139,92,246,0.12)",
             border: "none",
@@ -701,27 +701,26 @@ export default function FifaSchedule() {
           </span>
         </button>
 
-        {/* Days grid — outer clip keeps slide animation tidy; inner padding lets card glow bleed through */}
-        <div className="min-w-0 flex-1" style={{ overflow:"hidden" }}>
-          <div style={{ padding:"6px 4px", margin:"-6px -4px", overflow:"visible" }}>
-            <div ref={containerRef} style={{ overflow:"visible" }}>
-              <div key={animKey} className="grid gap-3"
-                style={{
-                  gridTemplateColumns: `repeat(${current.length},1fr)`,
-                  animation: `slideIn${dir > 0 ? "Right" : "Left"} 320ms cubic-bezier(.4,0,.2,1)`,
-                  willChange: "transform, opacity",
-                }}>
-                {current.map(dayGroup => (
-                  <DayColumn key={dayGroup.date} dayGroup={dayGroup} todayBD={todayBD} />
-                ))}
-              </div>
-            </div>
+        {/* Days grid — only the animated slide div clips, with vertical padding so top/bottom glow escapes */}
+        <div ref={containerRef} style={{ overflow:"visible" }}>
+          <div key={animKey}
+            style={{
+              display:"grid",
+              gap:"12px",
+              gridTemplateColumns: `repeat(${current.length},1fr)`,
+              animation: `slideIn${dir > 0 ? "Right" : "Left"} 320ms cubic-bezier(.4,0,.2,1)`,
+              willChange: "transform, opacity",
+              overflow:"visible",
+            }}>
+            {current.map(dayGroup => (
+              <DayColumn key={dayGroup.date} dayGroup={dayGroup} todayBD={todayBD} />
+            ))}
           </div>
         </div>
 
-        {/* Next */}
+        {/* Next arrow */}
         <button onClick={() => navigate(1)} disabled={page >= pages.length - 1}
-          className="group flex w-9 shrink-0 flex-col items-center justify-center rounded-xl transition-all duration-200 active:scale-95"
+          className="group absolute right-0 top-0 bottom-0 z-10 flex w-9 flex-col items-center justify-center rounded-xl transition-all duration-200 active:scale-95"
           style={{
             background: page >= pages.length-1 ? "rgba(255,255,255,0.02)" : "rgba(139,92,246,0.12)",
             border: "none",
@@ -740,11 +739,11 @@ export default function FifaSchedule() {
 
       <style>{`
         @keyframes slideInRight {
-          from { opacity:0; transform:translateX(32px); }
+          from { opacity:0; transform:translateX(18px); }
           to   { opacity:1; transform:translateX(0); }
         }
         @keyframes slideInLeft {
-          from { opacity:0; transform:translateX(-32px); }
+          from { opacity:0; transform:translateX(-18px); }
           to   { opacity:1; transform:translateX(0); }
         }
       `}</style>
