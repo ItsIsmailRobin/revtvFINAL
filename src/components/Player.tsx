@@ -9,6 +9,7 @@ import {
 import Hls from "hls.js";
 import type { Channel } from "../utils/parseM3U";
 import { cn } from "../utils/cn";
+import { getFresh, setPersisted, markActivity } from "../utils/persist";
 
 interface PlayerProps {
   channel: Channel | null;
@@ -23,6 +24,16 @@ interface GestureState {
   side: "left" | "right" | null;
   active: boolean;
   locked: boolean;
+}
+
+// Module-level so it can be used inside useState initializers (which run
+// before any effects). Mirrors the in-effect isMobile/isIOS checks.
+function detectIsMobile(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return (
+    /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent))
+  );
 }
 
 export default function Player({
@@ -55,16 +66,17 @@ export default function Player({
   const hasStartedPlaybackRef = useRef(false);
 
   const [playing, setPlaying] = useState(false);
-  // Restore muted/volume from localStorage so refresh or logo-click doesn't
-  // reset the player to muted. Default: unmuted at full volume.
+  // Restore muted/volume for THIS session only (sessionStorage + 10-min
+  // inactivity expiry — see utils/persist.ts). On Android/iOS, never
+  // restore: volume/mute always reset to defaults each session.
   const [muted, setMuted] = useState<boolean>(() => {
-    try { return window.localStorage.getItem("revtv:muted") === "true"; } catch { return false; }
+    if (detectIsMobile()) return false;
+    return getFresh("revtv:muted") === "true";
   });
   const [volume, setVolume] = useState<number>(() => {
-    try {
-      const v = parseFloat(window.localStorage.getItem("revtv:volume") ?? "1");
-      return isNaN(v) ? 1 : Math.min(1, Math.max(0, v));
-    } catch { return 1; }
+    if (detectIsMobile()) return 1;
+    const v = parseFloat(getFresh("revtv:volume") ?? "1");
+    return isNaN(v) ? 1 : Math.min(1, Math.max(0, v));
   });
   // Refs mirroring muted/volume so the channel-switch effect (which only
   // re-runs on channel change) can read the latest user preference
@@ -73,12 +85,15 @@ export default function Player({
   const volumeRef = useRef(volume);
   useEffect(() => {
     mutedRef.current = muted;
-    try { window.localStorage.setItem("revtv:muted", String(muted)); } catch {}
+    if (!detectIsMobile()) setPersisted("revtv:muted", String(muted));
   }, [muted]);
   useEffect(() => {
     volumeRef.current = volume;
-    try { window.localStorage.setItem("revtv:volume", String(volume)); } catch {}
+    if (!detectIsMobile()) setPersisted("revtv:volume", String(volume));
   }, [volume]);
+  // Brightness: in-memory only on every platform (never persisted), and
+  // explicitly reset to default each session on Android/iOS per above —
+  // since it's already not persisted, this is naturally satisfied.
   const [brightness, setBrightness] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobileDevice, setIsMobileDevice] = useState(false);
@@ -116,7 +131,7 @@ export default function Player({
 
     let restored: AspectMode | null = null;
     try {
-      const raw = window.localStorage.getItem("revtv:aspect");
+      const raw = getFresh("revtv:aspect");
       if (raw) {
         const saved = JSON.parse(raw);
         if (
@@ -136,15 +151,14 @@ export default function Player({
   }, [channel?.id]);
 
   // Keep storage in sync with the current channel + aspect mode, so a
-  // refresh/logo click can restore it for THIS channel only.
+  // refresh/logo click can restore it for THIS channel only — and only
+  // within the same active session (see utils/persist.ts).
   useEffect(() => {
     if (!channel) return;
-    try {
-      window.localStorage.setItem(
-        "revtv:aspect",
-        JSON.stringify({ channelId: channel.id, aspectMode })
-      );
-    } catch {}
+    setPersisted(
+      "revtv:aspect",
+      JSON.stringify({ channelId: channel.id, aspectMode })
+    );
   }, [channel?.id, aspectMode]);
 
   // Status indicator — shows current volume / aspect ratio briefly
@@ -417,6 +431,14 @@ export default function Player({
 
     // Once the stream actually starts playing, try to unmute (unless the
     // user had previously muted it themselves).
+    //
+    // IMPORTANT: on Android Chrome/WebViews, setting `muted = false` on a
+    // video that is autoplaying (without a user gesture) doesn't always
+    // just get silently re-muted — it can PAUSE the video entirely,
+    // since unmuted playback wasn't permitted by the autoplay policy.
+    // That's the "plays for a moment then shows the play/resume icon"
+    // symptom. So after attempting unmute, explicitly check `v.paused`
+    // and re-call play() (muted, if needed) to recover.
     const tryUnmuteAfterStart = () => {
       const v = videoRef.current;
       if (!v) return;
@@ -429,8 +451,21 @@ export default function Player({
       v.volume = volumeRef.current;
       window.setTimeout(() => {
         if (!v) return;
-        if (v.muted) {
-          // Browser snapped it back to muted — needs an explicit tap.
+        if (v.paused) {
+          // Unmuting paused playback — browser rejected unmuted
+          // playback. Go back to muted and resume, show tap-to-unmute.
+          v.muted = true;
+          v.play().then(() => {
+            mutedRef.current = true;
+            setMuted(true);
+            setNeedsUnmute(true);
+          }).catch(() => {
+            mutedRef.current = true;
+            setMuted(true);
+            setNeedsUnmute(true);
+          });
+        } else if (v.muted) {
+          // Still playing but browser re-muted it — needs an explicit tap.
           mutedRef.current = true;
           setMuted(true);
           setNeedsUnmute(true);
@@ -614,6 +649,34 @@ export default function Player({
     v.muted = muted;
     v.volume = volume;
   }, [volume, muted]);
+
+  // ---- session activity tracking ----
+  // Any interaction (click/tap/key/scroll) marks the session as active,
+  // resetting the 10-minute inactivity clock used by utils/persist.ts.
+  // Throttled so we're not writing to sessionStorage on every pixel of
+  // scroll — once every few seconds is plenty.
+  useEffect(() => {
+    let lastMark = 0;
+    const onActivity = () => {
+      const now = Date.now();
+      if (now - lastMark < 5000) return;
+      lastMark = now;
+      markActivity();
+    };
+    const opts = { passive: true } as AddEventListenerOptions;
+    window.addEventListener("pointerdown", onActivity, opts);
+    window.addEventListener("keydown", onActivity);
+    window.addEventListener("touchstart", onActivity, opts);
+    window.addEventListener("wheel", onActivity, opts);
+    // Record initial activity for this load too.
+    onActivity();
+    return () => {
+      window.removeEventListener("pointerdown", onActivity);
+      window.removeEventListener("keydown", onActivity);
+      window.removeEventListener("touchstart", onActivity);
+      window.removeEventListener("wheel", onActivity);
+    };
+  }, []);
 
   // apply brightness as video filter
   useEffect(() => {
