@@ -455,12 +455,16 @@ export default function Player({
         lowLatencyMode: !isMobile,
 
         // ── Buffer sizing ─────────────────────────────────────────────
-        // Mobile gets a noticeably larger cushion than before so a brief
-        // drop in throughput doesn't immediately starve playback.
-        backBufferLength:    isMobile ?  8 :  8,  // how much to keep behind currentTime
-        maxBufferLength:     isMobile ? 20 : 10,  // target ahead-buffer in seconds
-        maxMaxBufferLength:  isMobile ? 30 : 16,  // hard cap
-        maxBufferSize:       isMobile ?  20_000_000 : 12_000_000, // 20 MB / 12 MB
+        // Mobile gets a noticeably larger cushion than the original
+        // (4-6s) values that caused rebuffering, but capped a bit lower
+        // than the max we tried — holding 30s/20MB of decoded buffer
+        // ahead of playback adds real CPU/decoder + memory pressure on
+        // phones (a contributor to running hot). 16-18s / 14MB keeps
+        // the same stability margin while trimming that overhead.
+        backBufferLength:    isMobile ?  6 :  8,  // how much to keep behind currentTime
+        maxBufferLength:     isMobile ? 16 : 10,  // target ahead-buffer in seconds
+        maxMaxBufferLength:  isMobile ? 24 : 16,  // hard cap
+        maxBufferSize:       isMobile ?  14_000_000 : 12_000_000, // 14 MB / 12 MB
 
         // ── Quality / ABR ─────────────────────────────────────────────
         // Don't force the lowest rendition on mobile — some streams'
@@ -470,7 +474,7 @@ export default function Player({
         // screen size.
         startLevel:          -1,                 // auto on all platforms
         capLevelToPlayerSize: true,               // never load resolution > screen size
-        abrEwmaDefaultEstimate: isMobile ? 500_000 : 800_000, // initial BW guess
+        abrEwmaDefaultEstimate: isMobile ? 350_000 : 800_000, // initial BW guess
         // Less twitchy ABR on mobile — fewer quality switches means
         // fewer brief re-buffer blips while switching renditions.
         abrBandWidthFactor:   isMobile ? 0.90 : 0.85,
