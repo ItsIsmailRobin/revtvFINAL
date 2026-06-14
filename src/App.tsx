@@ -188,7 +188,7 @@ export default function App() {
         <section className="mt-3 sm:mt-4 lg:hidden">
           <div className="rounded-2xl border" style={PANEL_STYLE}>
             <CategoryHeader groupsLength={groups.length} isOpen={categoriesOpen} onToggle={() => setCategoriesOpen(v => !v)} />
-            <div className="scrollbar-hide max-h-[calc(100vh-10rem)] overflow-y-auto" style={{ scrollbarWidth:"none" }}>
+            <div className="scrollbar-hide overflow-y-visible" style={{ scrollbarWidth:"none" }}>
               {categoriesOpen ? (
                 <AllTagsPanel tags={allTags} activeTag={activeTag} onSelect={t => { setActiveTag(t); setCategoriesOpen(false); }} />
               ) : (

@@ -217,6 +217,14 @@ export default function Player({
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
       (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
 
+    // iOS (incl. iPadOS "desktop" UA on Safari) has strict autoplay-with-sound
+    // privacy rules — attempting the "play unmuted, fall back to muted, then
+    // try to unmute again" trick either fails silently or can leave the
+    // player stuck. On iOS we go straight to muted autoplay (always allowed)
+    // and surface the existing "Tap to unmute" overlay for the user.
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
+
     // Track recovery attempts to avoid infinite loops
     let networkRetries = 0;
     let mediaRetries = 0;
@@ -226,7 +234,7 @@ export default function Player({
     // Skip timer: if stream doesn't produce a frame within N seconds, skip it
     const skipTimer = window.setTimeout(() => {
       if (channel) onStreamError?.(channel);
-    }, isMobile ? 9000 : 11000);
+    }, isMobile ? 12000 : 11000);
 
     // ── Helpers ──────────────────────────────────────────────────────────
     // Snap currentTime to the live edge. Safe to call any time.
@@ -246,12 +254,22 @@ export default function Player({
     // cause of the load→play→load→play loop on slow connections).
     let recoverScheduled = false;
     let recoverTimer = 0;
+    // Cooldown after a recover — ignore new stall/pause/freeze triggers for
+    // a short window right after we just recovered. Mobile connections often
+    // report a brief "stalled"/"pause" blip immediately after resuming,
+    // which was re-triggering scheduleRecover and causing a visible
+    // loading→play→loading loop every couple of seconds.
+    let recoverCooldownUntil = 0;
+    const RECOVER_COOLDOWN_MS = isMobile ? 4000 : 1500;
+    let waitingTimer = 0;
 
     const scheduleRecover = (delayMs: number) => {
       if (recoverScheduled || userPausedRef.current) return;
+      if (Date.now() < recoverCooldownUntil) return;
       recoverScheduled = true;
       recoverTimer = window.setTimeout(() => {
         recoverScheduled = false;
+        recoverCooldownUntil = Date.now() + RECOVER_COOLDOWN_MS;
         const v = videoRef.current;
         if (!v || v.ended || userPausedRef.current) return;
         snapToLive(v);                        // always jump to freshest segment
@@ -264,11 +282,24 @@ export default function Player({
       window.clearTimeout(skipTimer);
       window.clearTimeout(loadingTimer);
       window.clearTimeout(recoverTimer);
+      window.clearTimeout(waitingTimer);
       recoverScheduled = false;
       setLoading(false);
       setPlaying(true);
     };
-    const onWaiting  = () => { setLoading(true); };
+    const onWaiting  = () => {
+      // On mobile, a brief "waiting" event is normal during ABR level
+      // switches / minor rebuffers and resolves on its own. Showing the
+      // spinner immediately for every blip is what produced the
+      // load → play 2s → load loop. Give it a short grace period before
+      // surfacing the spinner; if "playing" fires first, this is cancelled.
+      if (isMobile) {
+        window.clearTimeout(waitingTimer);
+        waitingTimer = window.setTimeout(() => setLoading(true), 1200);
+      } else {
+        setLoading(true);
+      }
+    };
     const onPause    = () => {
       setPlaying(false);
       if (!userPausedRef.current) scheduleRecover(700);
@@ -291,7 +322,7 @@ export default function Player({
     // frozen stream on both mobile and PC.
     let lastTime  = -1;
     let frozenSec = 0;
-    const FROZEN_THRESHOLD = isMobile ? 3 : 4; // seconds before we act
+    const FROZEN_THRESHOLD = isMobile ? 5 : 4; // seconds before we act
     const frozenWatchdog = window.setInterval(() => {
       const v = videoRef.current;
       if (!v || v.paused || v.seeking || userPausedRef.current) {
@@ -316,6 +347,59 @@ export default function Player({
     video.addEventListener("ended",   onEnded);
     video.addEventListener("error",   onError);
 
+    // ── Autoplay-with-sound helper ──────────────────────────────────────
+    // PC & Android: try unmuted autoplay first. If the browser blocks it,
+    // fall back to muted autoplay, then immediately try to unmute (this
+    // often succeeds on Android Chrome right after a successful play()).
+    // If it's still muted after a short delay, show "Tap to unmute".
+    //
+    // iOS (Safari/WebView): iOS's autoplay-with-sound privacy rules mean the
+    // "play unmuted then recover" trick doesn't reliably work and can leave
+    // the player in a bad state. Go straight to muted autoplay (always
+    // allowed) and rely on the existing "Tap to unmute" overlay for the
+    // user to enable sound with one tap.
+    const attemptAutoplay = (v: HTMLVideoElement) => {
+      if (isIOS) {
+        v.muted = true;
+        mutedRef.current = true;
+        setMuted(true);
+        v.play().then(() => {
+          setNeedsUnmute(true);
+        }).catch(() => {});
+        return;
+      }
+
+      v.muted = mutedRef.current;
+      v.volume = volumeRef.current;
+      v.play().catch(() => {
+        // Autoplay blocked with sound — try muted first (always works).
+        v.muted = true;
+        v.play().then(() => {
+          // Muted play succeeded. Now immediately try to unmute — on
+          // Android Chrome this often works right after the play() resolves
+          // because the gesture policy is satisfied by the play itself.
+          v.muted = false;
+          // If the browser re-mutes it, the 'volumechange' event fires and
+          // v.muted will be true — we catch that below via the timeout.
+          // Give it 300ms; if still muted, show tap-to-unmute overlay.
+          setTimeout(() => {
+            if (v.muted) {
+              // Still forced-muted — need explicit user gesture.
+              mutedRef.current = true;
+              setMuted(true);
+              setNeedsUnmute(true);
+            } else {
+              // Unmute succeeded silently — restore saved volume.
+              v.volume = volumeRef.current;
+              mutedRef.current = false;
+              setMuted(false);
+              setNeedsUnmute(false);
+            }
+          }, 300);
+        }).catch(() => {});
+      });
+    };
+
     if (Hls.isSupported()) {
       // isMobile already declared above (used by skip timer + frozen threshold)
       const hls = new Hls({
@@ -323,26 +407,32 @@ export default function Player({
         lowLatencyMode: true,
 
         // ── Buffer sizing ─────────────────────────────────────────────
-        // Keep buffers small so stale data is abandoned quickly and we
-        // always snap back to the live edge after a hiccup.
-        // Mobile needs even smaller buffers to avoid memory pressure.
-        backBufferLength:    isMobile ?  4 :  8,  // how much to keep behind currentTime
-        maxBufferLength:     isMobile ?  6 : 10,  // target ahead-buffer in seconds
-        maxMaxBufferLength:  isMobile ? 10 : 16,  // hard cap
-        maxBufferSize:       isMobile ?  6_000_000 : 12_000_000, // 6 MB / 12 MB
+        // Keep buffers reasonably sized so a brief network hiccup doesn't
+        // immediately drain the buffer and trigger a stall→reload loop.
+        // Previous mobile values (4-6s) were too tight for iOS/Android
+        // connections — the player would buffer just enough to start,
+        // play for ~2s, drain the buffer, stall, and reload. Bringing
+        // these closer to desktop fixes the "loads → plays 2s → loads"
+        // cycle while staying light enough for mobile memory limits.
+        backBufferLength:    isMobile ?  6 :  8,  // how much to keep behind currentTime
+        maxBufferLength:     isMobile ? 12 : 10,  // target ahead-buffer in seconds
+        maxMaxBufferLength:  isMobile ? 20 : 16,  // hard cap
+        maxBufferSize:       isMobile ?  10_000_000 : 12_000_000, // 10 MB / 12 MB
 
         // ── Quality / ABR ─────────────────────────────────────────────
         startLevel:          isMobile ? 0 : -1,  // mobile: lowest quality first, PC: auto
         capLevelToPlayerSize: true,              // never load resolution > screen size
         abrEwmaDefaultEstimate: isMobile ? 150_000 : 800_000, // initial BW guess
-        abrBandWidthFactor:   isMobile ? 0.70 : 0.85, // downgrade aggressively on drop
-        abrBandWidthUpFactor: isMobile ? 0.40 : 0.60, // upgrade conservatively
+        abrBandWidthFactor:   isMobile ? 0.80 : 0.85, // downgrade aggressively on drop
+        abrBandWidthUpFactor: isMobile ? 0.50 : 0.60, // upgrade conservatively
 
         // ── Stall / nudge ─────────────────────────────────────────────
         // maxStarvationDelay: start playback after this many seconds buffered
-        // Lower = starts faster but more stall risk; 1s is very aggressive
-        maxStarvationDelay:  isMobile ? 1 : 2,
-        maxLoadingDelay:     isMobile ? 2 : 3,
+        // Lower = starts faster but more stall risk. 1s on mobile was too
+        // aggressive — playback started before enough buffer existed to
+        // absorb network jitter, causing immediate rebuffering.
+        maxStarvationDelay:  isMobile ? 3 : 2,
+        maxLoadingDelay:     isMobile ? 4 : 3,
         // Internal HLS nudge: tiny seek when buffer gap detected
         nudgeOffset:         0.2,
         nudgeMaxRetry:       10,
@@ -359,9 +449,10 @@ export default function Player({
         fragLoadingMaxRetryTimeout: 4000,
 
         // ── Live sync ─────────────────────────────────────────────────
-        // 2 segments = closest to live without risking stall on 2s segments
-        liveSyncDurationCount:       isMobile ? 2 : 2,
-        liveMaxLatencyDurationCount: isMobile ? 3 : 4,
+        // Slightly larger live window on mobile gives more cushion
+        // against jitter before we need to snap/recover.
+        liveSyncDurationCount:       isMobile ? 3 : 2,
+        liveMaxLatencyDurationCount: isMobile ? 5 : 4,
         // Drift tolerance before HLS snaps to live edge internally
         maxFragLookUpTolerance: 0.2,
 
@@ -371,37 +462,7 @@ export default function Player({
       hls.loadSource(channel.url);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        // Preserve the user's current mute/volume preference across
-        // channel switches — don't force-unmute a muted player.
-        video.muted = mutedRef.current;
-        video.volume = volumeRef.current;
-        video.play().catch(() => {
-          // Autoplay blocked with sound — try muted first (always works).
-          video.muted = true;
-          video.play().then(() => {
-            // Muted play succeeded. Now immediately try to unmute — on
-            // Android Chrome this often works right after the play() resolves
-            // because the gesture policy is satisfied by the play itself.
-            video.muted = false;
-            // If the browser re-mutes it, the 'volumechange' event fires and
-            // video.muted will be true — we catch that below via the interval.
-            // Give it 300ms; if still muted, show tap-to-unmute overlay.
-            setTimeout(() => {
-              if (video.muted) {
-                // Still forced-muted — need explicit user gesture.
-                mutedRef.current = true;
-                setMuted(true);
-                setNeedsUnmute(true);
-              } else {
-                // Unmute succeeded silently — restore saved volume.
-                video.volume = volumeRef.current;
-                mutedRef.current = false;
-                setMuted(false);
-                setNeedsUnmute(false);
-              }
-            }, 300);
-          }).catch(() => {});
-        });
+        attemptAutoplay(video);
       });
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) {
@@ -449,26 +510,7 @@ export default function Player({
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       // Native HLS (Safari/iOS)
       video.src = channel.url;
-      video.muted = mutedRef.current;
-      video.volume = volumeRef.current;
-      video.play().catch(() => {
-        video.muted = true;
-        video.play().then(() => {
-          video.muted = false;
-          setTimeout(() => {
-            if (video.muted) {
-              mutedRef.current = true;
-              setMuted(true);
-              setNeedsUnmute(true);
-            } else {
-              video.volume = volumeRef.current;
-              mutedRef.current = false;
-              setMuted(false);
-              setNeedsUnmute(false);
-            }
-          }, 300);
-        }).catch(() => {});
-      });
+      attemptAutoplay(video);
     } else {
       window.clearTimeout(skipTimer);
       setError("HLS not supported on this browser.");
@@ -479,6 +521,7 @@ export default function Player({
       window.clearTimeout(skipTimer);
       window.clearTimeout(loadingTimer);
       window.clearTimeout(recoverTimer);
+      window.clearTimeout(waitingTimer);
       window.clearInterval(frozenWatchdog);
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
