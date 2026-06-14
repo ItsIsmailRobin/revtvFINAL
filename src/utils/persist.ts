@@ -1,79 +1,73 @@
-// Persistence helpers for RevTV.
+// Shared persistence helpers for "remember within this session, but not
+// forever" behavior.
 //
-// Storage strategy:
-//   sessionStorage  — cleared automatically when the tab is closed, the
-//                     browser exits, or on phone/PC restart.  Also always
-//                     empty in Incognito/Private mode.  No extra logic needed.
-//
-// What is remembered:
-//   channel id  — restored on refresh (F5 / logo soft-refresh)
-//   aspect mode — restored on refresh for the SAME channel; reset on channel change
-//   volume      — restored on refresh (PC only; mobile always starts at 1)
-//   muted       — restored on refresh (PC only; mobile always starts unmuted)
-//
-// Fresh start triggers (automatic — no code needed):
-//   • Tab close
-//   • Browser close / exit
-//   • PC or phone restart
-//   • Incognito / Private session
+// - Uses sessionStorage instead of localStorage:
+//     * sessionStorage is cleared the moment the tab/browser closes, so
+//       a new Incognito/Private session starts completely fresh with
+//       nothing remembered — exactly what's wanted there, with zero
+//       incognito-detection hacks.
+// - On top of that, we track a "last activity" timestamp. If more than
+//   INACTIVITY_LIMIT_MS has passed since the user last interacted with
+//   the player (tab left open and idle), stored preferences are treated
+//   as stale and reset to defaults — so coming back after 10+ minutes
+//   away gives a fresh start (default channel, aspect, volume, mute).
 
-export function getItem(key: string): string | null {
-  try { return window.sessionStorage.getItem(key); } catch { return null; }
-}
+const ACTIVITY_KEY = "revtv:lastActivity";
+export const INACTIVITY_LIMIT_MS = 10 * 60 * 1000; // 10 minutes
 
-export function setItem(key: string, value: string): void {
-  try { window.sessionStorage.setItem(key, value); } catch {}
-}
-
-export function removeItem(key: string): void {
-  try { window.sessionStorage.removeItem(key); } catch {}
-}
-
-// ── Named helpers (typed wrappers) ──────────────────────────────────────────
-
-export function getPersistedChannel(): string | null {
-  return getItem("revtv:channelId");
-}
-export function setPersistedChannel(id: string): void {
-  setItem("revtv:channelId", id);
-}
-
-export function getPersistedVolume(): number | null {
-  const raw = getItem("revtv:volume");
-  if (!raw) return null;
-  const v = parseFloat(raw);
-  return isNaN(v) ? null : Math.min(1, Math.max(0, v));
-}
-export function setPersistedVolume(v: number): void {
-  setItem("revtv:volume", String(v));
-}
-
-export function getPersistedMuted(): boolean | null {
-  const raw = getItem("revtv:muted");
-  if (raw === null) return null;
-  return raw === "true";
-}
-export function setPersistedMuted(m: boolean): void {
-  setItem("revtv:muted", String(m));
-}
-
-export function getPersistedAspect(channelId: string): string | null {
+/** Record that the user is actively using the player right now. Call this
+ *  on meaningful interactions (channel switch, volume/mute change, etc). */
+export function markActivity(): void {
   try {
-    const raw = getItem("revtv:aspect");
-    if (!raw) return null;
-    const obj = JSON.parse(raw);
-    if (obj && obj.channelId === channelId) return obj.aspectMode ?? null;
-    return null;
-  } catch { return null; }
-}
-export function setPersistedAspect(channelId: string, aspectMode: string): void {
-  setItem("revtv:aspect", JSON.stringify({ channelId, aspectMode }));
+    window.sessionStorage.setItem(ACTIVITY_KEY, String(Date.now()));
+  } catch {}
 }
 
-// Legacy stubs so nothing else explodes if imported elsewhere
-export function getFresh(_k: string): string | null { return getItem(_k); }
-export function setPersisted(k: string, v: string): void { setItem(k, v); }
-export function markActivity(): void {}
-export function clearAllPersisted(): void {}
-export function isSessionStale(): boolean { return false; }
-export const INACTIVITY_LIMIT_MS = 0;
+/** True if more than INACTIVITY_LIMIT_MS has passed since the last
+ *  recorded activity (or no activity has ever been recorded). */
+export function isSessionStale(): boolean {
+  try {
+    const raw = window.sessionStorage.getItem(ACTIVITY_KEY);
+    if (!raw) return true;
+    const last = parseInt(raw, 10);
+    if (isNaN(last)) return true;
+    return Date.now() - last > INACTIVITY_LIMIT_MS;
+  } catch {
+    return true;
+  }
+}
+
+/** Read a stored value, but only if the session isn't stale. If the
+ *  session IS stale, the key is removed and `null` is returned — this
+ *  also clears stale data for any preference that happens to ask for it. */
+export function getFresh(key: string): string | null {
+  try {
+    if (isSessionStale()) {
+      clearAllPersisted();
+      return null;
+    }
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+export function setPersisted(key: string, value: string): void {
+  try {
+    window.sessionStorage.setItem(key, value);
+    markActivity();
+  } catch {}
+}
+
+/** Remove every revtv:-prefixed key from sessionStorage (used when the
+ *  session is detected as stale, to fully reset to a clean state). */
+export function clearAllPersisted(): void {
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < window.sessionStorage.length; i++) {
+      const k = window.sessionStorage.key(i);
+      if (k && k.startsWith("revtv:")) keys.push(k);
+    }
+    keys.forEach((k) => window.sessionStorage.removeItem(k));
+  } catch {}
+}

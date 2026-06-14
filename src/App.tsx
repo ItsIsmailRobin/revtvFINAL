@@ -7,7 +7,7 @@ import Player from "./components/Player";
 import Footer from "./components/Footer";
 import FifaSchedule from "./components/FifaSchedule";
 import { parseM3U, getUniqueGroups, type Channel } from "./utils/parseM3U";
-import { getPersistedChannel, setPersistedChannel } from "./utils/persist";
+import { getFresh, setPersisted } from "./utils/persist";
 
 const PLAYLIST_URL =
   "https://raw.githubusercontent.com/ItsIsmailRobin/playlisttv/refs/heads/main/playlist.m3u";
@@ -54,11 +54,11 @@ export default function App() {
   const channelsRef = useRef<Channel[]>([]);
   useEffect(() => { channelsRef.current = channels; }, [channels]);
 
-  // Remember the currently-watched channel in sessionStorage.
-  // Cleared automatically when the tab/browser closes or on restart.
+  // Remember the currently-watched channel for THIS session only (10-min
+  // inactivity expiry + cleared entirely in Incognito — see utils/persist.ts).
   useEffect(() => {
     if (!activeChannel) return;
-    setPersistedChannel(activeChannel.id);
+    setPersisted("revtv:lastChannelId", activeChannel.id);
   }, [activeChannel]);
 
   const handleStreamError = useCallback((failedChannel: Channel) => {
@@ -84,11 +84,10 @@ export default function App() {
       if (!parsed.length) throw new Error("No channels found");
       setChannels(parsed);
       if (!activeChannel) {
-        // Restore the last-watched channel (persisted in sessionStorage —
-        // automatically fresh after tab close, browser exit, or restart).
+        // Restore the last-watched channel for THIS session only
         let restored: Channel | null = null;
         try {
-          const savedId = getPersistedChannel();
+          const savedId = getFresh("revtv:lastChannelId");
           if (savedId) restored = parsed.find(c => c.id === savedId) || null;
         } catch {}
         setActiveChannel(restored || parsed[0]);
@@ -133,8 +132,12 @@ export default function App() {
 
   const handleSelect = (ch: Channel) => {
     setActiveChannel(ch);
-    // Do NOT scroll the page — keep the header and player always in view.
-    // The channel list scrolls inside its own panel; the page stays at top.
+    // On mobile the channel list is below the player — snap the page
+    // instantly to the top so the player is always in view.
+    // Use "instant" (no animation) so there's zero visible page movement.
+    if (window.innerWidth < 1024) {
+      window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+    }
   };
 
   // Player height = min(aspect-video of its column, 80vh)

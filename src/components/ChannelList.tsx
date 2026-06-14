@@ -9,13 +9,12 @@ interface ChannelListProps {
   loading: boolean;
 }
 
-/** Walk up the DOM to find the nearest ancestor that is scrollable. */
-function findScrollParent(el: HTMLElement): HTMLElement | null {
+/** Walk up the DOM to find the nearest scrollable ancestor. */
+function getScrollParent(el: HTMLElement): HTMLElement | null {
   let node: HTMLElement | null = el.parentElement;
-  while (node) {
-    const style = window.getComputedStyle(node);
-    const overflow = style.overflow + style.overflowY;
-    if (/auto|scroll/.test(overflow) && node.scrollHeight > node.clientHeight) {
+  while (node && node !== document.body) {
+    const { overflow, overflowY } = window.getComputedStyle(node);
+    if (/auto|scroll/.test(overflow + overflowY) && node.scrollHeight > node.clientHeight) {
       return node;
     }
     node = node.parentElement;
@@ -32,25 +31,21 @@ export default function ChannelList({
   const activeRef = useRef<HTMLButtonElement>(null);
   const scrolledIdRef = useRef<string | null>(null);
 
-  // Scroll the active channel into view within its scrollable sidebar panel.
-  // Uses the button's own scrollIntoView — but only inside the nearest
-  // scrollable ancestor (the sidebar div), NOT the page itself.
-  // This way the page never jumps; the channel list panel scrolls internally.
+  // Scroll the active channel into view INSIDE the sidebar panel only.
+  // Never touches window.scrollY — the page position stays wherever it is.
   useEffect(() => {
     if (loading || !activeId) return;
     if (scrolledIdRef.current === activeId) return;
     scrolledIdRef.current = activeId;
-    if (!activeRef.current) return;
-    // Find the nearest scrollable ancestor (the sidebar panel scroll container)
-    // and scroll the button into view within that container only.
     const el = activeRef.current;
-    const scrollParent = findScrollParent(el);
-    if (scrollParent) {
-      const elRect = el.getBoundingClientRect();
-      const parentRect = scrollParent.getBoundingClientRect();
-      const offset = elRect.top - parentRect.top - parentRect.height / 2 + elRect.height / 2;
-      scrollParent.scrollBy({ top: offset, behavior: "auto" });
-    }
+    if (!el) return;
+    const panel = getScrollParent(el);
+    if (!panel) return;
+    // Center the active item inside the scrollable panel
+    const elTop    = el.offsetTop;
+    const elHeight = el.offsetHeight;
+    const panelH   = panel.clientHeight;
+    panel.scrollTop = elTop - panelH / 2 + elHeight / 2;
   }, [activeId, loading]);
 
   if (loading) {

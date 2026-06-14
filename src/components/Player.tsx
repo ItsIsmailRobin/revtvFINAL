@@ -9,11 +9,7 @@ import {
 import Hls from "hls.js";
 import type { Channel } from "../utils/parseM3U";
 import { cn } from "../utils/cn";
-import {
-  getPersistedVolume, setPersistedVolume,
-  getPersistedMuted,  setPersistedMuted,
-  getPersistedAspect, setPersistedAspect,
-} from "../utils/persist";
+import { getFresh, setPersisted, markActivity } from "../utils/persist";
 
 interface PlayerProps {
   channel: Channel | null;
@@ -70,27 +66,30 @@ export default function Player({
   const hasStartedPlaybackRef = useRef(false);
 
   const [playing, setPlaying] = useState(false);
-  // PC: restore volume + muted from sessionStorage (cleared on tab/browser close).
-  // Mobile (Android/iOS): always start fresh — volume=1, muted=false.
+  // Restore muted/volume for THIS session only (sessionStorage + 10-min
+  // inactivity expiry — see utils/persist.ts). On Android/iOS, never
+  // restore: volume/mute always reset to defaults each session.
   const [muted, setMuted] = useState<boolean>(() => {
     if (detectIsMobile()) return false;
-    return getPersistedMuted() ?? false;
+    return getFresh("revtv:muted") === "true";
   });
   const [volume, setVolume] = useState<number>(() => {
     if (detectIsMobile()) return 1;
-    return getPersistedVolume() ?? 1;
+    const v = parseFloat(getFresh("revtv:volume") ?? "1");
+    return isNaN(v) ? 1 : Math.min(1, Math.max(0, v));
   });
-  // Refs mirror muted/volume so the channel-switch effect can read the
-  // latest value without causing a full HLS re-attach on every toggle.
+  // Refs mirroring muted/volume so the channel-switch effect (which only
+  // re-runs on channel change) can read the latest user preference
+  // without forcing a full HLS re-attach on every mute/volume toggle.
   const mutedRef = useRef(muted);
   const volumeRef = useRef(volume);
   useEffect(() => {
     mutedRef.current = muted;
-    if (!detectIsMobile()) setPersistedMuted(muted);
+    if (!detectIsMobile()) setPersisted("revtv:muted", String(muted));
   }, [muted]);
   useEffect(() => {
     volumeRef.current = volume;
-    if (!detectIsMobile()) setPersistedVolume(volume);
+    if (!detectIsMobile()) setPersisted("revtv:volume", String(volume));
   }, [volume]);
   // Brightness: in-memory only on every platform (never persisted), and
   // explicitly reset to default each session on Android/iOS per above —
@@ -119,25 +118,47 @@ export default function Player({
   type AspectMode = "contain" | "cover" | "fill" | "native";
   const [aspectMode, setAspectMode] = useState<AspectMode>("contain");
 
-  // Per-channel aspect ratio:
-  // - Switching to a DIFFERENT channel → always reset to "contain"
-  // - Refresh (F5 / logo soft-refresh) on the SAME channel → restore last aspect
-  // - Tab/browser close / restart → fresh (sessionStorage cleared automatically)
+  // Per-channel aspect ratio memory:
+  // - On refresh / logo click, the same channel is restored — also
+  //   restore the aspect ratio it was last set to.
+  // - On switching to a different channel, always reset to default
+  //   ("contain"), even if returning to a previously-viewed channel.
   const lastChannelIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!channel) return;
     if (lastChannelIdRef.current === channel.id) return;
     lastChannelIdRef.current = channel.id;
-    // Try to restore aspect for this specific channel
-    const saved = getPersistedAspect(channel.id);
-    const valid = ["contain", "cover", "fill", "native"];
-    setAspectMode((saved && valid.includes(saved) ? saved : "contain") as AspectMode);
+
+    let restored: AspectMode | null = null;
+    try {
+      const raw = getFresh("revtv:aspect");
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (
+          saved &&
+          saved.channelId === channel.id &&
+          (saved.aspectMode === "contain" ||
+            saved.aspectMode === "cover" ||
+            saved.aspectMode === "fill" ||
+            saved.aspectMode === "native")
+        ) {
+          restored = saved.aspectMode;
+        }
+      }
+    } catch {}
+
+    setAspectMode(restored ?? "contain");
   }, [channel?.id]);
 
-  // Persist aspect whenever it changes so refresh restores it.
+  // Keep storage in sync with the current channel + aspect mode, so a
+  // refresh/logo click can restore it for THIS channel only — and only
+  // within the same active session (see utils/persist.ts).
   useEffect(() => {
     if (!channel) return;
-    setPersistedAspect(channel.id, aspectMode);
+    setPersisted(
+      "revtv:aspect",
+      JSON.stringify({ channelId: channel.id, aspectMode })
+    );
   }, [channel?.id, aspectMode]);
 
   // Status indicator — shows current volume / aspect ratio briefly
@@ -628,6 +649,34 @@ export default function Player({
     v.muted = muted;
     v.volume = volume;
   }, [volume, muted]);
+
+  // ---- session activity tracking ----
+  // Any interaction (click/tap/key/scroll) marks the session as active,
+  // resetting the 10-minute inactivity clock used by utils/persist.ts.
+  // Throttled so we're not writing to sessionStorage on every pixel of
+  // scroll — once every few seconds is plenty.
+  useEffect(() => {
+    let lastMark = 0;
+    const onActivity = () => {
+      const now = Date.now();
+      if (now - lastMark < 5000) return;
+      lastMark = now;
+      markActivity();
+    };
+    const opts = { passive: true } as AddEventListenerOptions;
+    window.addEventListener("pointerdown", onActivity, opts);
+    window.addEventListener("keydown", onActivity);
+    window.addEventListener("touchstart", onActivity, opts);
+    window.addEventListener("wheel", onActivity, opts);
+    // Record initial activity for this load too.
+    onActivity();
+    return () => {
+      window.removeEventListener("pointerdown", onActivity);
+      window.removeEventListener("keydown", onActivity);
+      window.removeEventListener("touchstart", onActivity);
+      window.removeEventListener("wheel", onActivity);
+    };
+  }, []);
 
   // apply brightness as video filter
   useEffect(() => {
