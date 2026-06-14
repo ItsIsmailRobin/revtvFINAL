@@ -212,88 +212,156 @@ export default function Player({
     userPausedRef.current = false;
     lastLiveSnapRef.current = 0;
 
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
+
     // Track recovery attempts to avoid infinite loops
     let networkRetries = 0;
     let mediaRetries = 0;
-    const MAX_RETRIES = 2;
-    // Skip timer: if stream doesn't start within 12s, consider it dead
+    const MAX_NETWORK_RETRIES = 5;
+    const MAX_MEDIA_RETRIES   = 4;
+
+    // Skip timer: if stream doesn't produce a frame within N seconds, skip it
     const skipTimer = window.setTimeout(() => {
       if (channel) onStreamError?.(channel);
-    }, 12000);
+    }, isMobile ? 9000 : 11000);
 
+    // ── Helpers ──────────────────────────────────────────────────────────
+    // Snap currentTime to the live edge. Safe to call any time.
+    const snapToLive = (v: HTMLVideoElement) => {
+      const hls = hlsRef.current;
+      if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
+        v.currentTime = hls.liveSyncPosition;
+      } else if (v.seekable.length > 0) {
+        const end = v.seekable.end(v.seekable.length - 1);
+        if (isFinite(end)) v.currentTime = end;
+      }
+    };
+
+    // ── Stall guard ───────────────────────────────────────────────────────
+    // Single debounce flag shared by onPause / onStalled / frozen detector.
+    // Prevents stacking multiple simultaneous recover attempts (the root
+    // cause of the load→play→load→play loop on slow connections).
+    let recoverScheduled = false;
+    let recoverTimer = 0;
+
+    const scheduleRecover = (delayMs: number) => {
+      if (recoverScheduled || userPausedRef.current) return;
+      recoverScheduled = true;
+      recoverTimer = window.setTimeout(() => {
+        recoverScheduled = false;
+        const v = videoRef.current;
+        if (!v || v.ended || userPausedRef.current) return;
+        snapToLive(v);                        // always jump to freshest segment
+        v.play().catch(() => {});
+      }, delayMs);
+    };
+
+    // ── Video events ─────────────────────────────────────────────────────
     const onPlaying = () => {
       window.clearTimeout(skipTimer);
+      window.clearTimeout(recoverTimer);
+      recoverScheduled = false;
       setLoading(false);
       setPlaying(true);
     };
-    const onWaiting = () => {
-      setLoading(true);
-    };
-    const onPause = () => {
+    const onWaiting  = () => { setLoading(true); };
+    const onPause    = () => {
       setPlaying(false);
-      // Auto-resume ONLY if the stream stalled on its own (buffering gap,
-      // network hiccup, etc.) — never if the user intentionally paused.
-      // Use a longer delay (600ms) so that togglePlay's synchronous
-      // `userPausedRef.current = true` write always lands before this runs,
-      // even on slow Android JS threads.
-      window.setTimeout(() => {
-        const v = videoRef.current;
-        if (!v || v.ended) return;
-        // Strict guard: if user paused, do nothing — wait for them to resume.
-        if (userPausedRef.current) return;
-        if (v.paused) v.play().catch(() => {});
-      }, 600);
+      if (!userPausedRef.current) scheduleRecover(700);
     };
-    const onEnded = () => {
-      // For m3u8 streams set on loop — restart from beginning
+    const onStalled  = () => { scheduleRecover(1000); };   // buffer empty — recover fast
+    const onEnded    = () => {
       const v = videoRef.current;
       if (!v) return;
       v.currentTime = 0;
       v.play().catch(() => {});
     };
-    const onError = () => {
+    const onError    = () => {
       setLoading(false);
       if (channel) onStreamError?.(channel);
     };
-    const onStalled = () => {
-      // Stream stalled (buffering). After grace period, snap to live edge
-      // and resume — but ONLY if the user hasn't manually paused.
-      window.setTimeout(() => {
-        const v = videoRef.current;
-        const hls = hlsRef.current;
-        // Respect user pause — never auto-resume on stall if user paused.
-        if (!v || !v.paused || userPausedRef.current) return;
-        if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
-          v.currentTime = hls.liveSyncPosition;
-        } else if (v.seekable.length > 0) {
-          const end = v.seekable.end(v.seekable.length - 1);
-          if (isFinite(end)) v.currentTime = end;
+
+    // ── Frozen detector (1-second interval) ──────────────────────────────
+    // timeupdate fires ~4×/s but slows down when tab is hidden.
+    // A dedicated 1-second interval is more reliable for detecting a truly
+    // frozen stream on both mobile and PC.
+    let lastTime  = -1;
+    let frozenSec = 0;
+    const FROZEN_THRESHOLD = isMobile ? 3 : 4; // seconds before we act
+    const frozenWatchdog = window.setInterval(() => {
+      const v = videoRef.current;
+      if (!v || v.paused || v.seeking || userPausedRef.current) {
+        lastTime = -1; frozenSec = 0; return;
+      }
+      if (v.currentTime === lastTime) {
+        frozenSec++;
+        if (frozenSec >= FROZEN_THRESHOLD) {
+          frozenSec = 0; lastTime = -1;
+          scheduleRecover(0); // snap immediately — stream is definitely frozen
         }
-        v.play().catch(() => {});
-      }, 3500);
-    };
+      } else {
+        frozenSec = 0;
+        lastTime  = v.currentTime;
+      }
+    }, 1000);
+
     video.addEventListener("playing", onPlaying);
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("stalled", onStalled);
-    video.addEventListener("pause", onPause);
-    video.addEventListener("ended", onEnded);
-    video.addEventListener("error", onError);
+    video.addEventListener("pause",   onPause);
+    video.addEventListener("ended",   onEnded);
+    video.addEventListener("error",   onError);
 
     if (Hls.isSupported()) {
+      // isMobile already declared above (used by skip timer + frozen threshold)
       const hls = new Hls({
-        enableWorker: true,
+        enableWorker:  true,
         lowLatencyMode: true,
-        backBufferLength: 30,
-        maxBufferLength: 8,
-        maxMaxBufferLength: 30,
-        maxBufferSize: 30 * 1000 * 1000,
-        startLevel: -1,
-        capLevelToPlayerSize: true,
-        abrEwmaDefaultEstimate: 500000,
-        // Fewer retries — fail faster so we can skip to next channel
-        fragLoadingMaxRetry: 2,
-        manifestLoadingMaxRetry: 2,
-        levelLoadingMaxRetry: 2,
+
+        // ── Buffer sizing ─────────────────────────────────────────────
+        // Keep buffers small so stale data is abandoned quickly and we
+        // always snap back to the live edge after a hiccup.
+        // Mobile needs even smaller buffers to avoid memory pressure.
+        backBufferLength:    isMobile ?  4 :  8,  // how much to keep behind currentTime
+        maxBufferLength:     isMobile ?  6 : 10,  // target ahead-buffer in seconds
+        maxMaxBufferLength:  isMobile ? 10 : 16,  // hard cap
+        maxBufferSize:       isMobile ?  6_000_000 : 12_000_000, // 6 MB / 12 MB
+
+        // ── Quality / ABR ─────────────────────────────────────────────
+        startLevel:          isMobile ? 0 : -1,  // mobile: lowest quality first, PC: auto
+        capLevelToPlayerSize: true,              // never load resolution > screen size
+        abrEwmaDefaultEstimate: isMobile ? 150_000 : 800_000, // initial BW guess
+        abrBandWidthFactor:   isMobile ? 0.70 : 0.85, // downgrade aggressively on drop
+        abrBandWidthUpFactor: isMobile ? 0.40 : 0.60, // upgrade conservatively
+
+        // ── Stall / nudge ─────────────────────────────────────────────
+        // maxStarvationDelay: start playback after this many seconds buffered
+        // Lower = starts faster but more stall risk; 1s is very aggressive
+        maxStarvationDelay:  isMobile ? 1 : 2,
+        maxLoadingDelay:     isMobile ? 2 : 3,
+        // Internal HLS nudge: tiny seek when buffer gap detected
+        nudgeOffset:         0.2,
+        nudgeMaxRetry:       10,
+        highBufferWatchdogPeriod: 2, // check for buffer issues every 2s
+
+        // ── Fragment loading ──────────────────────────────────────────
+        // More retries + shorter delays = faster recovery from hiccups
+        fragLoadingMaxRetry:     6,
+        manifestLoadingMaxRetry: 5,
+        levelLoadingMaxRetry:    5,
+        fragLoadingRetryDelay:   400,
+        manifestLoadingRetryDelay: 400,
+        levelLoadingRetryDelay:  400,
+        fragLoadingMaxRetryTimeout: 4000,
+
+        // ── Live sync ─────────────────────────────────────────────────
+        // 2 segments = closest to live without risking stall on 2s segments
+        liveSyncDurationCount:       isMobile ? 2 : 2,
+        liveMaxLatencyDurationCount: isMobile ? 3 : 4,
+        // Drift tolerance before HLS snaps to live edge internally
+        maxFragLookUpTolerance: 0.2,
+
         progressive: true,
       });
       hlsRef.current = hls;
@@ -336,20 +404,26 @@ export default function Player({
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              if (networkRetries < MAX_RETRIES) {
+              if (networkRetries < MAX_NETWORK_RETRIES) {
                 networkRetries++;
-                hls.startLoad();
+                // Exponential back-off: 400ms, 800ms, 1.6s, 3.2s, 6.4s
+                window.setTimeout(() => hls.startLoad(), 400 * Math.pow(2, networkRetries - 1));
               } else {
-                // Network failed after retries — skip to next channel
                 window.clearTimeout(skipTimer);
                 setLoading(false);
                 if (channel) onStreamError?.(channel);
               }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              if (mediaRetries < MAX_RETRIES) {
+              if (mediaRetries < MAX_MEDIA_RETRIES) {
                 mediaRetries++;
-                hls.recoverMediaError();
+                if (mediaRetries === 1) {
+                  hls.recoverMediaError();
+                } else {
+                  // Second attempt: full swap — detach then re-attach media
+                  hls.swapAudioCodec();
+                  hls.recoverMediaError();
+                }
               } else {
                 window.clearTimeout(skipTimer);
                 setLoading(false);
@@ -360,6 +434,12 @@ export default function Player({
               window.clearTimeout(skipTimer);
               setLoading(false);
               if (channel) onStreamError?.(channel);
+          }
+        } else {
+          // Non-fatal: buffer stall nudge — HLS will nudge internally,
+          // but we also schedule a live-edge snap for safety
+          if (data.details === "bufferStalledError" || data.details === "bufferNudgeOnStall") {
+            scheduleRecover(500);
           }
         }
       });
@@ -394,12 +474,15 @@ export default function Player({
 
     return () => {
       window.clearTimeout(skipTimer);
+      window.clearTimeout(recoverTimer);
+      window.clearInterval(frozenWatchdog);
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("stalled", onStalled);
-      video.removeEventListener("pause", onPause);
-      video.removeEventListener("ended", onEnded);
-      video.removeEventListener("error", onError);
+      video.removeEventListener("pause",   onPause);
+      video.removeEventListener("ended",   onEnded);
+      video.removeEventListener("error",   onError);
+      video.removeEventListener("timeupdate", onTimeUpdate);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -579,8 +662,7 @@ export default function Player({
     const hls = hlsRef.current;
     if (!v) return;
     const now = Date.now();
-    // Debounce: don't snap more than once every 8 seconds
-    if (now - lastLiveSnapRef.current < 8_000) return;
+    if (now - lastLiveSnapRef.current < 3_000) return; // debounce 3s
     let liveEdge: number | null = null;
     if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
       liveEdge = hls.liveSyncPosition;
@@ -589,22 +671,20 @@ export default function Player({
       if (isFinite(end)) liveEdge = end;
     }
     if (liveEdge == null) return;
-    if (liveEdge - v.currentTime > 5) {
+    if (liveEdge - v.currentTime > 3) { // snap if >3s behind live
       lastLiveSnapRef.current = now;
       v.currentTime = liveEdge;
     }
   }, []);
 
-  // Live-edge keeper: snaps forward if 10s+ behind. Runs every 30s (no spam).
-  // Also fires when user resumes after a manual pause via syncToLiveEdge() in togglePlay.
+  // Live-edge keeper: runs every 5s, snaps if >3s behind live edge.
   useEffect(() => {
     const id = window.setInterval(() => {
       const v = videoRef.current;
-      if (!v || v.paused || v.seeking) return;
+      if (!v || v.paused || v.seeking || userPausedRef.current) return;
       const hls = hlsRef.current;
       const now = Date.now();
-      // Debounce: skip if we already snapped recently
-      if (now - lastLiveSnapRef.current < 8_000) return;
+      if (now - lastLiveSnapRef.current < 3_000) return;
       let liveEdge: number | null = null;
       if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
         liveEdge = hls.liveSyncPosition;
@@ -613,11 +693,11 @@ export default function Player({
         if (isFinite(end)) liveEdge = end;
       }
       if (liveEdge == null) return;
-      if (liveEdge - v.currentTime > 5) {
+      if (liveEdge - v.currentTime > 3) {
         lastLiveSnapRef.current = now;
         v.currentTime = liveEdge;
       }
-    }, 30_000);
+    }, 5_000);
     return () => window.clearInterval(id);
   }, []);
 
