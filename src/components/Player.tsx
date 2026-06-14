@@ -49,6 +49,10 @@ export default function Player({
   // Tracks whether the user deliberately paused — prevents auto-resume from
   // firing when the user hits the pause button intentionally.
   const userPausedRef = useRef(false);
+  // Tracks whether the current channel has started playing at least once
+  // since being switched to — used to suppress the pause/play glass
+  // overlay during the brief loading window right after a channel switch.
+  const hasStartedPlaybackRef = useRef(false);
 
   const [playing, setPlaying] = useState(false);
   // Restore muted/volume from localStorage so refresh or logo-click doesn't
@@ -210,6 +214,11 @@ export default function Player({
     setPlaying(false);
     userPausedRef.current = false;
     lastLiveSnapRef.current = 0;
+    // Suppress the pause overlay until the new channel has actually
+    // started playing at least once — prevents the glass play button
+    // flashing during the brief setPlaying(false) → setPlaying(true)
+    // window on every channel switch.
+    hasStartedPlaybackRef.current = false;
     // Delay showing the loading spinner — the previous frame stays visible
     // during the brief handoff, so the screen never goes dark on channel switch.
     const loadingTimer = window.setTimeout(() => setLoading(true), 300);
@@ -234,7 +243,7 @@ export default function Player({
     // Skip timer: if stream doesn't produce a frame within N seconds, skip it
     const skipTimer = window.setTimeout(() => {
       if (channel) onStreamError?.(channel);
-    }, isMobile ? 15000 : 11000);
+    }, isIOS ? 18000 : isMobile ? 15000 : 11000);
 
     // ── Helpers ──────────────────────────────────────────────────────────
     // Snap currentTime to the live edge. Safe to call any time.
@@ -260,7 +269,11 @@ export default function Player({
     // which was re-triggering scheduleRecover and causing a visible
     // loading→play→loading loop every couple of seconds.
     let recoverCooldownUntil = 0;
-    const RECOVER_COOLDOWN_MS = isMobile ? 5000 : 1500;
+    // iOS native HLS rebuffers more slowly than hls.js on Android/desktop —
+    // give it the longest cooldown so we don't repeatedly call play()/seek
+    // while it's still naturally recovering (which restarts its internal
+    // buffering and looks like "loading again").
+    const RECOVER_COOLDOWN_MS = isIOS ? 7000 : isMobile ? 5000 : 1500;
     let waitingTimer = 0;
 
     const scheduleRecover = (delayMs: number) => {
@@ -272,7 +285,13 @@ export default function Player({
         recoverCooldownUntil = Date.now() + RECOVER_COOLDOWN_MS;
         const v = videoRef.current;
         if (!v || v.ended || userPausedRef.current) return;
-        snapToLive(v);                        // always jump to freshest segment
+        // On iOS native HLS, seeking to the live edge while the player is
+        // still buffering throws away progress and restarts the load —
+        // this is what produced "loading → loading again → skip". Just
+        // nudge play() and let AVPlayer's own buffering resolve it; only
+        // snap to live if we're already far behind (handled by the
+        // periodic live-edge sync effect, not here).
+        if (!isIOS) snapToLive(v);
         v.play().catch(() => {});
       }, delayMs);
     };
@@ -284,6 +303,8 @@ export default function Player({
       window.clearTimeout(recoverTimer);
       window.clearTimeout(waitingTimer);
       recoverScheduled = false;
+      nativeErrorRetries = 0;
+      hasStartedPlaybackRef.current = true;
       setLoading(false);
       setPlaying(true);
     };
@@ -302,16 +323,37 @@ export default function Player({
     };
     const onPause    = () => {
       setPlaying(false);
-      if (!userPausedRef.current) scheduleRecover(isMobile ? 1200 : 700);
+      if (!userPausedRef.current) scheduleRecover(isIOS ? 1800 : isMobile ? 1200 : 700);
     };
-    const onStalled  = () => { scheduleRecover(isMobile ? 1500 : 1000); };   // buffer empty — recover
+    const onStalled  = () => { scheduleRecover(isIOS ? 2000 : isMobile ? 1500 : 1000); };   // buffer empty — recover
     const onEnded    = () => {
       const v = videoRef.current;
       if (!v) return;
       v.currentTime = 0;
       v.play().catch(() => {});
     };
+    // Native <video> error event (used on the iOS native-HLS path — hls.js
+    // has its own ERROR handler below). iOS/Safari can fire a transient
+    // "error" during normal rebuffering on a flaky connection, not just on
+    // a truly broken stream. Previously this skipped the channel
+    // immediately, which is the "it even skips the channel" symptom.
+    // Retry by reloading the source with backoff first; only skip after
+    // repeated failures.
+    let nativeErrorRetries = 0;
+    const MAX_NATIVE_ERROR_RETRIES = 4;
     const onError    = () => {
+      if (isIOS && nativeErrorRetries < MAX_NATIVE_ERROR_RETRIES) {
+        nativeErrorRetries++;
+        const v = videoRef.current;
+        window.setTimeout(() => {
+          if (!v || userPausedRef.current) return;
+          // Reload the source — clears the errored media element state
+          // without tearing down the whole player/effect.
+          v.src = channel.url;
+          v.play().catch(() => {});
+        }, 500 * Math.pow(2, nativeErrorRetries - 1)); // 500ms, 1s, 2s, 4s
+        return;
+      }
       setLoading(false);
       if (channel) onStreamError?.(channel);
     };
@@ -322,7 +364,7 @@ export default function Player({
     // frozen stream on both mobile and PC.
     let lastTime  = -1;
     let frozenSec = 0;
-    const FROZEN_THRESHOLD = isMobile ? 6 : 4; // seconds before we act
+    const FROZEN_THRESHOLD = isIOS ? 8 : isMobile ? 6 : 4; // seconds before we act
     const frozenWatchdog = window.setInterval(() => {
       const v = videoRef.current;
       if (!v || v.paused || v.seeking || userPausedRef.current) {
@@ -1266,10 +1308,10 @@ export default function Player({
           with an iOS-style frosted play button that scales/fades in
           smoothly. Clicking anywhere resumes playback. Hidden while
           loading/transitioning so it doesn't fight those overlays. */}
-      {channel && !playing && !loading && !error && !fsTransitioning && (
+      {channel && !playing && !loading && !error && !fsTransitioning && hasStartedPlaybackRef.current && (
         <div
-          className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 backdrop-blur-[2px] transition-opacity duration-300"
-          style={{ animation: "fadeInOverlay 260ms ease forwards" }}
+          className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 backdrop-blur-[2px]"
+          style={{ animation: "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both" }}
           onClick={(e) => { e.stopPropagation(); togglePlay(); }}
           onDoubleClick={onVideoDoubleClick}
         >
@@ -1278,14 +1320,14 @@ export default function Player({
             onClick={(e) => { e.stopPropagation(); togglePlay(); }}
             aria-label="Play"
             data-player-control
-            className="group flex h-16 w-16 items-center justify-center rounded-full border text-white transition-transform duration-200 ease-out hover:scale-105 active:scale-95 sm:h-[72px] sm:w-[72px]"
+            className="group flex h-16 w-16 items-center justify-center rounded-full border text-white transition-[transform,background-color] duration-300 ease-out hover:scale-[1.06] active:scale-95 sm:h-[72px] sm:w-[72px]"
             style={{
-              animation: "glassPop 420ms cubic-bezier(.22,1,.36,1) both",
-              background: "rgba(255,255,255,0.12)",
-              borderColor: "rgba(255,255,255,0.25)",
-              backdropFilter: "blur(20px) saturate(180%)",
-              WebkitBackdropFilter: "blur(20px) saturate(180%)",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.3)",
+              animation: "iosGlassPop 480ms cubic-bezier(.22,1,.36,1) both",
+              background: "rgba(255,255,255,0.14)",
+              borderColor: "rgba(255,255,255,0.28)",
+              backdropFilter: "blur(24px) saturate(180%)",
+              WebkitBackdropFilter: "blur(24px) saturate(180%)",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.35)",
             }}
           >
             <svg
@@ -1293,7 +1335,8 @@ export default function Player({
               height="26"
               viewBox="0 0 24 24"
               fill="currentColor"
-              className="ml-1 transition-transform duration-200 ease-out group-hover:scale-110 sm:h-7 sm:w-7"
+              className="ml-1 transition-transform duration-300 ease-out group-hover:scale-110 sm:h-7 sm:w-7"
+              style={{ animation: "iosIconFade 420ms cubic-bezier(.22,1,.36,1) 60ms both" }}
             >
               <polygon points="5 3 19 12 5 21 5 3" />
             </svg>
@@ -1806,11 +1849,21 @@ export default function Player({
           0% { opacity: 0; transform: scale(0.92); }
           100% { opacity: 1; transform: scale(1); }
         }
+        /* iOS-glass style overlay fade — backdrop blur eases in smoothly. */
+        @keyframes iosOverlayFade {
+          0%   { opacity: 0; backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); }
+          100% { opacity: 1; }
+        }
         /* iOS-glass style pop for the pause/play button — gentle
-           scale + fade with a soft overshoot, no harsh bounce. */
-        @keyframes glassPop {
-          0%   { opacity: 0; transform: scale(0.8); }
-          60%  { opacity: 1; transform: scale(1.04); }
+           scale + blur-in with a soft overshoot, no harsh bounce. */
+        @keyframes iosGlassPop {
+          0%   { opacity: 0; transform: scale(0.82); filter: blur(6px); }
+          70%  { opacity: 1; transform: scale(1.05); filter: blur(0px); }
+          100% { opacity: 1; transform: scale(1); filter: blur(0px); }
+        }
+        /* Icon fades/sharpens in slightly after the glass shell. */
+        @keyframes iosIconFade {
+          0%   { opacity: 0; transform: scale(0.7); }
           100% { opacity: 1; transform: scale(1); }
         }
       `}</style>

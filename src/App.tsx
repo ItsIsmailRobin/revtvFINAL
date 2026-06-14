@@ -145,7 +145,7 @@ export default function App() {
   const sidebarContent = (
     <>
       <CategoryHeader groupsLength={groups.length} isOpen={categoriesOpen} onToggle={() => setCategoriesOpen(v => !v)} />
-      <div className="scrollbar-hide overflow-y-auto" style={{ scrollbarWidth:"none", height: SIDEBAR_SCROLL_H }}>
+      <div className="scrollbar-hide overflow-y-auto" style={{ scrollbarWidth:"none", maxHeight: SIDEBAR_SCROLL_H }}>
         {categoriesOpen ? (
           <AllTagsPanel tags={allTags} activeTag={activeTag} onSelect={t => { setActiveTag(t); setCategoriesOpen(false); }} />
         ) : (
