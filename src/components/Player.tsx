@@ -306,9 +306,11 @@ export default function Player({
       window.clearTimeout(waitingTimer);
       recoverScheduled = false;
       nativeErrorRetries = 0;
+      const firstStart = !hasStartedPlaybackRef.current;
       hasStartedPlaybackRef.current = true;
       setLoading(false);
       setPlaying(true);
+      if (firstStart) tryUnmuteAfterStart();
     };
     const onWaiting  = () => {
       // On mobile, a brief "waiting" event is normal during ABR level
@@ -392,52 +394,52 @@ export default function Player({
     video.addEventListener("error",   onError);
 
     // ── Autoplay-with-sound helper ──────────────────────────────────────
-    // Try unmuted autoplay first on EVERY platform, including iOS. Most
-    // browsers (and iOS Safari/WKWebView) DO allow unmuted autoplay when
-    // the user's previous session/preference was unmuted, or simply
-    // don't enforce the restriction as strictly as expected here — so
-    // attempting it first gives sound-on playback whenever possible.
-    // If the browser blocks it, fall back to muted autoplay (always
-    // allowed) and then immediately try to unmute — this often succeeds
-    // right after a successful play(). If still muted after a short
-    // delay, show the "Tap to unmute" overlay as a last resort.
+    // Browsers (esp. Android Chrome / WebViews) reliably allow autoplay
+    // ONLY when muted. Racing an unmuted play() first can leave the
+    // player in a stuck "paused, not even muted-playing" state on
+    // Android when the unmuted attempt is rejected and the muted retry
+    // doesn't resolve cleanly in time.
+    //
+    // So: always start muted (guaranteed to autoplay on every platform),
+    // then — the instant playback actually begins — try to unmute. On
+    // PC and most Android Chrome/WebViews this unmute succeeds silently
+    // because the act of calling play() satisfies the autoplay gesture
+    // policy. If the browser snaps it back to muted, fall back to the
+    // "Tap to unmute" overlay.
     const attemptAutoplay = (v: HTMLVideoElement) => {
-      v.muted = mutedRef.current;
+      v.muted = true;
+      v.play().catch(() => {
+        // Even muted autoplay was blocked (rare) — try again shortly,
+        // the media may not have been ready yet.
+        window.setTimeout(() => { v.play().catch(() => {}); }, 300);
+      });
+    };
+
+    // Once the stream actually starts playing, try to unmute (unless the
+    // user had previously muted it themselves).
+    const tryUnmuteAfterStart = () => {
+      const v = videoRef.current;
+      if (!v) return;
+      if (mutedRef.current) {
+        // User preference is muted — respect it, no unmute prompt.
+        setNeedsUnmute(false);
+        return;
+      }
+      v.muted = false;
       v.volume = volumeRef.current;
-      v.play().then(() => {
+      window.setTimeout(() => {
+        if (!v) return;
         if (v.muted) {
-          // Started muted by our own preference (user had muted it
-          // previously) — nothing to recover, no unmute prompt needed.
+          // Browser snapped it back to muted — needs an explicit tap.
+          mutedRef.current = true;
+          setMuted(true);
+          setNeedsUnmute(true);
+        } else {
+          mutedRef.current = false;
+          setMuted(false);
           setNeedsUnmute(false);
         }
-      }).catch(() => {
-        // Autoplay blocked with sound — try muted first (always works).
-        v.muted = true;
-        v.play().then(() => {
-          // Muted play succeeded. Now immediately try to unmute — on
-          // Android Chrome and many WebViews this often works right
-          // after the play() resolves because the gesture policy is
-          // satisfied by the play itself.
-          v.muted = false;
-          // If the browser re-mutes it, the 'volumechange' event fires and
-          // v.muted will be true — we catch that below via the timeout.
-          // Give it 300ms; if still muted, show tap-to-unmute overlay.
-          setTimeout(() => {
-            if (v.muted) {
-              // Still forced-muted — need explicit user gesture.
-              mutedRef.current = true;
-              setMuted(true);
-              setNeedsUnmute(true);
-            } else {
-              // Unmute succeeded silently — restore saved volume.
-              v.volume = volumeRef.current;
-              mutedRef.current = false;
-              setMuted(false);
-              setNeedsUnmute(false);
-            }
-          }, 300);
-        }).catch(() => {});
-      });
+      }, 250);
     };
 
     if (Hls.isSupported()) {
@@ -472,14 +474,17 @@ export default function Player({
         // screen size.
         startLevel:          -1,                 // auto on all platforms
         capLevelToPlayerSize: true,               // never load resolution > screen size
-        abrEwmaDefaultEstimate: isMobile ? 350_000 : 800_000, // initial BW guess
+        abrEwmaDefaultEstimate: isMobile ? 250_000 : 800_000, // initial BW guess
         // Less twitchy ABR on mobile — fewer quality switches means
         // fewer brief re-buffer blips while switching renditions.
-        abrBandWidthFactor:   isMobile ? 0.95 : 0.85,
-        abrBandWidthUpFactor: isMobile ? 0.60 : 0.60,
-        // Don't downswitch instantly on a single bad measurement.
-        abrEwmaFastLive:  isMobile ? 7.0 : 3.0,
-        abrEwmaSlowLive:  isMobile ? 12.0 : 9.0,
+        // But react QUICKLY to a bandwidth drop (fast EWMA) so we don't
+        // stay stuck on a bitrate the connection can't sustain — that's
+        // what causes the long "stuck buffering" stalls. Be slower to
+        // upgrade back up (slow EWMA on the up side) to avoid yo-yo'ing.
+        abrBandWidthFactor:   isMobile ? 0.8 : 0.85,
+        abrBandWidthUpFactor: isMobile ? 0.6 : 0.60,
+        abrEwmaFastLive:  isMobile ? 2.0 : 3.0,
+        abrEwmaSlowLive:  isMobile ? 9.0 : 9.0,
 
         // ── Stall / nudge ─────────────────────────────────────────────
         // maxStarvationDelay: how long to wait with a buffer before
@@ -507,12 +512,12 @@ export default function Player({
         fragLoadingMaxRetryTimeout: 4000,
 
         // ── Live sync ─────────────────────────────────────────────────
-        // A larger live window on mobile means we sit further back from
-        // the live edge but with a much bigger cushion against jitter —
-        // this trades a couple extra seconds of latency for an end to
-        // the constant "catch up to live → stall → reload" cycle.
-        liveSyncDurationCount:       isMobile ? 6 : 2,
-        liveMaxLatencyDurationCount: isMobile ? 12 : 4,
+        // The buffer cushion above (30s) is what absorbs jitter — we
+        // don't need to sit unusually far from the live edge too, which
+        // can itself cause a long initial "catching up" buffering phase
+        // on mobile. A modest +1 vs desktop is enough.
+        liveSyncDurationCount:       isMobile ? 3 : 2,
+        liveMaxLatencyDurationCount: isMobile ? 8 : 4,
         // Drift tolerance before HLS snaps to live edge internally
         maxFragLookUpTolerance: isMobile ? 0.5 : 0.2,
         // Don't let hls.js force a live-edge seek the moment latency
