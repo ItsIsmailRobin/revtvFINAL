@@ -207,10 +207,12 @@ export default function Player({
     if (!video || !channel) return;
 
     setError(null);
-    setLoading(true);
     setPlaying(false);
     userPausedRef.current = false;
     lastLiveSnapRef.current = 0;
+    // Delay showing the loading spinner — the previous frame stays visible
+    // during the brief handoff, so the screen never goes dark on channel switch.
+    const loadingTimer = window.setTimeout(() => setLoading(true), 300);
 
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
       (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
@@ -260,6 +262,7 @@ export default function Player({
     // ── Video events ─────────────────────────────────────────────────────
     const onPlaying = () => {
       window.clearTimeout(skipTimer);
+      window.clearTimeout(loadingTimer);
       window.clearTimeout(recoverTimer);
       recoverScheduled = false;
       setLoading(false);
@@ -474,6 +477,7 @@ export default function Player({
 
     return () => {
       window.clearTimeout(skipTimer);
+      window.clearTimeout(loadingTimer);
       window.clearTimeout(recoverTimer);
       window.clearInterval(frozenWatchdog);
       video.removeEventListener("playing", onPlaying);
@@ -482,14 +486,13 @@ export default function Player({
       video.removeEventListener("pause",   onPause);
       video.removeEventListener("ended",   onEnded);
       video.removeEventListener("error",   onError);
-      video.removeEventListener("timeupdate", onTimeUpdate);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
+      // Keep video.src intact so the last frame stays visible during
+      // the channel handoff — prevents the black-screen flash.
       video.pause();
-      video.removeAttribute("src");
-      video.load();
     };
   }, [channel?.id, channel?.url]);
 
@@ -1191,9 +1194,10 @@ export default function Player({
         </div>
       )}
 
-      {/* Loading */}
+      {/* Loading — fades in so channel switches never flash dark */}
       {loading && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 ">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40"
+          style={{ animation: "fadeInOverlay 200ms ease forwards" }}>
           <div className="flex flex-col items-center gap-3">
             <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/15 border-t-white/80" />
             <span className="text-xs font-medium uppercase tracking-widest text-white/60">
@@ -1716,6 +1720,10 @@ export default function Player({
       </div>
 
       <style>{`
+        @keyframes fadeInOverlay {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
         @keyframes playPop {
           0% { opacity: 0; transform: scale(0.7); }
           60% { opacity: 1; transform: scale(1.08); }
