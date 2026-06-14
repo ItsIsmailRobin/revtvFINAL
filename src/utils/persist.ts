@@ -1,69 +1,79 @@
-// Shared persistence helpers.
+// Persistence helpers for RevTV.
 //
-// Strategy:
-// - Channel + Aspect: stored in localStorage (survives refresh, cleared on tab/browser close via beforeunload)
-// - Volume + Brightness: NEVER persisted (always fresh on every load)
-// - On Android/iOS: volume + brightness never persisted (naturally satisfied since they're never stored)
-// - On close/restart: beforeunload clears everything → fresh start
-// - On refresh (F5/reload): localStorage keeps channel + aspect, giving a smooth restore
+// Storage strategy:
+//   sessionStorage  — cleared automatically when the tab is closed, the
+//                     browser exits, or on phone/PC restart.  Also always
+//                     empty in Incognito/Private mode.  No extra logic needed.
 //
-// Summary:
-//   Refresh → channel + aspect remembered, volume/brightness fresh
-//   Close tab / browser / phone power off → everything fresh next visit
-//   Android/iOS: volume/brightness always fresh (never stored)
+// What is remembered:
+//   channel id  — restored on refresh (F5 / logo soft-refresh)
+//   aspect mode — restored on refresh for the SAME channel; reset on channel change
+//   volume      — restored on refresh (PC only; mobile always starts at 1)
+//   muted       — restored on refresh (PC only; mobile always starts unmuted)
+//
+// Fresh start triggers (automatic — no code needed):
+//   • Tab close
+//   • Browser close / exit
+//   • PC or phone restart
+//   • Incognito / Private session
 
-const CHANNEL_KEY = "revtv:lastChannelId";
-const ASPECT_KEY  = "revtv:aspect";
-
-// Register a beforeunload handler once to clear all persisted state
-// when the tab/browser is closed. This makes close = fresh start.
-if (typeof window !== "undefined") {
-  window.addEventListener("beforeunload", () => {
-    try {
-      localStorage.removeItem(CHANNEL_KEY);
-      localStorage.removeItem(ASPECT_KEY);
-    } catch {}
-  });
+export function getItem(key: string): string | null {
+  try { return window.sessionStorage.getItem(key); } catch { return null; }
 }
+
+export function setItem(key: string, value: string): void {
+  try { window.sessionStorage.setItem(key, value); } catch {}
+}
+
+export function removeItem(key: string): void {
+  try { window.sessionStorage.removeItem(key); } catch {}
+}
+
+// ── Named helpers (typed wrappers) ──────────────────────────────────────────
 
 export function getPersistedChannel(): string | null {
-  try {
-    return localStorage.getItem(CHANNEL_KEY);
-  } catch {
-    return null;
-  }
+  return getItem("revtv:channelId");
 }
-
 export function setPersistedChannel(id: string): void {
-  try {
-    localStorage.setItem(CHANNEL_KEY, id);
-  } catch {}
+  setItem("revtv:channelId", id);
 }
 
-export function getPersistedAspect(): string | null {
+export function getPersistedVolume(): number | null {
+  const raw = getItem("revtv:volume");
+  if (!raw) return null;
+  const v = parseFloat(raw);
+  return isNaN(v) ? null : Math.min(1, Math.max(0, v));
+}
+export function setPersistedVolume(v: number): void {
+  setItem("revtv:volume", String(v));
+}
+
+export function getPersistedMuted(): boolean | null {
+  const raw = getItem("revtv:muted");
+  if (raw === null) return null;
+  return raw === "true";
+}
+export function setPersistedMuted(m: boolean): void {
+  setItem("revtv:muted", String(m));
+}
+
+export function getPersistedAspect(channelId: string): string | null {
   try {
-    return localStorage.getItem(ASPECT_KEY);
-  } catch {
+    const raw = getItem("revtv:aspect");
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (obj && obj.channelId === channelId) return obj.aspectMode ?? null;
     return null;
-  }
+  } catch { return null; }
+}
+export function setPersistedAspect(channelId: string, aspectMode: string): void {
+  setItem("revtv:aspect", JSON.stringify({ channelId, aspectMode }));
 }
 
-export function setPersistedAspect(value: string): void {
-  try {
-    localStorage.setItem(ASPECT_KEY, value);
-  } catch {}
-}
-
-export function clearAllPersisted(): void {
-  try {
-    localStorage.removeItem(CHANNEL_KEY);
-    localStorage.removeItem(ASPECT_KEY);
-  } catch {}
-}
-
-// Stubs kept for compatibility if anything imports these, but they are no-ops.
-export function getFresh(_key: string): string | null { return null; }
-export function setPersisted(_key: string, _value: string): void {}
+// Legacy stubs so nothing else explodes if imported elsewhere
+export function getFresh(_k: string): string | null { return getItem(_k); }
+export function setPersisted(k: string, v: string): void { setItem(k, v); }
 export function markActivity(): void {}
-export const INACTIVITY_LIMIT_MS = 0;
+export function clearAllPersisted(): void {}
 export function isSessionStale(): boolean { return false; }
+export const INACTIVITY_LIMIT_MS = 0;

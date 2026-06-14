@@ -54,8 +54,8 @@ export default function App() {
   const channelsRef = useRef<Channel[]>([]);
   useEffect(() => { channelsRef.current = channels; }, [channels]);
 
-  // Remember the currently-watched channel so a page refresh restores it.
-  // Cleared automatically on tab/browser close via beforeunload in persist.ts.
+  // Remember the currently-watched channel in sessionStorage.
+  // Cleared automatically when the tab/browser closes or on restart.
   useEffect(() => {
     if (!activeChannel) return;
     setPersistedChannel(activeChannel.id);
@@ -84,7 +84,8 @@ export default function App() {
       if (!parsed.length) throw new Error("No channels found");
       setChannels(parsed);
       if (!activeChannel) {
-        // Restore the last-watched channel (only on refresh — cleared on close)
+        // Restore the last-watched channel (persisted in sessionStorage —
+        // automatically fresh after tab close, browser exit, or restart).
         let restored: Channel | null = null;
         try {
           const savedId = getPersistedChannel();
@@ -132,7 +133,8 @@ export default function App() {
 
   const handleSelect = (ch: Channel) => {
     setActiveChannel(ch);
-    if (window.innerWidth < 1024) window.scrollTo({ top: 0, behavior: "smooth" });
+    // Do NOT scroll the page — keep the header and player always in view.
+    // The channel list scrolls inside its own panel; the page stays at top.
   };
 
   // Player height = min(aspect-video of its column, 80vh)

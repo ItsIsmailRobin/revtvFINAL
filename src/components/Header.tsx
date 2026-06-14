@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 
 export default function Header() {
   const handleLogoClick = () => {
-    window.location.href = window.location.origin + window.location.pathname;
+    // Soft refresh: re-fetch the playlist without a full page reload.
+    // This keeps the page at the top, keeps state, and avoids any scroll jump.
+    window.dispatchEvent(new CustomEvent("revtv:refresh-playlist"));
   };
 
   const [refreshState, setRefreshState] = useState<"idle" | "loading" | "done" | "error">("idle");
