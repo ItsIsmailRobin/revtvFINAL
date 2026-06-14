@@ -7,7 +7,7 @@ import Player from "./components/Player";
 import Footer from "./components/Footer";
 import FifaSchedule from "./components/FifaSchedule";
 import { parseM3U, getUniqueGroups, type Channel } from "./utils/parseM3U";
-import { getFresh, setPersisted } from "./utils/persist";
+import { getPersistedChannel, setPersistedChannel } from "./utils/persist";
 
 const PLAYLIST_URL =
   "https://raw.githubusercontent.com/ItsIsmailRobin/playlisttv/refs/heads/main/playlist.m3u";
@@ -54,11 +54,11 @@ export default function App() {
   const channelsRef = useRef<Channel[]>([]);
   useEffect(() => { channelsRef.current = channels; }, [channels]);
 
-  // Remember the currently-watched channel for THIS session only (10-min
-  // inactivity expiry + cleared entirely in Incognito — see utils/persist.ts).
+  // Remember the currently-watched channel so a page refresh restores it.
+  // Cleared automatically on tab/browser close via beforeunload in persist.ts.
   useEffect(() => {
     if (!activeChannel) return;
-    setPersisted("revtv:lastChannelId", activeChannel.id);
+    setPersistedChannel(activeChannel.id);
   }, [activeChannel]);
 
   const handleStreamError = useCallback((failedChannel: Channel) => {
@@ -84,10 +84,10 @@ export default function App() {
       if (!parsed.length) throw new Error("No channels found");
       setChannels(parsed);
       if (!activeChannel) {
-        // Restore the last-watched channel for THIS session only
+        // Restore the last-watched channel (only on refresh — cleared on close)
         let restored: Channel | null = null;
         try {
-          const savedId = getFresh("revtv:lastChannelId");
+          const savedId = getPersistedChannel();
           if (savedId) restored = parsed.find(c => c.id === savedId) || null;
         } catch {}
         setActiveChannel(restored || parsed[0]);

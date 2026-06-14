@@ -1,73 +1,69 @@
-// Shared persistence helpers for "remember within this session, but not
-// forever" behavior.
+// Shared persistence helpers.
 //
-// - Uses sessionStorage instead of localStorage:
-//     * sessionStorage is cleared the moment the tab/browser closes, so
-//       a new Incognito/Private session starts completely fresh with
-//       nothing remembered — exactly what's wanted there, with zero
-//       incognito-detection hacks.
-// - On top of that, we track a "last activity" timestamp. If more than
-//   INACTIVITY_LIMIT_MS has passed since the user last interacted with
-//   the player (tab left open and idle), stored preferences are treated
-//   as stale and reset to defaults — so coming back after 10+ minutes
-//   away gives a fresh start (default channel, aspect, volume, mute).
+// Strategy:
+// - Channel + Aspect: stored in localStorage (survives refresh, cleared on tab/browser close via beforeunload)
+// - Volume + Brightness: NEVER persisted (always fresh on every load)
+// - On Android/iOS: volume + brightness never persisted (naturally satisfied since they're never stored)
+// - On close/restart: beforeunload clears everything → fresh start
+// - On refresh (F5/reload): localStorage keeps channel + aspect, giving a smooth restore
+//
+// Summary:
+//   Refresh → channel + aspect remembered, volume/brightness fresh
+//   Close tab / browser / phone power off → everything fresh next visit
+//   Android/iOS: volume/brightness always fresh (never stored)
 
-const ACTIVITY_KEY = "revtv:lastActivity";
-export const INACTIVITY_LIMIT_MS = 10 * 60 * 1000; // 10 minutes
+const CHANNEL_KEY = "revtv:lastChannelId";
+const ASPECT_KEY  = "revtv:aspect";
 
-/** Record that the user is actively using the player right now. Call this
- *  on meaningful interactions (channel switch, volume/mute change, etc). */
-export function markActivity(): void {
-  try {
-    window.sessionStorage.setItem(ACTIVITY_KEY, String(Date.now()));
-  } catch {}
+// Register a beforeunload handler once to clear all persisted state
+// when the tab/browser is closed. This makes close = fresh start.
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => {
+    try {
+      localStorage.removeItem(CHANNEL_KEY);
+      localStorage.removeItem(ASPECT_KEY);
+    } catch {}
+  });
 }
 
-/** True if more than INACTIVITY_LIMIT_MS has passed since the last
- *  recorded activity (or no activity has ever been recorded). */
-export function isSessionStale(): boolean {
+export function getPersistedChannel(): string | null {
   try {
-    const raw = window.sessionStorage.getItem(ACTIVITY_KEY);
-    if (!raw) return true;
-    const last = parseInt(raw, 10);
-    if (isNaN(last)) return true;
-    return Date.now() - last > INACTIVITY_LIMIT_MS;
-  } catch {
-    return true;
-  }
-}
-
-/** Read a stored value, but only if the session isn't stale. If the
- *  session IS stale, the key is removed and `null` is returned — this
- *  also clears stale data for any preference that happens to ask for it. */
-export function getFresh(key: string): string | null {
-  try {
-    if (isSessionStale()) {
-      clearAllPersisted();
-      return null;
-    }
-    return window.sessionStorage.getItem(key);
+    return localStorage.getItem(CHANNEL_KEY);
   } catch {
     return null;
   }
 }
 
-export function setPersisted(key: string, value: string): void {
+export function setPersistedChannel(id: string): void {
   try {
-    window.sessionStorage.setItem(key, value);
-    markActivity();
+    localStorage.setItem(CHANNEL_KEY, id);
   } catch {}
 }
 
-/** Remove every revtv:-prefixed key from sessionStorage (used when the
- *  session is detected as stale, to fully reset to a clean state). */
-export function clearAllPersisted(): void {
+export function getPersistedAspect(): string | null {
   try {
-    const keys: string[] = [];
-    for (let i = 0; i < window.sessionStorage.length; i++) {
-      const k = window.sessionStorage.key(i);
-      if (k && k.startsWith("revtv:")) keys.push(k);
-    }
-    keys.forEach((k) => window.sessionStorage.removeItem(k));
+    return localStorage.getItem(ASPECT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setPersistedAspect(value: string): void {
+  try {
+    localStorage.setItem(ASPECT_KEY, value);
   } catch {}
 }
+
+export function clearAllPersisted(): void {
+  try {
+    localStorage.removeItem(CHANNEL_KEY);
+    localStorage.removeItem(ASPECT_KEY);
+  } catch {}
+}
+
+// Stubs kept for compatibility if anything imports these, but they are no-ops.
+export function getFresh(_key: string): string | null { return null; }
+export function setPersisted(_key: string, _value: string): void {}
+export function markActivity(): void {}
+export const INACTIVITY_LIMIT_MS = 0;
+export function isSessionStale(): boolean { return false; }

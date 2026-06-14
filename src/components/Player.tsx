@@ -9,7 +9,7 @@ import {
 import Hls from "hls.js";
 import type { Channel } from "../utils/parseM3U";
 import { cn } from "../utils/cn";
-import { getFresh, setPersisted, markActivity } from "../utils/persist";
+import { getPersistedAspect, setPersistedAspect } from "../utils/persist";
 
 interface PlayerProps {
   channel: Channel | null;
@@ -66,31 +66,17 @@ export default function Player({
   const hasStartedPlaybackRef = useRef(false);
 
   const [playing, setPlaying] = useState(false);
-  // Restore muted/volume for THIS session only (sessionStorage + 10-min
-  // inactivity expiry — see utils/persist.ts). On Android/iOS, never
-  // restore: volume/mute always reset to defaults each session.
-  const [muted, setMuted] = useState<boolean>(() => {
-    if (detectIsMobile()) return false;
-    return getFresh("revtv:muted") === "true";
-  });
-  const [volume, setVolume] = useState<number>(() => {
-    if (detectIsMobile()) return 1;
-    const v = parseFloat(getFresh("revtv:volume") ?? "1");
-    return isNaN(v) ? 1 : Math.min(1, Math.max(0, v));
-  });
-  // Refs mirroring muted/volume so the channel-switch effect (which only
-  // re-runs on channel change) can read the latest user preference
-  // without forcing a full HLS re-attach on every mute/volume toggle.
+  // Volume and mute are NEVER persisted — always start fresh on every load.
+  // On mobile (Android/iOS): also naturally fresh since we never write them.
+  // On PC: same — fresh every time (no restore from storage).
+  const [muted, setMuted] = useState<boolean>(false);
+  const [volume, setVolume] = useState<number>(1);
+  // Refs mirror muted/volume so the channel-switch effect can read the
+  // latest user preference without forcing a full HLS re-attach.
   const mutedRef = useRef(muted);
   const volumeRef = useRef(volume);
-  useEffect(() => {
-    mutedRef.current = muted;
-    if (!detectIsMobile()) setPersisted("revtv:muted", String(muted));
-  }, [muted]);
-  useEffect(() => {
-    volumeRef.current = volume;
-    if (!detectIsMobile()) setPersisted("revtv:volume", String(volume));
-  }, [volume]);
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
+  useEffect(() => { volumeRef.current = volume; }, [volume]);
   // Brightness: in-memory only on every platform (never persisted), and
   // explicitly reset to default each session on Android/iOS per above —
   // since it's already not persisted, this is naturally satisfied.
@@ -131,7 +117,7 @@ export default function Player({
 
     let restored: AspectMode | null = null;
     try {
-      const raw = getFresh("revtv:aspect");
+      const raw = getPersistedAspect();
       if (raw) {
         const saved = JSON.parse(raw);
         if (
@@ -151,12 +137,10 @@ export default function Player({
   }, [channel?.id]);
 
   // Keep storage in sync with the current channel + aspect mode, so a
-  // refresh/logo click can restore it for THIS channel only — and only
-  // within the same active session (see utils/persist.ts).
+  // refresh restores it for THIS channel — cleared on close/restart via beforeunload.
   useEffect(() => {
     if (!channel) return;
-    setPersisted(
-      "revtv:aspect",
+    setPersistedAspect(
       JSON.stringify({ channelId: channel.id, aspectMode })
     );
   }, [channel?.id, aspectMode]);
@@ -168,6 +152,11 @@ export default function Player({
   // True when the browser forced muted autoplay and we're waiting for a
   // user gesture to unmute. Shows a one-tap "Tap to unmute" overlay.
   const [needsUnmute, setNeedsUnmute] = useState(false);
+  // Shows a brief "Muted" or "Unmuted" badge on the player ONLY after the
+  // user manually toggles mute (not on initial autoplay-muted load).
+  const [muteStatusVisible, setMuteStatusVisible] = useState(false);
+  const [muteStatusText, setMuteStatusText] = useState("");
+  const muteStatusTimerRef = useRef<number | null>(null);
   const statusTimerRef = useRef<number | null>(null);
 
     const showStatus = useCallback((msg: string) => {
@@ -208,14 +197,37 @@ export default function Player({
     });
   }, [aspectLabel, showStatus]);
 
-  // Show volume status when it changes (e.g. via keyboard)
+  const showMuteStatus = useCallback((text: string) => {
+    setMuteStatusText(text);
+    setMuteStatusVisible(true);
+    if (muteStatusTimerRef.current) window.clearTimeout(muteStatusTimerRef.current);
+    muteStatusTimerRef.current = window.setTimeout(() => {
+      setMuteStatusVisible(false);
+    }, 2000);
+  }, []);
+
+  // Track whether the user has manually changed volume/mute so we don't
+  // show the status indicator on the very first render (autoplay is muted
+  // by default — showing "Muted" immediately is confusing on mobile).
+  const userChangedAudioRef = useRef(false);
+
+  // Show volume/mute status when it changes — but only after the user has
+  // manually interacted with audio controls (not on initial autoplay-muted load).
+  // On mobile: show a brief muted/unmuted badge directly on player.
+  // On desktop: use the existing status bar.
   useEffect(() => {
     if (!channel) return;
-    showStatus(
-      muted || volume === 0
-        ? "Muted"
-        : `Volume: ${Math.round(volume * 100)}%`
-    );
+    if (!userChangedAudioRef.current) return;
+    const isMobile = detectIsMobile();
+    if (isMobile) {
+      showMuteStatus(muted || volume === 0 ? "Muted" : "Unmuted");
+    } else {
+      showStatus(
+        muted || volume === 0
+          ? "Muted"
+          : `Volume: ${Math.round(volume * 100)}%`
+      );
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [volume, muted]);
 
@@ -227,6 +239,7 @@ export default function Player({
     setError(null);
     setPlaying(false);
     userPausedRef.current = false;
+    userChangedAudioRef.current = false;
     lastLiveSnapRef.current = 0;
     // Suppress the pause overlay until the new channel has actually
     // started playing at least once — prevents the glass play button
@@ -650,34 +663,6 @@ export default function Player({
     v.volume = volume;
   }, [volume, muted]);
 
-  // ---- session activity tracking ----
-  // Any interaction (click/tap/key/scroll) marks the session as active,
-  // resetting the 10-minute inactivity clock used by utils/persist.ts.
-  // Throttled so we're not writing to sessionStorage on every pixel of
-  // scroll — once every few seconds is plenty.
-  useEffect(() => {
-    let lastMark = 0;
-    const onActivity = () => {
-      const now = Date.now();
-      if (now - lastMark < 5000) return;
-      lastMark = now;
-      markActivity();
-    };
-    const opts = { passive: true } as AddEventListenerOptions;
-    window.addEventListener("pointerdown", onActivity, opts);
-    window.addEventListener("keydown", onActivity);
-    window.addEventListener("touchstart", onActivity, opts);
-    window.addEventListener("wheel", onActivity, opts);
-    // Record initial activity for this load too.
-    onActivity();
-    return () => {
-      window.removeEventListener("pointerdown", onActivity);
-      window.removeEventListener("keydown", onActivity);
-      window.removeEventListener("touchstart", onActivity);
-      window.removeEventListener("wheel", onActivity);
-    };
-  }, []);
-
   // apply brightness as video filter
   useEffect(() => {
     const v = videoRef.current;
@@ -897,6 +882,7 @@ export default function Player({
   }, [armHide, syncToLiveEdge]);
 
   const toggleMute = useCallback(() => {
+    userChangedAudioRef.current = true;
     setMuted((m) => !m);
     setNeedsUnmute(false);
     armHide();
@@ -904,6 +890,7 @@ export default function Player({
 
   const changeVolume = useCallback(
     (val: number) => {
+      userChangedAudioRef.current = true;
       const newVol = Math.round(Math.max(0, Math.min(1, val)) * 100) / 100;
       setVolume(newVol);
       if (newVol > 0 && muted) setMuted(false);
@@ -1234,6 +1221,7 @@ export default function Player({
         togglePlay();
       } else if (key === "m") {
         e.preventDefault();
+        userChangedAudioRef.current = true;
         toggleMute();
       } else if (key === "f") {
         e.preventDefault();
@@ -1245,11 +1233,13 @@ export default function Player({
       } else if (key === "arrowup") {
         // Volume up — increments by 5% per press, unmutes if muted
         e.preventDefault();
+        userChangedAudioRef.current = true;
         setMuted(false);
         setVolume((prev) => Math.min(1, Math.round((prev + 0.05) * 100) / 100));
       } else if (key === "arrowdown") {
         // Volume down — decrements by 5% per press, mutes when 0
         e.preventDefault();
+        userChangedAudioRef.current = true;
         setVolume((prev) => {
           const next = Math.max(0, Math.round((prev - 0.05) * 100) / 100);
           if (next === 0) setMuted(true);
@@ -1587,6 +1577,7 @@ export default function Player({
             className="pointer-events-auto flex items-center gap-2 rounded-full border border-white/20 bg-black/70 px-4 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur-sm transition-all duration-200 hover:bg-black/90 active:scale-95"
             onClick={(e) => {
               e.stopPropagation();
+              userChangedAudioRef.current = true;
               const v = videoRef.current;
               if (v) { v.muted = false; v.volume = volumeRef.current || 1; }
               mutedRef.current = false;
@@ -1599,6 +1590,32 @@ export default function Player({
             </svg>
             Tap to unmute
           </button>
+        </div>
+      )}
+
+      {/* Muted / Unmuted badge — shown briefly after user manually toggles mute.
+          Shown on both Android and iOS but NOT on first autoplay-muted load. */}
+      {muteStatusVisible && isMobileDevice && (
+        <div
+          className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
+          style={{ animation: "fadeInOverlay 180ms ease both" }}
+        >
+          <div className="flex items-center gap-2 rounded-full border border-white/15 bg-black/70 px-5 py-2.5 backdrop-blur-sm">
+            {muteStatusText === "Muted" ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <line x1="23" y1="9" x2="17" y2="15" />
+                <line x1="17" y1="9" x2="23" y2="15" />
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+              </svg>
+            )}
+            <span className="text-sm font-semibold text-white">{muteStatusText}</span>
+          </div>
         </div>
       )}
 
