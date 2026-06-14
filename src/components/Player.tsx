@@ -1250,6 +1250,38 @@ export default function Player({
         </div>
       )}
 
+      {/* Paused overlay — blurs the player and pops in a glass play
+          button whenever playback is paused (manual pause or
+          auto-pause). Clicking it resumes playback. Hidden while
+          loading/transitioning so it doesn't fight those overlays. */}
+      {channel && !playing && !loading && !error && !fsTransitioning && (
+        <div
+          className="absolute inset-0 z-20 flex items-center justify-center bg-black/30 backdrop-blur-md transition-opacity duration-300"
+          style={{ animation: "fadeInOverlay 220ms ease forwards" }}
+          onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+          onDoubleClick={onVideoDoubleClick}
+        >
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+            aria-label="Play"
+            data-player-control
+            className="group flex h-16 w-16 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white shadow-2xl backdrop-blur-xl transition-all duration-300 hover:scale-110 hover:bg-white/20 active:scale-95 sm:h-20 sm:w-20"
+            style={{ animation: "gesturePop 280ms cubic-bezier(.34,1.56,.64,1) both" }}
+          >
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="ml-1 transition-transform duration-300 group-hover:scale-110 sm:h-8 sm:w-8"
+            >
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Fullscreen-transition overlay — covers the brief black flash
           on Android between exiting the inline player and the native
           fullscreen player taking over. */}

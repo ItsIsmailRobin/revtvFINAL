@@ -67,7 +67,7 @@ export default function Header() {
       <div className="flex items-center gap-3 sm:gap-4">
         <button onClick={handleLogoClick} aria-label="RevTV - Go to homepage"
           className="group block transition-all duration-300 hover:scale-105 active:scale-95">
-          <img src="https://i.postimg.cc/RZGz0gz9/Logo.png" alt="RevTV"
+          <img src="https://i.postimg.cc/xCLjQ13H/Logo-Rev.png" alt="RevTV"
             className="block h-10 w-auto object-contain transition-all duration-500 group-hover:brightness-110 sm:h-12"
             style={{ maxWidth:"200px" }} loading="eager"
             onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
