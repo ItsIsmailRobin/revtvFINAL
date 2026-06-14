@@ -7,19 +7,36 @@ export default function Header() {
 
   const [refreshState, setRefreshState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadingStartRef = useRef<number | null>(null);
 
   const handleLivePlaylistClick = () => {
     if (refreshState === "loading" || refreshState === "done") return; // prevent double-tap and pressing during "Updated!" period
     setRefreshState("loading");
+    loadingStartRef.current = Date.now();
     window.dispatchEvent(new CustomEvent("revtv:refresh-playlist"));
   };
 
   useEffect(() => {
-    const onDone = () => {
+    const MIN_LOADING_MS = 10_000; // show loading for at least 10 seconds
+    const DONE_HOLD_MS   = 50_000; // hold "Updated!" for 50 seconds
+
+    const applyDone = () => {
       setRefreshState("done");
       if (resetTimer.current) clearTimeout(resetTimer.current);
-      resetTimer.current = setTimeout(() => setRefreshState("idle"), 60_000); // hold "Updated!" for 1 minute
+      resetTimer.current = setTimeout(() => setRefreshState("idle"), DONE_HOLD_MS);
     };
+
+    const onDone = () => {
+      const elapsed = loadingStartRef.current ? Date.now() - loadingStartRef.current : MIN_LOADING_MS;
+      const remaining = MIN_LOADING_MS - elapsed;
+      if (remaining > 0) {
+        if (resetTimer.current) clearTimeout(resetTimer.current);
+        resetTimer.current = setTimeout(() => applyDone(), remaining);
+      } else {
+        applyDone();
+      }
+    };
+
     const onError = () => {
       setRefreshState("error");
       if (resetTimer.current) clearTimeout(resetTimer.current);

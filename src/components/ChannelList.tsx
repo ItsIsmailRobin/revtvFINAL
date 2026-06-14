@@ -51,7 +51,7 @@ export default function ChannelList({
   if (loading) {
     return (
       <div className="flex flex-col px-3 pb-3 pt-1" style={{ gap: "8px" }}>
-        {Array.from({ length: 6 }).map((_, i) => (
+        {Array.from({ length: 5 }).map((_, i) => (
           <div
             key={i}
             className="h-[60px] w-full animate-pulse rounded-xl border border-white/5 bg-white/[0.03]"
