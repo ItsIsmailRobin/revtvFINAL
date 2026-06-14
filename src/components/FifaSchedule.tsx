@@ -224,9 +224,9 @@ function Countdown({ match }: { match: Match }) {
     ? [{ v: pad(d), l:"Day" }, { v: pad(h), l:"Hours" }, { v: pad(mi), l:"Min" }, { v: pad(sc), l:"Second" }]
     : [{ v: pad(h), l:"Hours" }, { v: pad(mi), l:"Min" }, { v: pad(sc), l:"Second" }];
 
-  const numSz = d > 0 ? "20px" : "24px";
-  const colSz = d > 0 ? "16px" : "19px";
-  const colW  = d > 0 ? "30px" : "36px";
+  const numSz = d > 0 ? "clamp(13px,3.5vw,20px)" : "clamp(15px,4.5vw,24px)";
+  const colSz = d > 0 ? "clamp(11px,3vw,16px)" : "clamp(13px,3.8vw,19px)";
+  const colW  = d > 0 ? "clamp(22px,6vw,30px)" : "clamp(26px,7.5vw,36px)";
 
   return (
     <div style={{ display:"flex", alignItems:"center", gap:0 }}>
@@ -350,7 +350,7 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
       className="relative rounded-xl transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.01]"
       style={{
         background: live
-          ? "linear-gradient(135deg,rgba(40,15,70,0.60),rgba(25,8,55,0.50))"
+          ? "linear-gradient(135deg,rgba(75,28,125,0.78),rgba(50,12,100,0.68))"
           : over
           ? "rgba(255,255,255,0.02)"
           : isToday
@@ -396,28 +396,29 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
         </div>
 
         {/* Teams + score row */}
-        <div style={{ display:"flex", alignItems:"center", gap:"4px" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:"4px", width:"100%" }}>
           {/* Team A */}
-          <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-            {/* Flag fades out smoothly while the result is revealed (PC hover only) */}
+          <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", alignItems:"center", gap:"4px", overflow:"hidden" }}>
             <img src={match.flagA} alt={match.teamA}
-              className="h-7 w-11 rounded-sm object-cover shadow-md sm:h-8 sm:w-12"
               style={{
+                width:"clamp(32px,9vw,48px)", height:"clamp(20px,6vw,32px)",
+                borderRadius:"3px", objectFit:"cover",
                 border:"1px solid rgba(255,255,255,0.10)",
+                flexShrink:0,
                 opacity: canReveal && showResult ? 0 : 1,
                 transition: "opacity 300ms ease",
               }}
               onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
             <span style={{
-              fontFamily:"'Inter',sans-serif", fontSize:"11px", fontWeight:600,
+              fontFamily:"'Inter',sans-serif", fontSize:"clamp(9px,2.5vw,11px)", fontWeight:600,
               color: over && !live ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.88)",
               textAlign:"center", lineHeight:"1.2",
-              maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", display:"block",
+              width:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", display:"block",
             }}>{match.teamA}</span>
           </div>
 
-          {/* Centre: score or countdown — fixed width guarantees perfect centre alignment */}
-          <div style={{ width:"72px", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"2px", padding:"0 2px" }}>
+          {/* Centre: score or countdown — clamp width for mobile/desktop */}
+          <div style={{ width:"clamp(52px,18vw,76px)", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"2px", padding:"0 1px" }}>
             {live && hasScore ? (
               <>
                 <Score a={match.scoreA!} b={match.scoreB!} live />
@@ -464,20 +465,22 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
           </div>
 
           {/* Team B */}
-          <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+          <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", alignItems:"center", gap:"4px", overflow:"hidden" }}>
             <img src={match.flagB} alt={match.teamB}
-              className="h-7 w-11 rounded-sm object-cover shadow-md sm:h-8 sm:w-12"
               style={{
+                width:"clamp(32px,9vw,48px)", height:"clamp(20px,6vw,32px)",
+                borderRadius:"3px", objectFit:"cover",
                 border:"1px solid rgba(255,255,255,0.10)",
+                flexShrink:0,
                 opacity: canReveal && showResult ? 0 : 1,
                 transition: "opacity 300ms ease",
               }}
               onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
             <span style={{
-              fontFamily:"'Inter',sans-serif", fontSize:"11px", fontWeight:600,
+              fontFamily:"'Inter',sans-serif", fontSize:"clamp(9px,2.5vw,11px)", fontWeight:600,
               color: over && !live ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.88)",
               textAlign:"center", lineHeight:"1.2",
-              maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", display:"block",
+              width:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", display:"block",
             }}>{match.teamB}</span>
           </div>
         </div>
@@ -698,17 +701,21 @@ export default function FifaSchedule() {
           </span>
         </button>
 
-        {/* Days grid */}
-        <div ref={containerRef} className="min-w-0 flex-1 overflow-hidden">
-          <div key={animKey} className="grid gap-3"
-            style={{
-              gridTemplateColumns: `repeat(${current.length},1fr)`,
-              animation: `slideIn${dir > 0 ? "Right" : "Left"} 320ms cubic-bezier(.4,0,.2,1)`,
-              willChange: "transform, opacity",
-            }}>
-            {current.map(dayGroup => (
-              <DayColumn key={dayGroup.date} dayGroup={dayGroup} todayBD={todayBD} />
-            ))}
+        {/* Days grid — outer clip keeps slide animation tidy; inner padding lets card glow bleed through */}
+        <div className="min-w-0 flex-1" style={{ overflow:"hidden" }}>
+          <div style={{ padding:"6px 4px", margin:"-6px -4px", overflow:"visible" }}>
+            <div ref={containerRef} style={{ overflow:"visible" }}>
+              <div key={animKey} className="grid gap-3"
+                style={{
+                  gridTemplateColumns: `repeat(${current.length},1fr)`,
+                  animation: `slideIn${dir > 0 ? "Right" : "Left"} 320ms cubic-bezier(.4,0,.2,1)`,
+                  willChange: "transform, opacity",
+                }}>
+                {current.map(dayGroup => (
+                  <DayColumn key={dayGroup.date} dayGroup={dayGroup} todayBD={todayBD} />
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
