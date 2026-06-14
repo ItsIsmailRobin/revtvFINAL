@@ -675,15 +675,6 @@ export default function FifaSchedule() {
         }}>Based on Bangladesh Standard Time</p>
       </div>
 
-      {/* Page range label — hidden on mobile */}
-      <div className="mb-3 hidden items-center justify-between sm:flex">
-        <div />
-        <div style={{fontFamily:"'Inter',sans-serif", fontSize:"11px", color:"rgba(255,255,255,0.3)", fontWeight:500}}>
-          <span>{fmtD(pageStart)}</span>
-          {pageStart !== pageEnd && <><span className="mx-1" style={{color:"rgba(255,255,255,0.15)"}}>–</span><span>{fmtD(pageEnd)}</span></>}
-        </div>
-      </div>
-
       {/* Navigation + content — arrows absolute so NO overflow:hidden ancestor kills the card glows */}
       <div style={{ position:"relative", paddingLeft:"44px", paddingRight:"44px" }}>
         {/* Prev arrow */}

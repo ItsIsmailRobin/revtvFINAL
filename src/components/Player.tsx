@@ -1427,29 +1427,7 @@ export default function Player({
         </div>
       </div>
 
-      {/* Center play/pause on pause - always perfectly centered on first paint */}
-      {!playing && !loading && channel && (
-        <div
-          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
-        >
-          <button
-            onClick={togglePlay}
-            className="pointer-events-auto flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white  transition-transform duration-300 hover:scale-110 hover:bg-white/20 active:scale-95 sm:h-20 sm:w-20"
-            style={{ animation: "playPop 280ms cubic-bezier(.34,1.56,.64,1) both" }}
-            aria-label="Play"
-          >
-            <svg
-              width="28"
-              height="28"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className="ml-1"
-            >
-              <polygon points="5 3 19 12 5 21 5 3" />
-            </svg>
-          </button>
-        </div>
-      )}
+
 
       {/* Bottom controls */}
       <div
@@ -1723,11 +1701,6 @@ export default function Player({
         @keyframes fadeInOverlay {
           from { opacity: 0; }
           to   { opacity: 1; }
-        }
-        @keyframes playPop {
-          0% { opacity: 0; transform: scale(0.7); }
-          60% { opacity: 1; transform: scale(1.08); }
-          100% { opacity: 1; transform: scale(1); }
         }
         /* Zap dot pulse — the green dot overlaid on the zap icon
            pulses with a soft scale + opacity flicker. */
