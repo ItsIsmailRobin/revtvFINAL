@@ -243,7 +243,7 @@ export default function Player({
     // Skip timer: if stream doesn't produce a frame within N seconds, skip it
     const skipTimer = window.setTimeout(() => {
       if (channel) onStreamError?.(channel);
-    }, isIOS ? 18000 : isMobile ? 15000 : 11000);
+    }, isIOS ? 20000 : isMobile ? 20000 : 11000);
 
     // ── Helpers ──────────────────────────────────────────────────────────
     // Snap currentTime to the live edge. Safe to call any time.
@@ -273,10 +273,10 @@ export default function Player({
     // give it the longest cooldown so we don't repeatedly call play()/seek
     // while it's still naturally recovering (which restarts its internal
     // buffering and looks like "loading again").
-    const RECOVER_COOLDOWN_MS = isIOS ? 7000 : isMobile ? 5000 : 1500;
+    const RECOVER_COOLDOWN_MS = isIOS ? 8000 : isMobile ? 8000 : 1500;
     let waitingTimer = 0;
 
-    const scheduleRecover = (delayMs: number) => {
+    const scheduleRecover = (delayMs: number, snap = false) => {
       if (recoverScheduled || userPausedRef.current) return;
       if (Date.now() < recoverCooldownUntil) return;
       recoverScheduled = true;
@@ -288,10 +288,12 @@ export default function Player({
         // On iOS native HLS, seeking to the live edge while the player is
         // still buffering throws away progress and restarts the load —
         // this is what produced "loading → loading again → skip". Just
-        // nudge play() and let AVPlayer's own buffering resolve it; only
-        // snap to live if we're already far behind (handled by the
-        // periodic live-edge sync effect, not here).
-        if (!isIOS) snapToLive(v);
+        // nudge play() and let AVPlayer's own buffering resolve it.
+        // On Android/desktop, only snap to live when explicitly requested
+        // (truly frozen) — a plain stall/pause blip should NOT discard
+        // buffered data, since that's exactly what restarts the
+        // load → play → load cycle on mobile.
+        if (!isIOS && snap) snapToLive(v);
         v.play().catch(() => {});
       }, delayMs);
     };
@@ -316,16 +318,16 @@ export default function Player({
       // surfacing the spinner; if "playing" fires first, this is cancelled.
       if (isMobile) {
         window.clearTimeout(waitingTimer);
-        waitingTimer = window.setTimeout(() => setLoading(true), 1200);
+        waitingTimer = window.setTimeout(() => setLoading(true), 2500);
       } else {
         setLoading(true);
       }
     };
     const onPause    = () => {
       setPlaying(false);
-      if (!userPausedRef.current) scheduleRecover(isIOS ? 1800 : isMobile ? 1200 : 700);
+      if (!userPausedRef.current) scheduleRecover(isIOS ? 1800 : isMobile ? 1500 : 700);
     };
-    const onStalled  = () => { scheduleRecover(isIOS ? 2000 : isMobile ? 1500 : 1000); };   // buffer empty — recover
+    const onStalled  = () => { scheduleRecover(isIOS ? 2000 : isMobile ? 2000 : 1000); };   // buffer empty — recover
     const onEnded    = () => {
       const v = videoRef.current;
       if (!v) return;
@@ -364,7 +366,7 @@ export default function Player({
     // frozen stream on both mobile and PC.
     let lastTime  = -1;
     let frozenSec = 0;
-    const FROZEN_THRESHOLD = isIOS ? 8 : isMobile ? 6 : 4; // seconds before we act
+    const FROZEN_THRESHOLD = isIOS ? 10 : isMobile ? 8 : 4; // seconds before we act
     const frozenWatchdog = window.setInterval(() => {
       const v = videoRef.current;
       if (!v || v.paused || v.seeking || userPausedRef.current) {
@@ -374,7 +376,7 @@ export default function Player({
         frozenSec++;
         if (frozenSec >= FROZEN_THRESHOLD) {
           frozenSec = 0; lastTime = -1;
-          scheduleRecover(0); // snap immediately — stream is definitely frozen
+          scheduleRecover(0, true); // snap immediately — stream is definitely frozen
         }
       } else {
         frozenSec = 0;
@@ -455,16 +457,16 @@ export default function Player({
         lowLatencyMode: !isMobile,
 
         // ── Buffer sizing ─────────────────────────────────────────────
-        // Mobile gets a noticeably larger cushion than the original
-        // (4-6s) values that caused rebuffering, but capped a bit lower
-        // than the max we tried — holding 30s/20MB of decoded buffer
-        // ahead of playback adds real CPU/decoder + memory pressure on
-        // phones (a contributor to running hot). 16-18s / 14MB keeps
-        // the same stability margin while trimming that overhead.
-        backBufferLength:    isMobile ?  6 :  8,  // how much to keep behind currentTime
-        maxBufferLength:     isMobile ? 16 : 10,  // target ahead-buffer in seconds
-        maxMaxBufferLength:  isMobile ? 24 : 16,  // hard cap
-        maxBufferSize:       isMobile ?  14_000_000 : 12_000_000, // 14 MB / 12 MB
+        // Mobile networks (cellular / flaky WiFi) need a much deeper
+        // cushion than desktop to avoid the "play 2s → rebuffer" loop.
+        // 30s/20MB ahead-buffer absorbs multi-second jitter without
+        // re-entering the loading state. The extra CPU/memory cost is
+        // worth it versus a player that's unwatchable.
+        backBufferLength:    isMobile ? 10 :  8,  // how much to keep behind currentTime
+        maxBufferLength:     isMobile ? 30 : 10,  // target ahead-buffer in seconds
+        maxMaxBufferLength:  isMobile ? 60 : 16,  // hard cap
+        maxBufferSize:       isMobile ?  20_000_000 : 12_000_000, // 20 MB / 12 MB
+        maxBufferHole:       isMobile ? 1.0 : 0.5, // tolerate larger gaps before "stalled"
 
         // ── Quality / ABR ─────────────────────────────────────────────
         // Don't force the lowest rendition on mobile — some streams'
@@ -506,13 +508,17 @@ export default function Player({
         fragLoadingMaxRetryTimeout: 4000,
 
         // ── Live sync ─────────────────────────────────────────────────
-        // A larger live window on mobile means we sit a bit further
-        // from the live edge but with much more cushion against jitter,
-        // instead of constantly chasing the edge and stalling.
-        liveSyncDurationCount:       isMobile ? 4 : 2,
-        liveMaxLatencyDurationCount: isMobile ? 8 : 4,
+        // A larger live window on mobile means we sit further back from
+        // the live edge but with a much bigger cushion against jitter —
+        // this trades a couple extra seconds of latency for an end to
+        // the constant "catch up to live → stall → reload" cycle.
+        liveSyncDurationCount:       isMobile ? 6 : 2,
+        liveMaxLatencyDurationCount: isMobile ? 12 : 4,
         // Drift tolerance before HLS snaps to live edge internally
-        maxFragLookUpTolerance: 0.2,
+        maxFragLookUpTolerance: isMobile ? 0.5 : 0.2,
+        // Don't let hls.js force a live-edge seek the moment latency
+        // creeps up — let the buffer cushion absorb it instead.
+        liveDurationInfinity: false,
 
         progressive: true,
       });
@@ -561,7 +567,7 @@ export default function Player({
           // Non-fatal: buffer stall nudge — HLS will nudge internally,
           // but we also schedule a live-edge snap for safety
           if (data.details === "bufferStalledError" || data.details === "bufferNudgeOnStall") {
-            scheduleRecover(500);
+            scheduleRecover(500, false);
           }
         }
       });
