@@ -452,14 +452,21 @@ export default function Player({
         // iOS blocks unmuted autoplay — must start muted
         v.muted = true;
         v.volume = volumeRef.current;
+        v.play().catch(() => {
+          window.setTimeout(() => { v.play().catch(() => {}); }, 300);
+        });
       } else {
         // PC & Android — play unmuted straight away
         v.muted = false;
         v.volume = volumeRef.current;
+        v.play().catch(() => {
+          // Browser blocked autoplay — stop spinner, show play button so user can tap
+          window.clearTimeout(loadingTimer);
+          setLoading(false);
+          hasStartedPlaybackRef.current = true; // allow play button to show
+          setPlaying(false);
+        });
       }
-      v.play().catch(() => {
-        window.setTimeout(() => { v.play().catch(() => {}); }, 300);
-      });
     };
 
     // Called once on the first "playing" event. Only needed for iOS.
@@ -1439,7 +1446,7 @@ export default function Player({
           with an iOS-style frosted play button that scales/fades in
           smoothly. Clicking anywhere resumes playback. Hidden while
           loading/transitioning so it doesn't fight those overlays. */}
-      {channel && !playing && !loading && !error && !fsTransitioning && hasStartedPlaybackRef.current && !needsUnmute && (
+      {channel && !playing && !loading && !error && !fsTransitioning && !needsUnmute && (
         <div
           className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 backdrop-blur-[2px]"
           style={{ animation: "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both" }}
