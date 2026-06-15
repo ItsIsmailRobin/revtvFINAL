@@ -7,7 +7,7 @@ import Player from "./components/Player";
 import Footer from "./components/Footer";
 import FifaSchedule from "./components/FifaSchedule";
 import { parseM3U, getUniqueGroups, type Channel } from "./utils/parseM3U";
-import { getFresh, setPersisted } from "./utils/persist";
+import { getFresh, setPersisted, getCachedPlaylist, setCachedPlaylist } from "./utils/persist";
 
 const PLAYLIST_URL =
   "https://raw.githubusercontent.com/ItsIsmailRobin/playlisttv/refs/heads/main/playlist.m3u";
@@ -43,15 +43,32 @@ function ChannelCount({ count, activeTag }: { count:number; activeTag:string }) 
 }
 
 export default function App() {
-  const [channels, setChannels]     = useState<Channel[]>([]);
-  const [loading, setLoading]       = useState(true);
+  // Seed from the last cached playlist (localStorage) so channels and the
+  // player populate INSTANTLY on a brand-new tab / hard refresh, before the
+  // live M3U fetch resolves. A fresh fetch always runs in the background
+  // (see useEffect below) and replaces this the moment it completes.
+  const [channels, setChannels] = useState<Channel[]>(() => {
+    const cached = getCachedPlaylist<Channel[]>();
+    return cached && cached.length ? cached : [];
+  });
+  const [loading, setLoading]       = useState(() => channels.length === 0);
   const [error, setError]           = useState<string | null>(null);
   const [activeTag, setActiveTag]   = useState<string>("All");
-  const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
+  const [activeChannel, setActiveChannel] = useState<Channel | null>(() => {
+    if (!channels.length) return null;
+    try {
+      const savedId = getFresh("revtv:lastChannelId");
+      if (savedId) {
+        const found = channels.find(c => c.id === savedId);
+        if (found) return found;
+      }
+    } catch {}
+    return channels[0];
+  });
   const [categoriesOpen, setCategoriesOpen] = useState(false);
 
   const failedChannelsRef = useRef<Set<string>>(new Set());
-  const channelsRef = useRef<Channel[]>([]);
+  const channelsRef = useRef<Channel[]>(channels);
   useEffect(() => { channelsRef.current = channels; }, [channels]);
 
   // Remember the currently-watched channel for THIS session only (10-min
@@ -76,23 +93,53 @@ export default function App() {
 
   const fetchPlaylist = async () => {
     try {
-      setLoading(true); setError(null);
-      const res = await fetch(PLAYLIST_URL, { cache: "no-store" });
-      if (!res.ok) throw new Error("Failed to load playlist");
-      const text = await res.text();
+      // Only show the channel-list skeleton if we have nothing cached yet
+      // (true first-ever visit). If we already have cached channels, keep
+      // showing them instantly while this fetch refreshes in the background.
+      if (channelsRef.current.length === 0) setLoading(true);
+      setError(null);
+
+      // Re-use the early prefetch Promise kicked off by the inline <script>
+      // in index.html — it started fetching the M3U the instant the HTML
+      // was parsed, so by the time React mounts the result is often already
+      // available (zero extra network round-trip).
+      const w = window as any;
+      let text: string | null = null;
+      if (w.__revtv_prefetch__) {
+        text = await w.__revtv_prefetch__;
+        w.__revtv_prefetch__ = null; // consume once; subsequent calls re-fetch
+      }
+      if (!text) {
+        const res = await fetch(PLAYLIST_URL, { cache: "no-store" });
+        if (!res.ok) throw new Error("Failed to load playlist");
+        text = await res.text();
+      }
       const parsed = parseM3U(text);
       if (!parsed.length) throw new Error("No channels found");
       // Always refresh channels on every visit/load
       setChannels(parsed);
+      setCachedPlaylist(parsed);
       // Restore the last-watched channel for THIS session only
       let restored: Channel | null = null;
       try {
         const savedId = getFresh("revtv:lastChannelId");
         if (savedId) restored = parsed.find(c => c.id === savedId) || null;
       } catch {}
-      setActiveChannel(restored || parsed[0]);
+      setActiveChannel(prev => {
+        if (restored) return restored;
+        // Keep current active channel if it still exists in the fresh
+        // playlist (avoids an unwanted channel switch on background refresh)
+        if (prev) {
+          const stillExists = parsed.find(c => c.id === prev.id);
+          if (stillExists) return stillExists;
+        }
+        return parsed[0];
+      });
     } catch (err: any) {
-      setError(err?.message || "Could not load playlist");
+      // Only surface the error banner if we have no channels at all to show
+      if (channelsRef.current.length === 0) {
+        setError(err?.message || "Could not load playlist");
+      }
     } finally {
       setLoading(false);
       window.dispatchEvent(new CustomEvent("revtv:refresh-done"));
@@ -112,6 +159,7 @@ export default function App() {
         return;
       }
       setChannels(parsed);
+      setCachedPlaylist(parsed);
       window.dispatchEvent(new CustomEvent("revtv:refresh-done"));
     } catch {
       window.dispatchEvent(new CustomEvent("revtv:refresh-error"));

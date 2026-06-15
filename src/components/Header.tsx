@@ -137,7 +137,7 @@ export default function Header() {
         <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
           {refreshState === "loading" ? (
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-              style={{ animation: "spinOnce 0.8s linear infinite", color: "#6614c4" }}>
+              style={{ animation: "spinOnce 0.8s linear infinite", color: "#34bf80" }}>
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25"/>
               <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
             </svg>
@@ -152,16 +152,16 @@ export default function Header() {
           ) : (
             <>
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
-                style={{ backgroundColor: "#6614c4" }} />
+                style={{ backgroundColor: "#34bf80" }} />
               <span className="relative inline-flex h-2 w-2 rounded-full"
-                style={{ backgroundColor: "#6614c4", boxShadow: "0 0 6px rgba(102,20,196,0.9), 0 0 12px rgba(102,20,196,0.5)" }} />
+                style={{ backgroundColor: "#34bf80", boxShadow: "0 0 6px rgba(52,191,128,0.9), 0 0 12px rgba(52,191,128,0.5)" }} />
             </>
           )}
         </span>
         {/* Text — hidden on phone, only the dot/icon remains */}
         <span className="hidden text-[11px] font-bold uppercase tracking-widest sm:inline"
           style={{
-            color: refreshState === "done" ? "#22c55e" : refreshState === "error" ? "#ef4444" : "#6614c4",
+            color: refreshState === "done" ? "#22c55e" : refreshState === "error" ? "#ef4444" : "#34bf80",
             animation: refreshState === "idle" ? "updatePulse 2.4s ease-in-out infinite" : "none",
           }}>
           {refreshState === "loading" ? "Updating…" : refreshState === "done" ? "Updated!" : refreshState === "error" ? "Failed" : "Update Playlist"}
@@ -171,7 +171,7 @@ export default function Header() {
       <style>{`
         @keyframes updatePulse {
           0%,100% { opacity:.75; }
-          50%      { opacity:1; text-shadow:0 0 14px rgba(102,20,196,0.85),0 0 22px rgba(102,20,196,0.4); }
+          50%      { opacity:1; text-shadow:0 0 14px rgba(52,191,128,0.85),0 0 22px rgba(52,191,128,0.4); }
         }
         @keyframes spinOnce {
           from { transform: rotate(0deg); }

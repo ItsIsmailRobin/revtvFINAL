@@ -71,3 +71,31 @@ export function clearAllPersisted(): void {
     keys.forEach((k) => window.sessionStorage.removeItem(k));
   } catch {}
 }
+
+// ── Cross-session playlist cache (localStorage) ─────────────────────
+// Unlike the sessionStorage helpers above, this is intentionally
+// persisted in localStorage so the channel list and player can render
+// INSTANTLY on a brand-new tab / hard refresh — before the live M3U
+// fetch even resolves. The fresh fetch still runs in the background
+// and overwrites this cache once it completes.
+const PLAYLIST_CACHE_KEY = "revtv:playlistCache";
+
+export function getCachedPlaylist<T>(): T | null {
+  try {
+    // First try the synchronously-available window cache set by the inline
+    // prefetch script in index.html (already parsed from localStorage).
+    const w = window as any;
+    if (w.__revtv_cache__) return w.__revtv_cache__ as T;
+    const raw = window.localStorage.getItem(PLAYLIST_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+export function setCachedPlaylist<T>(data: T): void {
+  try {
+    window.localStorage.setItem(PLAYLIST_CACHE_KEY, JSON.stringify(data));
+  } catch {}
+}

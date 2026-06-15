@@ -1717,8 +1717,8 @@ export default function Player({
             </svg>
           </button>
 
-          {/* Volume — hover + scroll wheel to adjust on PC */}
-          <div ref={volumeWheelRef} className="group/vol flex items-center gap-1.5">
+          {/* Volume — hover + scroll wheel to adjust on PC. Hidden when tap-to-unmute overlay is active */}
+          <div ref={volumeWheelRef} className={`group/vol flex items-center gap-1.5${needsUnmute ? " hidden" : ""}`}>
             <button
               onClick={toggleMute}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white  transition-all duration-300 hover:scale-110 hover:border-white/30 hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
