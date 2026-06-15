@@ -213,12 +213,20 @@ export default function Player({
   const isAutoplayMuteRef = useRef(true);
   // Track previous muted value to detect mute-only toggles vs volume changes
   const prevMutedRef = useRef(muted);
+  // Suppress volume/mute badge on the very first render (page load / refresh)
+  const isFirstRenderRef = useRef(true);
 
   // Show volume status when it changes (e.g. via keyboard)
   // But suppress the "Muted" badge on the initial autoplay mute —
   // we show "Tap to unmute" overlay for that instead.
   // When manually muted/unmuted: show "Muted" / "Unmuted" label (not volume %).
   useEffect(() => {
+    // Always skip on the very first render — nothing has changed yet
+    if (isFirstRenderRef.current) {
+      isFirstRenderRef.current = false;
+      prevMutedRef.current = muted;
+      return;
+    }
     if (!channel) return;
     // Suppress the status badge for the very first autoplay-forced mute
     if (isAutoplayMuteRef.current && muted) return;

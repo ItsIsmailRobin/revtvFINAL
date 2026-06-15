@@ -93,7 +93,7 @@ export default function Header() {
       <div className="flex items-center gap-3 sm:gap-4" style={{ animation: "hdrFadeIn 700ms cubic-bezier(.4,0,.2,1) both" }}>
         <button onClick={handleLogoClick} aria-label="RevTV - Go to homepage"
           className="group block transition-all duration-300 hover:scale-105 active:scale-95">
-          <img src="/Logo.png" alt="RevTV"
+          <img src="https://raw.githubusercontent.com/ItsIsmailRobin/revtvFINAL/refs/heads/main/Logo.png" alt="RevTV"
             className="block h-10 w-auto object-contain transition-all duration-500 group-hover:brightness-110 sm:h-12"
             style={{ maxWidth:"200px", opacity: 0, animation: "logoPulse 1.2s ease-in-out infinite" }} loading="eager" fetchPriority="high"
             onLoad={e => { (e.target as HTMLImageElement).style.animation = "logoFadeIn 400ms ease forwards"; (e.target as HTMLImageElement).style.opacity = "1"; }}

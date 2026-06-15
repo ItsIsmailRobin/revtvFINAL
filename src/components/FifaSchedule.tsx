@@ -422,16 +422,16 @@ function MatchCard({ match, isToday, scoreMap }: { match: Match; isToday: boolea
           {/* Centre: score or countdown — clamp width for mobile/desktop */}
           <div style={{ width:"clamp(52px,18vw,76px)", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"2px", padding:"0 1px" }}>
             {live && hasScore ? (
-              <>
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", width:"100%", gap:"4px" }}>
                 <Score a={scoreA!} b={scoreB!} live />
-                <div className="flex items-center gap-1 mt-0.5">
+                <div className="flex items-center gap-1">
                   <span className="relative flex h-1.5 w-1.5 shrink-0">
                     <span className="absolute inset-0 rounded-full" style={{ backgroundColor:"rgba(139,92,246,0.7)", animation:"livePulseRing 2s ease-in-out infinite" }} />
                     <span className="relative h-1.5 w-1.5 rounded-full" style={{ backgroundColor:"#a78bfa" }} />
                   </span>
                   <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"8px", fontWeight:700, letterSpacing:"0.14em", color:"#c4b5fd", textTransform:"uppercase"}}>Ongoing</span>
                 </div>
-              </>
+              </div>
             ) : live ? (
               /* Live but no score yet */
               <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:"6px", width:"100%" }}>
