@@ -172,7 +172,7 @@ export default function App() {
       <Background />
       <Header />
 
-      <main className=\"relative mx-auto w-full max-w-[1600px] px-3 pb-8 pt-3 sm:px-5 sm:pt-4 lg:px-8\">
+      <main className="relative mx-auto w-full max-w-[1600px] px-3 pb-8 pt-3 sm:px-5 sm:pt-4 lg:px-8">
 
         {/* ── Main grid: player left, sidebar right ── */}
         <section className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-5 lg:items-start">
