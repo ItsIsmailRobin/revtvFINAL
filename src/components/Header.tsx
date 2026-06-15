@@ -95,7 +95,8 @@ export default function Header() {
           className="group block transition-all duration-300 hover:scale-105 active:scale-95">
           <img src="https://i.postimg.cc/RZGz0gz9/Logo.png" alt="RevTV"
             className="block h-10 w-auto object-contain transition-all duration-500 group-hover:brightness-110 sm:h-12"
-            style={{ maxWidth:"200px" }} loading="eager"
+            style={{ maxWidth:"200px", opacity: 0, animation: "logoFadeIn 400ms ease 200ms forwards" }} loading="eager" fetchPriority="high"
+            onLoad={e => { (e.target as HTMLImageElement).style.opacity = "1"; (e.target as HTMLImageElement).style.animation = "none"; }}
             onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
         </button>
 
@@ -173,6 +174,10 @@ export default function Header() {
         @keyframes hdrFadeIn {
           0%   { opacity: 0; transform: translateY(-6px); }
           100% { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes logoFadeIn {
+          0%   { opacity: 0; }
+          100% { opacity: 1; }
         }
         @keyframes updatePulse {
           0%,100% { opacity:.75; }

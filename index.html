@@ -91,6 +91,8 @@
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="https://i.postimg.cc/76JJccSN/play.png" />
     <link rel="apple-touch-icon" href="https://i.postimg.cc/76JJccSN/play.png" />
+    <!-- Preload logo to prevent flash/popup on first paint -->
+    <link rel="preload" as="image" href="https://i.postimg.cc/RZGz0gz9/Logo.png" />
 
     <!-- Structured Data: WebSite -->
     <script type="application/ld+json">
@@ -179,11 +181,11 @@
     <div id="root"></div>
 
     <!--
-      Early playlist prefetch — starts the M3U fetch the instant the HTML
-      is parsed, before React bundles are downloaded or evaluated.
-      Also embeds a compact M3U parser so channels are parsed and written
-      to window.__revtv_cache__ the moment the network response arrives —
-      React reads this synchronously from useState initializer (zero wait).
+      Early playlist prefetch — seeds channels from localStorage immediately
+      (synchronous, zero latency) so channels show on first paint.
+      Also starts a network fetch in the background to get fresh data.
+      The inline M3U parser writes fresh results to window.__revtv_cache__
+      and localStorage — React reads this on mount.
     -->
     <script>
       (function () {
@@ -226,15 +228,21 @@
           return channels;
         }
 
-        // Seed from localStorage immediately — synchronous, zero latency.
+        // STEP 1: Seed from localStorage IMMEDIATELY — synchronous, zero latency.
+        // This ensures channels are available before React even mounts.
         try {
           var raw = window.localStorage.getItem(CACHE_KEY);
-          if (raw) window.__revtv_cache__ = JSON.parse(raw);
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length) {
+              window.__revtv_cache__ = parsed;
+            }
+          }
         } catch (e) {}
 
-        // Kick off live fetch immediately. Parse M3U right here as soon as
-        // the response arrives — write result to window.__revtv_cache__ and
-        // localStorage so React reads it instantly on mount.
+        // STEP 2: Kick off live network fetch in background.
+        // This updates __revtv_cache__ and localStorage once fresh data arrives.
+        // React will update channels when fetchPlaylist() resolves.
         window.__revtv_prefetch__ = fetch(PLAYLIST_URL, { cache: "no-store" })
           .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
           .then(function (text) {
@@ -246,7 +254,10 @@
             window.__revtv_prefetch__ = null; // signal: fully resolved
             return text;
           })
-          .catch(function () { return null; });
+          .catch(function () {
+            window.__revtv_prefetch__ = null;
+            return null;
+          });
       })();
     </script>
 

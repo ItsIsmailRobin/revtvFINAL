@@ -45,18 +45,30 @@ function ChannelCount({ count, activeTag }: { count:number; activeTag:string }) 
 export default function App() {
   // Seed from the last cached playlist (localStorage / window.__revtv_cache__)
   // so channels and the player populate INSTANTLY on every tab/refresh.
-  // The inline <script> in index.html starts the M3U fetch before React loads
-  // and writes the parsed result to window.__revtv_cache__ as soon as it
-  // arrives — so by the time this runs, channels may already be fresh.
+  // We ALWAYS try localStorage first — even if the prefetch script hasn't
+  // resolved yet, we have stale-but-usable data to show immediately.
   const [channels, setChannels] = useState<Channel[]>(() => {
+    // Try window cache first (may already be populated by prefetch script)
+    const w = window as any;
+    if (w.__revtv_cache__?.length) return w.__revtv_cache__ as Channel[];
+    // Fall back to localStorage cache — always available, zero latency
     const cached = getCachedPlaylist<Channel[]>();
     return cached && cached.length ? cached : [];
   });
+  // loading = true ONLY when we have absolutely zero channels to show.
+  // If we have any cached channels (from localStorage or prefetch),
+  // show them immediately — never show skeleton/empty list on first visit.
   const [loading, setLoading] = useState(() => {
-    // Only show skeleton if we truly have nothing to show
     const w = window as any;
-    const hasCache = !!(w.__revtv_cache__?.length);
-    return !hasCache;
+    if (w.__revtv_cache__?.length) return false;
+    try {
+      const raw = window.localStorage.getItem("revtv:playlistCache");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length) return false;
+      }
+    } catch {}
+    return true; // truly no cache at all — show skeleton
   });
   const [error, setError]           = useState<string | null>(null);
   const [activeTag, setActiveTag]   = useState<string>("All");
@@ -126,9 +138,15 @@ export default function App() {
         return;
       }
 
-      // Slow path: prefetch is still in-flight or failed — show skeleton only
-      // if we have no channels at all, then await the prefetch result.
-      if (channelsRef.current.length === 0) setLoading(true);
+      // Slow path: prefetch is still in-flight or failed — show skeleton ONLY
+      // if we have absolutely no channels (no cache, first ever visit).
+      // If we already have cached channels, load silently in the background.
+      if (channelsRef.current.length === 0) {
+        setLoading(true);
+      } else {
+        // We have channels — don't show skeleton, just update silently
+        setLoading(false);
+      }
 
       // Re-use the early prefetch Promise — it started before React loaded.
       let text: string | null = null;
@@ -194,12 +212,19 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Always start the header "Updating…" animation immediately on page visit.
+    // This is purely cosmetic — it runs for 10 seconds regardless of whether
+    // channels were already cached or still loading from network.
+    setTimeout(() => window.dispatchEvent(new CustomEvent("revtv:refresh-start")), 50);
+
+    // Fetch/refresh the playlist — this updates channels silently in background
+    // if we already have cached channels, or shows skeleton if first ever visit.
     fetchPlaylist();
+
+    // Periodic background refresh every 5 minutes
     const t = setInterval(refreshPlaylist, 5 * 60 * 1000);
     const onRefresh = () => refreshPlaylist();
     window.addEventListener("revtv:refresh-playlist", onRefresh);
-    // Signal header to show its 10s loading animation on every page visit
-    setTimeout(() => window.dispatchEvent(new CustomEvent("revtv:refresh-start")), 0);
     return () => { clearInterval(t); window.removeEventListener("revtv:refresh-playlist", onRefresh); };
   }, []);
 

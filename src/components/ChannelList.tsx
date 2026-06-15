@@ -126,7 +126,8 @@ export default function ChannelList({
                 <img
                   src={ch.logo}
                   alt={ch.name}
-                  loading="lazy"
+                  loading="eager"
+                  decoding="async"
                   referrerPolicy="no-referrer"
                   className="h-full w-full rounded-full object-contain transition-transform duration-500 group-hover:scale-110"
                   style={{ background: "transparent" }}
