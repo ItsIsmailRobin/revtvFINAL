@@ -49,6 +49,9 @@ export default function App() {
   const [activeTag, setActiveTag]   = useState<string>("All");
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
+  // Splash animation shown on every visit/refresh while playlist loads
+  const [splashVisible, setSplashVisible] = useState(true);
+  const [splashFading, setSplashFading] = useState(false);
 
   const failedChannelsRef = useRef<Set<string>>(new Set());
   const channelsRef = useRef<Channel[]>([]);
@@ -74,6 +77,13 @@ export default function App() {
     setActiveChannel(all[0]);
   }, []);
 
+  // Dismiss splash — fade out then hide. Called after playlist loads
+  // or after 10s timeout (whichever comes first).
+  const dismissSplash = useCallback(() => {
+    setSplashFading(true);
+    setTimeout(() => setSplashVisible(false), 600);
+  }, []);
+
   const fetchPlaylist = async () => {
     try {
       setLoading(true); setError(null);
@@ -82,20 +92,21 @@ export default function App() {
       const text = await res.text();
       const parsed = parseM3U(text);
       if (!parsed.length) throw new Error("No channels found");
+      // Always refresh channels on every visit/load
       setChannels(parsed);
-      if (!activeChannel) {
-        // Restore the last-watched channel for THIS session only
-        let restored: Channel | null = null;
-        try {
-          const savedId = getFresh("revtv:lastChannelId");
-          if (savedId) restored = parsed.find(c => c.id === savedId) || null;
-        } catch {}
-        setActiveChannel(restored || parsed[0]);
-      }
+      // Restore the last-watched channel for THIS session only
+      let restored: Channel | null = null;
+      try {
+        const savedId = getFresh("revtv:lastChannelId");
+        if (savedId) restored = parsed.find(c => c.id === savedId) || null;
+      } catch {}
+      setActiveChannel(restored || parsed[0]);
     } catch (err: any) {
       setError(err?.message || "Could not load playlist");
     } finally {
       setLoading(false);
+      // Dismiss splash after playlist finishes loading (min 2s for animation)
+      setTimeout(dismissSplash, 800);
     }
   };
 
@@ -120,10 +131,12 @@ export default function App() {
 
   useEffect(() => {
     fetchPlaylist();
+    // Safety: dismiss splash after 10s max even if fetch is still pending
+    const splashTimeout = setTimeout(dismissSplash, 10000);
     const t = setInterval(refreshPlaylist, 5 * 60 * 1000);
     const onRefresh = () => refreshPlaylist();
     window.addEventListener("revtv:refresh-playlist", onRefresh);
-    return () => { clearInterval(t); window.removeEventListener("revtv:refresh-playlist", onRefresh); };
+    return () => { clearTimeout(splashTimeout); clearInterval(t); window.removeEventListener("revtv:refresh-playlist", onRefresh); };
   }, []);
 
   const groups   = useMemo(() => getUniqueGroups(channels), [channels]);
@@ -169,6 +182,70 @@ export default function App() {
     <div className="relative min-h-screen text-white">
       <Background />
       <Header />
+
+      {/* ── Splash loading screen — shown on every visit/refresh ── */}
+      {splashVisible && (
+        <div
+          className="fixed inset-0 z-[9999] flex flex-col items-center justify-center"
+          style={{
+            background: "linear-gradient(160deg,#0d0520 0%,#060112 40%,#09021a 70%,#050010 100%)",
+            opacity: splashFading ? 0 : 1,
+            transition: "opacity 600ms ease",
+            pointerEvents: splashFading ? "none" : "all",
+          }}
+        >
+          {/* Logo / Brand */}
+          <div className="mb-8 flex flex-col items-center gap-3">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/5 shadow-2xl"
+              style={{ backdropFilter: "blur(12px)" }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#34bf80" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-2xl font-bold tracking-tight text-white">RevTV</span>
+              <span className="text-xs font-medium uppercase tracking-[0.2em] text-white/40">Updating Playlist</span>
+            </div>
+          </div>
+
+          {/* Animated progress bar */}
+          <div className="relative w-56 overflow-hidden rounded-full" style={{ height: "3px", backgroundColor: "rgba(255,255,255,0.08)" }}>
+            <div
+              className="absolute inset-y-0 left-0 rounded-full"
+              style={{
+                background: "linear-gradient(90deg, #34bf80, #7c3aed, #34bf80)",
+                backgroundSize: "200% 100%",
+                animation: "splashProgress 10s linear forwards, splashShimmer 1.8s ease-in-out infinite",
+              }}
+            />
+          </div>
+
+          {/* Dots animation */}
+          <div className="mt-6 flex items-center gap-2">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="h-1.5 w-1.5 rounded-full bg-white/30"
+                style={{ animation: `splashDot 1.2s ease-in-out ${i * 0.2}s infinite` }} />
+            ))}
+          </div>
+
+          <style>{`
+            @keyframes splashProgress {
+              0%   { width: 0%; }
+              40%  { width: 60%; }
+              80%  { width: 88%; }
+              100% { width: 100%; }
+            }
+            @keyframes splashShimmer {
+              0%   { background-position: 200% 0; }
+              100% { background-position: -200% 0; }
+            }
+            @keyframes splashDot {
+              0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); }
+              40%            { opacity: 1;    transform: scale(1.2); }
+            }
+          `}</style>
+        </div>
+      )}
 
       <main className="relative mx-auto w-full max-w-[1600px] px-3 pb-8 pt-3 sm:px-5 sm:pt-4 lg:px-8">
 

@@ -70,6 +70,17 @@
     <link rel="preconnect" href="https://i.postimg.cc" />
     <link rel="dns-prefetch" href="https://i.postimg.cc" />
 
+    <!-- DNS-over-HTTPS via Cloudflare 1.1.1.1 — faster DNS resolution,
+         no need for VPN. Most modern browsers (Chrome 83+, Firefox 62+,
+         Edge 79+) will use this automatically via Secure DNS settings.
+         The meta tag below hints the browser to use encrypted DNS. -->
+    <meta http-equiv="origin-trial" content="" />
+    <!-- Prefetch common CDN/stream origins to reduce DNS lookup latency -->
+    <link rel="dns-prefetch" href="https://cloudflare.com" />
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
+    <link rel="dns-prefetch" href="https://objects.githubusercontent.com" />
+    <link rel="dns-prefetch" href="https://github.com" />
+
     <!-- Fonts: Inter + Space Grotesk -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />

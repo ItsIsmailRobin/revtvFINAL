@@ -208,9 +208,16 @@ export default function Player({
     });
   }, [aspectLabel, showStatus]);
 
+  // Track if this is the initial autoplay mute (suppress status badge for it)
+  const isAutoplayMuteRef = useRef(true);
+
   // Show volume status when it changes (e.g. via keyboard)
+  // But suppress the "Muted" badge on the initial autoplay mute —
+  // we show "Tap to unmute" overlay for that instead.
   useEffect(() => {
     if (!channel) return;
+    // Suppress the status badge for the very first autoplay-forced mute
+    if (isAutoplayMuteRef.current && muted) return;
     showStatus(
       muted || volume === 0
         ? "Muted"
@@ -444,6 +451,7 @@ export default function Player({
       if (!v) return;
       if (mutedRef.current) {
         // User preference is muted — respect it, no unmute prompt.
+        isAutoplayMuteRef.current = false; // user-set mute, show status normally
         setNeedsUnmute(false);
         return;
       }
@@ -459,6 +467,7 @@ export default function Player({
             mutedRef.current = true;
             setMuted(true);
             setNeedsUnmute(true);
+            // Keep isAutoplayMuteRef.current = true so status badge stays hidden
           }).catch(() => {
             mutedRef.current = true;
             setMuted(true);
@@ -469,7 +478,10 @@ export default function Player({
           mutedRef.current = true;
           setMuted(true);
           setNeedsUnmute(true);
+          // Keep isAutoplayMuteRef.current = true so status badge stays hidden
         } else {
+          // Successfully unmuted — from here on, mute/unmute shows status
+          isAutoplayMuteRef.current = false;
           mutedRef.current = false;
           setMuted(false);
           setNeedsUnmute(false);
@@ -897,6 +909,8 @@ export default function Player({
   }, [armHide, syncToLiveEdge]);
 
   const toggleMute = useCallback(() => {
+    // From first manual mute toggle onward, show mute/unmute status badge normally
+    isAutoplayMuteRef.current = false;
     setMuted((m) => !m);
     setNeedsUnmute(false);
     armHide();
@@ -1589,6 +1603,7 @@ export default function Player({
               e.stopPropagation();
               const v = videoRef.current;
               if (v) { v.muted = false; v.volume = volumeRef.current || 1; }
+              isAutoplayMuteRef.current = false; // user interacted — show status normally
               mutedRef.current = false;
               setMuted(false);
               setNeedsUnmute(false);
