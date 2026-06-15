@@ -922,11 +922,7 @@ export default function Player({
     armHide();
   }, [armHide]);
 
-  // Tap-to-unmute handler — unmutes without showing the volume status badge
-  const handleTapToUnmute = useCallback(() => {
-    suppressNextVolumeStatusRef.current = true;
-    toggleMute();
-  }, [toggleMute]);
+
 
   const changeVolume = useCallback(
     (val: number) => {
