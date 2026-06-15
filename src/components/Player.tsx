@@ -437,147 +437,118 @@ export default function Player({
     video.addEventListener("ended",   onEnded);
     video.addEventListener("error",   onError);
 
-    // ── Autoplay-with-sound helper ──────────────────────────────────────
-    // PC    : always autoplay unmuted. If browser blocks, force-unmute and retry.
-    // Android: start muted → immediately try unmute once playback begins (no overlay).
-    // iOS   : start muted → if prior gesture stored, try silent unmute once.
-    //         If no prior gesture → show "Tap To Unmute" overlay on first visit.
-    //         After user taps, gesture is persisted so next visit skips the overlay.
+    // ── Autoplay-with-sound ───────────────────────────────────────────────
+    //
+    // KEY INSIGHT: Always call play() with muted=true — this guarantees autoplay
+    // never gets blocked or paused by the browser. Once "playing" fires we unmute.
+    // At that point the browser treats it as an ongoing session (not fresh autoplay)
+    // so unmuting works without a prior user gesture on PC and Android.
+    //
+    // PC / Android : muted play() → on "playing" → unmute immediately.
+    //               Retry up to 5x if first attempt blocked → then "Tap To Unmute".
+    // iOS          : muted play() → on "playing":
+    //                 • hadPriorGesture → try silent unmute once (no overlay on fail)
+    //                 • no prior gesture → show "Tap To Unmute" (saves grant on tap)
+
     const hadPriorGesture = (() => {
       try { return window.localStorage.getItem("revtv:unmuteGrant") === "1"; } catch { return false; }
     })();
 
+    // Always start muted so play() never throws/pauses. Unmute happens in
+    // tryUnmuteAfterStart once the "playing" event fires.
     const attemptAutoplay = (v: HTMLVideoElement) => {
-      if (!isMobile && !isIOS) {
-        // PC: always start unmuted — modern browsers allow this
-        v.muted = false;
-        v.volume = volumeRef.current;
-        v.play().catch(() => {
-          // Rare: browser blocked unmuted autoplay → start muted, unmute after playing event
-          v.muted = true;
-          v.play().catch(() => {
-            window.setTimeout(() => { v.play().catch(() => {}); }, 300);
-          });
-        });
-      } else {
-        // Mobile / iOS: must start muted — guaranteed to autoplay
-        v.muted = true;
-        v.play().catch(() => {
-          window.setTimeout(() => { v.play().catch(() => {}); }, 300);
-        });
-      }
+      v.muted = true;
+      v.volume = volumeRef.current;
+      v.play().catch(() => {
+        window.setTimeout(() => { v.play().catch(() => {}); }, 300);
+      });
     };
 
-    // Called once when the stream fires its first "playing" event.
+    // Called exactly once on the first "playing" event for this channel.
     const tryUnmuteAfterStart = () => {
       const v = videoRef.current;
       if (!v) return;
+
+      // User deliberately muted before playback — respect it, no overlay.
       if (mutedRef.current) {
-        // User deliberately muted — respect it, no overlay
         isAutoplayMuteRef.current = false;
         setNeedsUnmute(false);
         return;
       }
 
-      // ── PC ──────────────────────────────────────────────────────────
-      if (!isMobile && !isIOS) {
-        if (!v.muted) {
-          // Already playing with sound (normal case)
-          isAutoplayMuteRef.current = false;
-          mutedRef.current = false;
-          setMuted(false);
-          setNeedsUnmute(false);
+      // ── iOS ─────────────────────────────────────────────────────────
+      // iOS Safari enforces strict autoplay policies — unmuting needs a real
+      // user gesture. We cannot bypass this with retries.
+      if (isIOS) {
+        if (hadPriorGesture) {
+          // Try silent unmute once. iOS sometimes allows it in the same session.
+          // If blocked, stay muted with no overlay — user already knows the site.
+          v.muted = false;
+          v.volume = volumeRef.current;
+          window.setTimeout(() => {
+            const v2 = videoRef.current;
+            if (!v2) return;
+            if (!v2.muted && !v2.paused) {
+              isAutoplayMuteRef.current = false;
+              mutedRef.current = false;
+              setMuted(false);
+              setNeedsUnmute(false);
+            } else {
+              v2.muted = true;
+              if (v2.paused) v2.play().catch(() => {});
+              isAutoplayMuteRef.current = false;
+              mutedRef.current = true;
+              setMuted(true);
+              setNeedsUnmute(false);
+            }
+          }, 500);
         } else {
-          // Started muted (rare browser block) — force unmute now.
-          // Keep retrying every 200 ms for up to 2 s; PC browsers always allow
-          // unmute once playback has started.
-          let pcRetries = 0;
-          const forceUnmutePC = () => {
-            const vid = videoRef.current;
-            if (!vid) return;
-            vid.muted = false;
-            vid.volume = volumeRef.current;
-            window.setTimeout(() => {
-              const v2 = videoRef.current;
-              if (!v2) return;
-              if (!v2.muted) {
-                isAutoplayMuteRef.current = false;
-                mutedRef.current = false;
-                setMuted(false);
-                setNeedsUnmute(false);
-              } else if (++pcRetries < 10) {
-                // Keep retrying — PC should always eventually allow this
-                window.setTimeout(forceUnmutePC, 200);
-              }
-              // Never show "Tap To Unmute" on PC — just keep trying silently
-            }, 100);
-          };
-          forceUnmutePC();
+          // First ever iOS visit — must ask once
+          setNeedsUnmute(true);
         }
         return;
       }
 
-      // ── Android ─────────────────────────────────────────────────────
-      // Try unmuting once right after playback starts. Android Chrome almost
-      // always allows this. If it fails, just stay muted — no overlay.
-      if (isMobile && !isIOS) {
-        v.muted = false;
-        v.volume = volumeRef.current;
-        window.setTimeout(() => {
-          const v2 = videoRef.current;
-          if (!v2) return;
-          if (!v2.muted && !v2.paused) {
-            // Success
-            isAutoplayMuteRef.current = false;
-            mutedRef.current = false;
-            setMuted(false);
-            setNeedsUnmute(false);
-          } else {
-            // Browser blocked — play muted, no overlay on Android
-            v2.muted = true;
-            if (v2.paused) v2.play().catch(() => {});
-            isAutoplayMuteRef.current = false;
-            mutedRef.current = false; // keep state as "user wants sound"
-            setNeedsUnmute(false);
-          }
-        }, 300);
-        return;
-      }
+      // ── PC & Android ────────────────────────────────────────────────
+      // Unmuting an already-playing video does NOT require a user gesture —
+      // the browser allows it because play() already succeeded (muted).
+      // Retry up to 5 times with short gaps; show overlay only as last resort.
+      let retries = 0;
+      const DELAYS = [50, 150, 350, 600, 900]; // ms between attempts
 
-      // ── iOS ─────────────────────────────────────────────────────────
-      // iOS Safari strictly blocks unmuted autoplay. We need a real user gesture.
-      // • hadPriorGesture: try silent unmute once. Success → great. Fail → muted silently (no overlay).
-      // • No prior gesture: show "Tap To Unmute" overlay so user can grant it.
-      if (hadPriorGesture) {
-        v.muted = false;
-        v.volume = volumeRef.current;
+      const tryUnmute = () => {
+        const vid = videoRef.current;
+        if (!vid) return;
+        vid.muted = false;
+        vid.volume = volumeRef.current;
         window.setTimeout(() => {
           const v2 = videoRef.current;
           if (!v2) return;
-          if (!v2.muted && !v2.paused) {
-            // iOS allowed it this session
+          if (!v2.muted) {
+            // ✓ Unmuted — playing with sound
             isAutoplayMuteRef.current = false;
             mutedRef.current = false;
             setMuted(false);
             setNeedsUnmute(false);
           } else {
-            // Still blocked — play muted silently, no overlay (user already knows they can tap)
+            // Still muted — keep video playing while we retry
             v2.muted = true;
             if (v2.paused) v2.play().catch(() => {});
-            isAutoplayMuteRef.current = false;
-            mutedRef.current = true;
-            setMuted(true);
-            setNeedsUnmute(false);
+            if (retries < DELAYS.length - 1) {
+              const gap = DELAYS[retries + 1] - DELAYS[retries];
+              retries++;
+              window.setTimeout(tryUnmute, gap);
+            } else {
+              // All 5 retries failed — show "Tap To Unmute" as last resort
+              mutedRef.current = true;
+              setMuted(true);
+              setNeedsUnmute(true);
+            }
           }
-        }, 500);
-      } else {
-        // First ever visit on iOS — show the tap overlay
-        v.muted = true;
-        if (v.paused) v.play().catch(() => {});
-        mutedRef.current = true;
-        setMuted(true);
-        setNeedsUnmute(true);
-      }
+        }, 30);
+      };
+
+      tryUnmute();
     };
 
     if (Hls.isSupported()) {
