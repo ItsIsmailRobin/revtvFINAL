@@ -138,8 +138,10 @@ function bdTodayStr(): string {
 }
 
 function matchStart(m: Match) { return new Date(`${m.date}T${m.time}:00+06:00`); }
-function isOver(m: Match)  { return matchStart(m) < bdNow(); }
-function isLive(m: Match)  { const s = matchStart(m).getTime(), n = bdNow().getTime(); return n >= s && n <= s + 110*60000; }
+// A match is truly over only after start + 115 min (90 + stoppages + half-time buffer).
+// This prevents matches from showing "Full Time" the moment they kick off.
+function isOver(m: Match)  { return matchStart(m).getTime() + 115*60000 < bdNow().getTime(); }
+function isLive(m: Match)  { const s = matchStart(m).getTime(), n = bdNow().getTime(); return n >= s && n <= s + 115*60000; }
 
 function groupByDate(matches: Match[]): { date: string; matches: Match[] }[] {
   const map: Record<string, Match[]> = {};
@@ -173,6 +175,7 @@ function Countdown({ match }: { match: Match }) {
     return () => clearInterval(id);
   }, [match]);
 
+  // isLive covers start → start+115min, isOver covers start+115min onwards
   if (isLive(match)) return (
     <div className="flex items-center justify-center gap-1.5">
       <span className="relative flex h-2 w-2 shrink-0">
@@ -190,24 +193,8 @@ function Countdown({ match }: { match: Match }) {
     </div>
   );
 
-  if (ms <= 0) {
-    const ongoing = isLive(match);
-    return ongoing ? (
-      <div className="flex items-center justify-center gap-1.5">
-        <span className="relative flex h-2 w-2 shrink-0">
-          <span className="absolute inset-0 rounded-full" style={{
-            backgroundColor: "rgba(139,92,246,0.7)",
-            animation: "livePulseRing 2s ease-in-out infinite",
-          }} />
-          <span className="relative h-2 w-2 rounded-full" style={{
-            backgroundColor: "#a78bfa",
-            boxShadow: "0 0 6px rgba(167,139,250,0.9), 0 0 14px rgba(139,92,246,0.6)",
-            animation: "liveDotGlow 2s ease-in-out infinite",
-          }} />
-        </span>
-        <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.10em", color:"#c4b5fd", textShadow:"0 0 10px rgba(167,139,250,0.8), 0 0 20px rgba(139,92,246,0.5)", animation:"liveLabelPulse 2s ease-in-out infinite"}}>Live</span>
-      </div>
-    ) : (
+  if (isOver(match)) {
+    return (
       <div style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.25)", textTransform:"uppercase", textAlign:"center", lineHeight:1, padding:"2px 4px"}}>Full Time</div>
     );
   }
@@ -451,7 +438,7 @@ function MatchCard({ match, isToday, scoreMap }: { match: Match; isToday: boolea
                 }}>Full Time</span>
               </div>
             ) : over ? (
-              <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"10px", fontWeight:700, letterSpacing:"0.08em", color:"rgba(255,255,255,0.28)", textTransform:"uppercase", display:"block", textAlign:"center", width:"100%"}}>Full Time</span>
+              <Countdown match={match} />
             ) : (
               <Countdown match={match} />
             )}

@@ -441,6 +441,12 @@ export default function Player({
     // On PC: attempt direct unmuted autoplay first (modern browsers allow this).
     // On mobile (iOS/Android): always start muted (browser policy requires it),
     // then aggressively try to unmute once playback begins.
+    // If the user has previously granted unmute (stored in localStorage), we
+    // retry unmuting more aggressively to avoid the "Tap to Unmute" prompt on refresh.
+    const hadPriorGesture = (() => {
+      try { return window.localStorage.getItem("revtv:unmuteGrant") === "1"; } catch { return false; }
+    })();
+
     const attemptAutoplay = (v: HTMLVideoElement) => {
       if (!isMobile && !isIOS) {
         // Desktop: try unmuted first
@@ -464,7 +470,7 @@ export default function Player({
 
     // Once the stream starts, handle unmute.
     // PC: if already unmuted (direct autoplay worked), just confirm state.
-    // Mobile/iOS: try ONE unmute attempt. If browser rejects, immediately show "Tap to Unmute".
+    // Mobile/iOS: try unmute. If prior gesture exists, retry multiple times before giving up.
     const tryUnmuteAfterStart = () => {
       const v = videoRef.current;
       if (!v) return;
@@ -508,27 +514,46 @@ export default function Player({
         return;
       }
 
-      // Mobile/iOS: single unmute attempt — no retries
-      v.muted = false;
-      v.volume = volumeRef.current;
-      window.setTimeout(() => {
+      // Mobile/iOS: try unmute. If we have a prior gesture grant, retry up to 4 times
+      // with increasing delays before showing the overlay — browsers often allow it
+      // after buffering has stabilised even if the first attempt fails.
+      const maxRetries = hadPriorGesture ? 4 : 1;
+      const delays = [200, 500, 900, 1500]; // ms after playback start
+      let attempt = 0;
+
+      const tryOnce = () => {
         const vid = videoRef.current;
         if (!vid) return;
-        if (!vid.muted && !vid.paused) {
-          // Success
-          isAutoplayMuteRef.current = false;
-          mutedRef.current = false;
-          setMuted(false);
-          setNeedsUnmute(false);
-        } else {
-          // Browser blocked — immediately show "Tap to Unmute", no further retries
-          vid.muted = true;
-          if (vid.paused) vid.play().catch(() => {});
-          mutedRef.current = true;
-          setMuted(true);
-          setNeedsUnmute(true);
-        }
-      }, isIOS ? 400 : 300);
+        vid.muted = false;
+        vid.volume = volumeRef.current;
+        window.setTimeout(() => {
+          const v2 = videoRef.current;
+          if (!v2) return;
+          if (!v2.muted && !v2.paused) {
+            // Success — unmuted without user tap
+            isAutoplayMuteRef.current = false;
+            mutedRef.current = false;
+            setMuted(false);
+            setNeedsUnmute(false);
+          } else {
+            // This attempt blocked
+            v2.muted = true;
+            if (v2.paused) v2.play().catch(() => {});
+            attempt++;
+            if (attempt < maxRetries) {
+              // Schedule next retry
+              window.setTimeout(tryOnce, delays[attempt] - delays[attempt - 1]);
+            } else {
+              // All retries exhausted — show overlay
+              mutedRef.current = true;
+              setMuted(true);
+              setNeedsUnmute(true);
+            }
+          }
+        }, isIOS ? 400 : 200);
+      };
+
+      tryOnce();
     };
 
     if (Hls.isSupported()) {
@@ -1328,6 +1353,9 @@ export default function Player({
     mutedRef.current = false;
     setMuted(false);
     setNeedsUnmute(false);
+    // Remember that user has granted unmute gesture — used on next refresh
+    // to attempt unmuting automatically before showing the overlay.
+    try { window.localStorage.setItem("revtv:unmuteGrant", "1"); } catch {}
   }, []);
 
   const onVideoClick = (e: ReactMouseEvent) => {
@@ -1656,29 +1684,23 @@ export default function Player({
           onClick={(e) => { e.stopPropagation(); doUnmuteNow(); }}
           style={{ cursor: "pointer" }}
         >
-          {/* Glass pill — purely visual, click is handled by the parent div */}
+          {/* Small glass pill — matches play/mute button style */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "9px",
-              padding: "11px 24px",
+              gap: "6px",
+              padding: "7px 14px",
               borderRadius: "999px",
-              // Layered glass: frosted white tint + subtle inner highlight
-              background: "linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.09) 100%)",
-              border: "1px solid rgba(255,255,255,0.32)",
-              backdropFilter: "blur(28px) saturate(200%) brightness(1.1)",
-              WebkitBackdropFilter: "blur(28px) saturate(200%) brightness(1.1)",
-              boxShadow: [
-                "0 4px 24px rgba(0,0,0,0.30)",
-                "0 1px 0 rgba(255,255,255,0.40) inset",
-                "0 -1px 0 rgba(0,0,0,0.10) inset",
-                "inset 0 0 0 0.5px rgba(255,255,255,0.18)",
-              ].join(", "),
-              fontSize: "13px",
+              background: "rgba(255,255,255,0.14)",
+              border: "1px solid rgba(255,255,255,0.28)",
+              backdropFilter: "blur(12px) saturate(160%)",
+              WebkitBackdropFilter: "blur(12px) saturate(160%)",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.30)",
+              fontSize: "11px",
               fontWeight: 600,
-              letterSpacing: "0.02em",
-              color: "rgba(255,255,255,0.97)",
+              letterSpacing: "0.03em",
+              color: "rgba(255,255,255,0.90)",
               fontFamily: "'Inter', system-ui, sans-serif",
               animation: "tapUnmuteIn 320ms cubic-bezier(0.22,1,0.36,1) both",
               userSelect: "none",
@@ -1686,17 +1708,17 @@ export default function Player({
             }}
           >
             {/* Speaker icon */}
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"
-              style={{ opacity: 0.88, flexShrink: 0 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"
+              style={{ opacity: 0.80, flexShrink: 0 }}>
               <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
             </svg>
-            Tap to Unmute
+            Tap to unmute
           </div>
           <style>{`
             @keyframes tapUnmuteIn {
-              0%   { opacity: 0; transform: scale(0.88); filter: blur(4px); }
-              70%  { opacity: 1; transform: scale(1.03); filter: blur(0px); }
-              100% { opacity: 1; transform: scale(1);    filter: blur(0px); }
+              0%   { opacity: 0; transform: scale(0.88); }
+              70%  { opacity: 1; transform: scale(1.03); }
+              100% { opacity: 1; transform: scale(1);    }
             }
           `}</style>
         </div>
