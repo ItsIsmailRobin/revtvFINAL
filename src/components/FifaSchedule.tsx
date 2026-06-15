@@ -205,7 +205,7 @@ function Countdown({ match }: { match: Match }) {
             animation: "liveDotGlow 2s ease-in-out infinite",
           }} />
         </span>
-        <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.10em", color:"#c4b5fd", textShadow:"0 0 10px rgba(167,139,250,0.8), 0 0 20px rgba(139,92,246,0.5)", animation:"liveLabelPulse 2s ease-in-out infinite"}}>Ongoing</span>
+        <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.10em", color:"#c4b5fd", textShadow:"0 0 10px rgba(167,139,250,0.8), 0 0 20px rgba(139,92,246,0.5)", animation:"liveLabelPulse 2s ease-in-out infinite"}}>Live</span>
       </div>
     ) : (
       <div style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.25)", textTransform:"uppercase", textAlign:"center", lineHeight:1, padding:"2px 4px"}}>Full Time</div>
@@ -429,7 +429,7 @@ function MatchCard({ match, isToday, scoreMap }: { match: Match; isToday: boolea
                     <span className="absolute inset-0 rounded-full" style={{ backgroundColor:"rgba(139,92,246,0.7)", animation:"livePulseRing 2s ease-in-out infinite" }} />
                     <span className="relative h-1.5 w-1.5 rounded-full" style={{ backgroundColor:"#a78bfa" }} />
                   </span>
-                  <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"8px", fontWeight:700, letterSpacing:"0.14em", color:"#c4b5fd", textTransform:"uppercase"}}>Ongoing</span>
+                  <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"8px", fontWeight:700, letterSpacing:"0.14em", color:"#c4b5fd", textTransform:"uppercase", animation:"liveLabelPulse 2s ease-in-out infinite"}}>Live</span>
                 </div>
               </div>
             ) : live ? (
@@ -439,7 +439,7 @@ function MatchCard({ match, isToday, scoreMap }: { match: Match; isToday: boolea
                   <span className="absolute inset-0 rounded-full" style={{ backgroundColor:"rgba(139,92,246,0.7)", animation:"livePulseRing 2s ease-in-out infinite" }} />
                   <span className="relative h-2 w-2 rounded-full" style={{ backgroundColor:"#a78bfa", boxShadow:"0 0 6px rgba(167,139,250,0.9)" }} />
                 </span>
-                <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.10em", color:"#c4b5fd", animation:"liveLabelPulse 2s ease-in-out infinite"}}>Ongoing</span>
+                <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.10em", color:"#c4b5fd", animation:"liveLabelPulse 2s ease-in-out infinite"}}>Live</span>
               </div>
             ) : over && hasScore ? (
               /* Show score directly — no hover needed, always visible */
@@ -584,13 +584,33 @@ export default function FifaSchedule() {
     const fetchScores = async () => {
       try {
         // ESPN public API — FIFA World Cup 2026 (league=FIFA.WORLD)
-        const res = await fetch(
-          "https://site.api.espn.com/apis/site/v2/sports/soccer/FIFA.WORLD/scoreboard?limit=200&dates=20260601-20261220",
-          { signal: AbortSignal.timeout(8000) }
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        const events: unknown[] = data?.events ?? [];
+        // Fetch both the full schedule and today's live scoreboard
+        const [schedRes, liveRes] = await Promise.all([
+          fetch(
+            "https://site.api.espn.com/apis/site/v2/sports/soccer/FIFA.WORLD/scoreboard?limit=200&dates=20260601-20261220",
+            { signal: AbortSignal.timeout(8000) }
+          ),
+          fetch(
+            "https://site.api.espn.com/apis/site/v2/sports/soccer/FIFA.WORLD/scoreboard",
+            { signal: AbortSignal.timeout(8000) }
+          ),
+        ]);
+
+        const allEvents: unknown[] = [];
+        if (schedRes.ok) {
+          const d = await schedRes.json();
+          allEvents.push(...(d?.events ?? []));
+        }
+        if (liveRes.ok) {
+          const d = await liveRes.json();
+          // Merge live events (avoid duplicates by id)
+          const existingIds = new Set(allEvents.map((e: unknown) => (e as Record<string, unknown>).id));
+          for (const ev of (d?.events ?? [])) {
+            if (!existingIds.has((ev as Record<string, unknown>).id)) allEvents.push(ev);
+          }
+        }
+
+        const events = allEvents;
         const map: Record<string, [number, number]> = {};
 
         for (const ev of events) {
@@ -598,8 +618,10 @@ export default function FifaSchedule() {
           const comps = (e.competitions as Record<string, unknown>[])?.[0];
           if (!comps) continue;
           const status = (comps.status as Record<string, unknown>)?.type as Record<string, unknown>;
-          // Only include completed matches
-          if (status?.completed !== true) continue;
+          // Include completed matches AND in-progress (live) matches
+          const isCompleted = status?.completed === true;
+          const isInProgress = status?.state === "in" || (status as Record<string, unknown>)?.description === "In Progress";
+          if (!isCompleted && !isInProgress) continue;
           const competitors = comps.competitors as Record<string, unknown>[];
           if (!competitors || competitors.length < 2) continue;
 
@@ -641,8 +663,8 @@ export default function FifaSchedule() {
     };
 
     fetchScores();
-    // Re-fetch every 5 minutes to get latest results
-    const id = setInterval(fetchScores, 5 * 60 * 1000);
+    // Re-fetch every 30 seconds for live match score updates
+    const id = setInterval(fetchScores, 30 * 1000);
     return () => clearInterval(id);
   }, []);
 
