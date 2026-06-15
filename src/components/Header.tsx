@@ -93,10 +93,10 @@ export default function Header() {
       <div className="flex items-center gap-3 sm:gap-4" style={{ animation: "hdrFadeIn 700ms cubic-bezier(.4,0,.2,1) both" }}>
         <button onClick={handleLogoClick} aria-label="RevTV - Go to homepage"
           className="group block transition-all duration-300 hover:scale-105 active:scale-95">
-          <img src="https://i.postimg.cc/RZGz0gz9/Logo.png" alt="RevTV"
+          <img src="/Logo.png" alt="RevTV"
             className="block h-10 w-auto object-contain transition-all duration-500 group-hover:brightness-110 sm:h-12"
-            style={{ maxWidth:"200px", opacity: 0, animation: "logoFadeIn 400ms ease 200ms forwards" }} loading="eager" fetchPriority="high"
-            onLoad={e => { (e.target as HTMLImageElement).style.opacity = "1"; (e.target as HTMLImageElement).style.animation = "none"; }}
+            style={{ maxWidth:"200px", opacity: 0, animation: "logoPulse 1.2s ease-in-out infinite" }} loading="eager" fetchPriority="high"
+            onLoad={e => { (e.target as HTMLImageElement).style.animation = "logoFadeIn 400ms ease forwards"; (e.target as HTMLImageElement).style.opacity = "1"; }}
             onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
         </button>
 
@@ -144,7 +144,7 @@ export default function Header() {
               <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
             </svg>
           ) : refreshState === "done" ? (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3bed9d" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
           ) : refreshState === "error" ? (
@@ -154,16 +154,16 @@ export default function Header() {
           ) : (
             <>
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
-                style={{ backgroundColor: "#34bf80" }} />
+                style={{ backgroundColor: "#73159e" }} />
               <span className="relative inline-flex h-2 w-2 rounded-full"
-                style={{ backgroundColor: "#34bf80", boxShadow: "0 0 6px rgba(52,191,128,0.9), 0 0 12px rgba(52,191,128,0.5)" }} />
+                style={{ backgroundColor: "#73159e", boxShadow: "0 0 6px rgba(115,21,158,0.9), 0 0 12px rgba(115,21,158,0.5)" }} />
             </>
           )}
         </span>
         {/* Text — hidden on phone, only the dot/icon remains */}
         <span className="hidden text-[11px] font-bold uppercase tracking-widest sm:inline"
           style={{
-            color: refreshState === "done" ? "#22c55e" : refreshState === "error" ? "#ef4444" : "#34bf80",
+            color: refreshState === "done" ? "#3bed9d" : refreshState === "error" ? "#ef4444" : refreshState === "loading" ? "#34bf80" : "#73159e",
             animation: refreshState === "idle" ? "updatePulse 2.4s ease-in-out infinite" : "none",
           }}>
           {refreshState === "loading" ? "Updating…" : refreshState === "done" ? "Updated!" : refreshState === "error" ? "Failed" : "Update Playlist"}
@@ -179,9 +179,13 @@ export default function Header() {
           0%   { opacity: 0; }
           100% { opacity: 1; }
         }
+        @keyframes logoPulse {
+          0%, 100% { opacity: 0.25; transform: scale(0.97); filter: brightness(0.7); }
+          50%       { opacity: 0.55; transform: scale(1.02); filter: brightness(1.1); }
+        }
         @keyframes updatePulse {
           0%,100% { opacity:.75; }
-          50%      { opacity:1; text-shadow:0 0 14px rgba(52,191,128,0.85),0 0 22px rgba(52,191,128,0.4); }
+          50%      { opacity:1; text-shadow:0 0 14px rgba(115,21,158,0.85),0 0 22px rgba(115,21,158,0.4); }
         }
         @keyframes spinOnce {
           from { transform: rotate(0deg); }

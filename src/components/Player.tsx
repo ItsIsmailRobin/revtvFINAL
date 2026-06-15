@@ -211,10 +211,13 @@ export default function Player({
 
   // Track if this is the initial autoplay mute (suppress status badge for it)
   const isAutoplayMuteRef = useRef(true);
+  // Track previous muted value to detect mute-only toggles vs volume changes
+  const prevMutedRef = useRef(muted);
 
   // Show volume status when it changes (e.g. via keyboard)
   // But suppress the "Muted" badge on the initial autoplay mute —
   // we show "Tap to unmute" overlay for that instead.
+  // When manually muted/unmuted: show "Muted" / "Unmuted" label (not volume %).
   useEffect(() => {
     if (!channel) return;
     // Suppress the status badge for the very first autoplay-forced mute
@@ -222,13 +225,20 @@ export default function Player({
     // Suppress when user just tapped "Tap to unmute" — no volume badge needed
     if (suppressNextVolumeStatusRef.current) {
       suppressNextVolumeStatusRef.current = false;
+      prevMutedRef.current = muted;
       return;
     }
-    showStatus(
-      muted || volume === 0
-        ? "Muted"
-        : `Volume: ${Math.round(volume * 100)}%`
-    );
+    const mutedChanged = muted !== prevMutedRef.current;
+    prevMutedRef.current = muted;
+    if (mutedChanged) {
+      // Manual mute/unmute — show label only, not volume number
+      showStatus(muted ? "Muted" : "Unmuted");
+    } else {
+      // Volume wheel/keyboard change — show volume % (only if not muted)
+      if (!muted && volume > 0) {
+        showStatus(`Volume: ${Math.round(volume * 100)}%`);
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [volume, muted]);
 
@@ -1502,7 +1512,7 @@ export default function Player({
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              {statusMessage.startsWith("Volume") ? (
+              {statusMessage.startsWith("Volume") || statusMessage === "Unmuted" ? (
                 <>
                   <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                   <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
