@@ -583,49 +583,78 @@ export default function FifaSchedule() {
 
     const fetchScores = async () => {
       try {
-        // ESPN public API — FIFA World Cup 2026 (league=FIFA.WORLD)
-        // Fetch both the full schedule and today's live scoreboard
-        const [schedRes, liveRes] = await Promise.all([
-          fetch(
-            "https://site.api.espn.com/apis/site/v2/sports/soccer/FIFA.WORLD/scoreboard?limit=200&dates=20260601-20261220",
-            { signal: AbortSignal.timeout(8000) }
-          ),
-          fetch(
-            "https://site.api.espn.com/apis/site/v2/sports/soccer/FIFA.WORLD/scoreboard",
-            { signal: AbortSignal.timeout(8000) }
-          ),
-        ]);
-
-        const allEvents: unknown[] = [];
-        if (schedRes.ok) {
-          const d = await schedRes.json();
-          allEvents.push(...(d?.events ?? []));
-        }
-        if (liveRes.ok) {
-          const d = await liveRes.json();
-          // Merge live events (avoid duplicates by id)
-          const existingIds = new Set(allEvents.map((e: unknown) => (e as Record<string, unknown>).id));
-          for (const ev of (d?.events ?? [])) {
-            if (!existingIds.has((ev as Record<string, unknown>).id)) allEvents.push(ev);
-          }
-        }
-
-        const events = allEvents;
         const map: Record<string, [number, number]> = {};
 
-        for (const ev of events) {
+        // ── Source 1: ESPN full schedule + live scoreboard ────────────────
+        const espnFetch = async () => {
+          const [schedRes, liveRes] = await Promise.allSettled([
+            fetch(
+              "https://site.api.espn.com/apis/site/v2/sports/soccer/FIFA.WORLD/scoreboard?limit=200&dates=20260601-20261220",
+              { signal: AbortSignal.timeout(8000) }
+            ),
+            fetch(
+              "https://site.api.espn.com/apis/site/v2/sports/soccer/FIFA.WORLD/scoreboard",
+              { signal: AbortSignal.timeout(8000) }
+            ),
+          ]);
+
+          const allEvents: unknown[] = [];
+          if (schedRes.status === "fulfilled" && schedRes.value.ok) {
+            const d = await schedRes.value.json();
+            allEvents.push(...(d?.events ?? []));
+          }
+          if (liveRes.status === "fulfilled" && liveRes.value.ok) {
+            const d = await liveRes.value.json();
+            const existingIds = new Set(allEvents.map((e: unknown) => (e as Record<string, unknown>).id));
+            for (const ev of (d?.events ?? [])) {
+              if (!existingIds.has((ev as Record<string, unknown>).id)) allEvents.push(ev);
+            }
+          }
+          return allEvents;
+        };
+
+        // ── Source 2: TheSportsDB free API for FIFA WC 2026 ──────────────
+        const sportsdbFetch = async (): Promise<Array<{ teamA: string; teamB: string; scoreA: number; scoreB: number }>> => {
+          // TheSportsDB: league 4480 = FIFA World Cup
+          const res = await fetch(
+            "https://www.thesportsdb.com/api/v1/json/3/eventsseason.php?id=4480&s=2026",
+            { signal: AbortSignal.timeout(8000) }
+          );
+          if (!res.ok) return [];
+          const data = await res.json();
+          const results: Array<{ teamA: string; teamB: string; scoreA: number; scoreB: number }> = [];
+          for (const ev of (data?.events ?? [])) {
+            const scoreA = parseInt(ev.intHomeScore ?? "-1", 10);
+            const scoreB = parseInt(ev.intAwayScore ?? "-1", 10);
+            if (scoreA < 0 || scoreB < 0) continue;
+            results.push({
+              teamA: String(ev.strHomeTeam ?? ""),
+              teamB: String(ev.strAwayTeam ?? ""),
+              scoreA,
+              scoreB,
+            });
+          }
+          return results;
+        };
+
+        // ── Parallel fetch all sources ────────────────────────────────────
+        const [espnEvents, sportsdbResults] = await Promise.all([
+          espnFetch().catch(() => []),
+          sportsdbFetch().catch(() => []),
+        ]);
+
+        // ── Process ESPN events ───────────────────────────────────────────
+        for (const ev of espnEvents) {
           const e = ev as Record<string, unknown>;
           const comps = (e.competitions as Record<string, unknown>[])?.[0];
           if (!comps) continue;
           const status = (comps.status as Record<string, unknown>)?.type as Record<string, unknown>;
-          // Include completed matches AND in-progress (live) matches
           const isCompleted = status?.completed === true;
-          const isInProgress = status?.state === "in" || (status as Record<string, unknown>)?.description === "In Progress";
+          const isInProgress = status?.state === "in" || String(status?.description ?? "").toLowerCase().includes("progress");
           if (!isCompleted && !isInProgress) continue;
           const competitors = comps.competitors as Record<string, unknown>[];
           if (!competitors || competitors.length < 2) continue;
 
-          // ESPN returns home/away; find each
           const home = competitors.find((c: Record<string, unknown>) => c.homeAway === "home");
           const away = competitors.find((c: Record<string, unknown>) => c.homeAway === "away");
           if (!home || !away) continue;
@@ -636,26 +665,37 @@ export default function FifaSchedule() {
           const awayScore = parseInt(String(away.score ?? "-1"), 10);
           if (homeScore < 0 || awayScore < 0) continue;
 
-          // Match against our MATCHES list by normalized team name
           for (const m of MATCHES) {
+            if (map[`${m.id}`]) continue; // already have score for this match
             const mA = norm(m.teamA), mB = norm(m.teamB);
-            // Try both orderings (home=teamA or home=teamB)
             if (
               (homeTeam.includes(mA) || mA.includes(homeTeam)) &&
               (awayTeam.includes(mB) || mB.includes(awayTeam))
-            ) {
-              map[`${m.id}`] = [homeScore, awayScore];
-              break;
-            }
+            ) { map[`${m.id}`] = [homeScore, awayScore]; break; }
             if (
               (homeTeam.includes(mB) || mB.includes(homeTeam)) &&
               (awayTeam.includes(mA) || mA.includes(awayTeam))
-            ) {
-              map[`${m.id}`] = [awayScore, homeScore];
-              break;
-            }
+            ) { map[`${m.id}`] = [awayScore, homeScore]; break; }
           }
         }
+
+        // ── Fill gaps using TheSportsDB (crosscheck / fallback) ───────────
+        for (const r of sportsdbResults) {
+          const rA = norm(r.teamA), rB = norm(r.teamB);
+          for (const m of MATCHES) {
+            if (map[`${m.id}`]) continue; // ESPN already has it
+            const mA = norm(m.teamA), mB = norm(m.teamB);
+            if (
+              (rA.includes(mA) || mA.includes(rA)) &&
+              (rB.includes(mB) || mB.includes(rB))
+            ) { map[`${m.id}`] = [r.scoreA, r.scoreB]; break; }
+            if (
+              (rA.includes(mB) || mB.includes(rA)) &&
+              (rB.includes(mA) || mA.includes(rB))
+            ) { map[`${m.id}`] = [r.scoreB, r.scoreA]; break; }
+          }
+        }
+
         setScoreMap(map);
       } catch {
         // Silently ignore fetch errors — show nothing instead of crashing

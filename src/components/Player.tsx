@@ -462,10 +462,9 @@ export default function Player({
       }
     };
 
-    // Once the stream starts, check mute state and handle accordingly.
-    // On PC: if the unmuted autoplay succeeded, just clear needsUnmute.
-    // On mobile (iOS/Android): aggressively try to unmute.
-    // Only show "Tap to Unmute" if the browser truly blocks unmuted playback.
+    // Once the stream starts, handle unmute.
+    // PC: if already unmuted (direct autoplay worked), just confirm state.
+    // Mobile/iOS: try ONE unmute attempt. If browser rejects, immediately show "Tap to Unmute".
     const tryUnmuteAfterStart = () => {
       const v = videoRef.current;
       if (!v) return;
@@ -476,54 +475,60 @@ export default function Player({
         return;
       }
 
-      // If we're on PC and already unmuted (direct autoplay worked), done.
-      if (!isMobile && !isIOS && !v.muted) {
-        isAutoplayMuteRef.current = false;
-        mutedRef.current = false;
-        setMuted(false);
-        setNeedsUnmute(false);
+      // PC: check if already unmuted from direct autoplay
+      if (!isMobile && !isIOS) {
+        if (!v.muted) {
+          // Already playing with sound — nothing to do
+          isAutoplayMuteRef.current = false;
+          mutedRef.current = false;
+          setMuted(false);
+          setNeedsUnmute(false);
+        } else {
+          // PC unmuted autoplay was blocked — try once more then show overlay
+          v.muted = false;
+          v.volume = volumeRef.current;
+          window.setTimeout(() => {
+            const vid = videoRef.current;
+            if (!vid) return;
+            if (!vid.muted) {
+              isAutoplayMuteRef.current = false;
+              mutedRef.current = false;
+              setMuted(false);
+              setNeedsUnmute(false);
+            } else {
+              // Still blocked — show overlay
+              vid.muted = true;
+              if (vid.paused) vid.play().catch(() => {});
+              mutedRef.current = true;
+              setMuted(true);
+              setNeedsUnmute(true);
+            }
+          }, 250);
+        }
         return;
       }
 
-      // Attempt unmute with retries — only fall back to tap-to-unmute if all fail
-      const doUnmute = (attempt: number) => {
+      // Mobile/iOS: single unmute attempt — no retries
+      v.muted = false;
+      v.volume = volumeRef.current;
+      window.setTimeout(() => {
         const vid = videoRef.current;
         if (!vid) return;
-
-        vid.muted = false;
-        vid.volume = volumeRef.current;
-
-        window.setTimeout(() => {
-          const vid2 = videoRef.current;
-          if (!vid2) return;
-
-          if (!vid2.muted && !vid2.paused) {
-            // Success — playing with sound
-            isAutoplayMuteRef.current = false;
-            mutedRef.current = false;
-            setMuted(false);
-            setNeedsUnmute(false);
-            return;
-          }
-
-          // Browser rejected unmute (paused or re-muted)
-          if (attempt < 3) {
-            // Keep video playing muted, then retry
-            vid2.muted = true;
-            if (vid2.paused) vid2.play().catch(() => {});
-            window.setTimeout(() => doUnmute(attempt + 1), attempt === 1 ? 600 : 1200);
-          } else {
-            // All retries failed — show tap-to-unmute overlay
-            vid2.muted = true;
-            if (vid2.paused) vid2.play().catch(() => {});
-            mutedRef.current = true;
-            setMuted(true);
-            setNeedsUnmute(true);
-          }
-        }, isIOS ? 400 : 250);
-      };
-
-      doUnmute(1);
+        if (!vid.muted && !vid.paused) {
+          // Success
+          isAutoplayMuteRef.current = false;
+          mutedRef.current = false;
+          setMuted(false);
+          setNeedsUnmute(false);
+        } else {
+          // Browser blocked — immediately show "Tap to Unmute", no further retries
+          vid.muted = true;
+          if (vid.paused) vid.play().catch(() => {});
+          mutedRef.current = true;
+          setMuted(true);
+          setNeedsUnmute(true);
+        }
+      }, isIOS ? 400 : 300);
     };
 
     if (Hls.isSupported()) {
@@ -1314,9 +1319,22 @@ export default function Player({
     return () => document.removeEventListener("keydown", onKey);
   }, [channel, togglePlay, toggleMute, toggleFullscreen]);
 
+  // Unmute helper — used by tap-anywhere-to-unmute
+  const doUnmuteNow = useCallback(() => {
+    const v = videoRef.current;
+    if (v) { v.muted = false; v.volume = volumeRef.current || 1; }
+    isAutoplayMuteRef.current = false;
+    suppressNextVolumeStatusRef.current = true;
+    mutedRef.current = false;
+    setMuted(false);
+    setNeedsUnmute(false);
+  }, []);
+
   const onVideoClick = (e: ReactMouseEvent) => {
     if (isSwiping.current) return;
     e.stopPropagation();
+    // If "Tap to Unmute" is showing, any tap on the player unmutes — never pause
+    if (needsUnmute) { doUnmuteNow(); return; }
     togglePlay();
   };
 
@@ -1437,7 +1455,7 @@ export default function Player({
           with an iOS-style frosted play button that scales/fades in
           smoothly. Clicking anywhere resumes playback. Hidden while
           loading/transitioning so it doesn't fight those overlays. */}
-      {channel && !playing && !loading && !error && !fsTransitioning && hasStartedPlaybackRef.current && (
+      {channel && !playing && !loading && !error && !fsTransitioning && hasStartedPlaybackRef.current && !needsUnmute && (
         <div
           className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 backdrop-blur-[2px]"
           style={{ animation: "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both" }}
@@ -1631,41 +1649,56 @@ export default function Player({
         </div>
       )}
 
-      {/* Tap-to-unmute overlay — shown when browser forced muted autoplay */}
+      {/* Tap-to-unmute overlay — whole player area is tappable, not just button */}
       {needsUnmute && (
-        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
-          <button
-            type="button"
-            className="pointer-events-auto flex items-center gap-2.5 text-sm font-semibold text-white transition-all duration-200 active:scale-95"
+        <div
+          className="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center"
+          onClick={(e) => { e.stopPropagation(); doUnmuteNow(); }}
+          style={{ cursor: "pointer" }}
+        >
+          {/* Glass pill — purely visual, click is handled by the parent div */}
+          <div
             style={{
-              padding: "10px 22px",
+              display: "flex",
+              alignItems: "center",
+              gap: "9px",
+              padding: "11px 24px",
               borderRadius: "999px",
-              border: "1px solid rgba(255,255,255,0.28)",
-              background: "rgba(255,255,255,0.14)",
-              backdropFilter: "blur(24px) saturate(180%)",
-              WebkitBackdropFilter: "blur(24px) saturate(180%)",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.12)",
+              // Layered glass: frosted white tint + subtle inner highlight
+              background: "linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.09) 100%)",
+              border: "1px solid rgba(255,255,255,0.32)",
+              backdropFilter: "blur(28px) saturate(200%) brightness(1.1)",
+              WebkitBackdropFilter: "blur(28px) saturate(200%) brightness(1.1)",
+              boxShadow: [
+                "0 4px 24px rgba(0,0,0,0.30)",
+                "0 1px 0 rgba(255,255,255,0.40) inset",
+                "0 -1px 0 rgba(0,0,0,0.10) inset",
+                "inset 0 0 0 0.5px rgba(255,255,255,0.18)",
+              ].join(", "),
               fontSize: "13px",
               fontWeight: 600,
-              letterSpacing: "0.01em",
-              color: "rgba(255,255,255,0.95)",
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              const v = videoRef.current;
-              if (v) { v.muted = false; v.volume = volumeRef.current || 1; }
-              isAutoplayMuteRef.current = false; // user interacted — show status normally
-              suppressNextVolumeStatusRef.current = true; // don't show volume badge on unmute
-              mutedRef.current = false;
-              setMuted(false);
-              setNeedsUnmute(false);
+              letterSpacing: "0.02em",
+              color: "rgba(255,255,255,0.97)",
+              fontFamily: "'Inter', system-ui, sans-serif",
+              animation: "tapUnmuteIn 320ms cubic-bezier(0.22,1,0.36,1) both",
+              userSelect: "none",
+              WebkitUserSelect: "none",
             }}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style={{ opacity: 0.9 }}>
+            {/* Speaker icon */}
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"
+              style={{ opacity: 0.88, flexShrink: 0 }}>
               <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
             </svg>
             Tap to Unmute
-          </button>
+          </div>
+          <style>{`
+            @keyframes tapUnmuteIn {
+              0%   { opacity: 0; transform: scale(0.88); filter: blur(4px); }
+              70%  { opacity: 1; transform: scale(1.03); filter: blur(0px); }
+              100% { opacity: 1; transform: scale(1);    filter: blur(0px); }
+            }
+          `}</style>
         </div>
       )}
 
