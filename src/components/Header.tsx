@@ -139,12 +139,13 @@ export default function Header() {
         <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
           {refreshState === "loading" ? (
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
-              style={{ animation: "spinOnce 0.8s linear infinite", color: "#34bf80" }}>
+              style={{ animation: "spinOnce 0.8s linear infinite, updatingIconGlow 1.6s ease-in-out infinite", color: "#34bf80" }}>
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.25"/>
               <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
             </svg>
           ) : refreshState === "done" ? (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3bed9d" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3bed9d" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+              style={{ animation: "updatedIconGlow 2s ease-in-out infinite" }}>
               <polyline points="20 6 9 17 4 12"/>
             </svg>
           ) : refreshState === "error" ? (
@@ -153,18 +154,18 @@ export default function Header() {
             </svg>
           ) : (
             <>
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
-                style={{ backgroundColor: "#73159e" }} />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-40"
+                style={{ backgroundColor: "#10c98f" }} />
               <span className="relative inline-flex h-2 w-2 rounded-full"
-                style={{ backgroundColor: "#73159e", boxShadow: "0 0 6px rgba(115,21,158,0.9), 0 0 12px rgba(115,21,158,0.5)" }} />
+                style={{ backgroundColor: "#10c98f", boxShadow: "0 0 3px rgba(16,201,143,0.6), 0 0 6px rgba(16,201,143,0.25)" }} />
             </>
           )}
         </span>
         {/* Text — hidden on phone, only the dot/icon remains */}
         <span className="hidden text-[11px] font-bold uppercase tracking-widest sm:inline"
           style={{
-            color: refreshState === "done" ? "#3bed9d" : refreshState === "error" ? "#ef4444" : refreshState === "loading" ? "#34bf80" : "#73159e",
-            animation: refreshState === "idle" ? "updatePulse 2.4s ease-in-out infinite" : "none",
+            color: refreshState === "done" ? "#3bed9d" : refreshState === "error" ? "#ef4444" : refreshState === "loading" ? "#34bf80" : "#10c98f",
+            animation: refreshState === "idle" ? "updatePulse 2.4s ease-in-out infinite" : refreshState === "loading" ? "updatingTextGlow 1.6s ease-in-out infinite" : refreshState === "done" ? "updatedTextGlow 2s ease-in-out infinite" : "none",
           }}>
           {refreshState === "loading" ? "Updating…" : refreshState === "done" ? "Updated!" : refreshState === "error" ? "Failed" : "Update Playlist"}
         </span>
@@ -185,7 +186,23 @@ export default function Header() {
         }
         @keyframes updatePulse {
           0%,100% { opacity:.75; }
-          50%      { opacity:1; text-shadow:0 0 14px rgba(115,21,158,0.85),0 0 22px rgba(115,21,158,0.4); }
+          50%      { opacity:1; text-shadow:0 0 8px rgba(16,201,143,0.7),0 0 14px rgba(16,201,143,0.3); }
+        }
+        @keyframes updatingTextGlow {
+          0%,100% { opacity:.85; text-shadow:0 0 6px rgba(52,191,128,0.65),0 0 12px rgba(52,191,128,0.3); }
+          50%      { opacity:1;   text-shadow:0 0 10px rgba(52,191,128,0.9),0 0 18px rgba(52,191,128,0.5); }
+        }
+        @keyframes updatedTextGlow {
+          0%,100% { opacity:.85; text-shadow:0 0 6px rgba(59,237,157,0.65),0 0 12px rgba(59,237,157,0.3); }
+          50%      { opacity:1;   text-shadow:0 0 10px rgba(59,237,157,0.9),0 0 18px rgba(59,237,157,0.5); }
+        }
+        @keyframes updatingIconGlow {
+          0%,100% { filter: drop-shadow(0 0 2px rgba(52,191,128,0.6)) drop-shadow(0 0 5px rgba(52,191,128,0.25)); }
+          50%      { filter: drop-shadow(0 0 4px rgba(52,191,128,0.9)) drop-shadow(0 0 8px rgba(52,191,128,0.45)); }
+        }
+        @keyframes updatedIconGlow {
+          0%,100% { filter: drop-shadow(0 0 2px rgba(59,237,157,0.6)) drop-shadow(0 0 5px rgba(59,237,157,0.25)); }
+          50%      { filter: drop-shadow(0 0 4px rgba(59,237,157,0.9)) drop-shadow(0 0 8px rgba(59,237,157,0.45)); }
         }
         @keyframes spinOnce {
           from { transform: rotate(0deg); }

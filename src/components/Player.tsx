@@ -239,8 +239,8 @@ export default function Player({
     const mutedChanged = muted !== prevMutedRef.current;
     prevMutedRef.current = muted;
     if (mutedChanged) {
-      // Manual mute/unmute — show label only, not volume number
-      showStatus(muted ? "Muted" : "Unmuted");
+      // Manual mute — show "Muted" label. Unmute — show nothing.
+      if (muted) showStatus("Muted");
     } else {
       // Volume wheel/keyboard change — show volume % (only if not muted)
       if (!muted && volume > 0) {
@@ -439,78 +439,67 @@ export default function Player({
     video.addEventListener("error",   onError);
 
     // ── Autoplay-with-sound helper ──────────────────────────────────────
-    // Browsers (esp. Android Chrome / WebViews) reliably allow autoplay
-    // ONLY when muted. Racing an unmuted play() first can leave the
-    // player in a stuck "paused, not even muted-playing" state on
-    // Android when the unmuted attempt is rejected and the muted retry
-    // doesn't resolve cleanly in time.
-    //
-    // So: always start muted (guaranteed to autoplay on every platform),
-    // then — the instant playback actually begins — try to unmute. On
-    // PC and most Android Chrome/WebViews this unmute succeeds silently
-    // because the act of calling play() satisfies the autoplay gesture
-    // policy. If the browser snaps it back to muted, fall back to the
-    // "Tap to unmute" overlay.
+    // Always start muted (guaranteed to autoplay on every platform),
+    // then aggressively try to unmute once playback begins.
     const attemptAutoplay = (v: HTMLVideoElement) => {
       v.muted = true;
       v.play().catch(() => {
-        // Even muted autoplay was blocked (rare) — try again shortly,
-        // the media may not have been ready yet.
         window.setTimeout(() => { v.play().catch(() => {}); }, 300);
       });
     };
 
-    // Once the stream actually starts playing, try to unmute (unless the
-    // user had previously muted it themselves).
-    //
-    // IMPORTANT: on Android Chrome/WebViews, setting `muted = false` on a
-    // video that is autoplaying (without a user gesture) doesn't always
-    // just get silently re-muted — it can PAUSE the video entirely,
-    // since unmuted playback wasn't permitted by the autoplay policy.
-    // That's the "plays for a moment then shows the play/resume icon"
-    // symptom. So after attempting unmute, explicitly check `v.paused`
-    // and re-call play() (muted, if needed) to recover.
+    // Once the stream starts, aggressively try to unmute on ALL platforms
+    // (PC, Android, iOS). Only show "Tap to unmute" if the browser truly
+    // blocks unmuted playback after multiple attempts.
     const tryUnmuteAfterStart = () => {
       const v = videoRef.current;
       if (!v) return;
       if (mutedRef.current) {
         // User preference is muted — respect it, no unmute prompt.
-        isAutoplayMuteRef.current = false; // user-set mute, show status normally
+        isAutoplayMuteRef.current = false;
         setNeedsUnmute(false);
         return;
       }
-      v.muted = false;
-      v.volume = volumeRef.current;
-      window.setTimeout(() => {
-        if (!v) return;
-        if (v.paused) {
-          // Unmuting paused playback — browser rejected unmuted
-          // playback. Go back to muted and resume, show tap-to-unmute.
-          v.muted = true;
-          v.play().then(() => {
+
+      // Attempt unmute with retries — only fall back to tap-to-unmute if all fail
+      const doUnmute = (attempt: number) => {
+        const vid = videoRef.current;
+        if (!vid) return;
+
+        vid.muted = false;
+        vid.volume = volumeRef.current;
+
+        window.setTimeout(() => {
+          const vid2 = videoRef.current;
+          if (!vid2) return;
+
+          if (!vid2.muted && !vid2.paused) {
+            // Success — playing with sound
+            isAutoplayMuteRef.current = false;
+            mutedRef.current = false;
+            setMuted(false);
+            setNeedsUnmute(false);
+            return;
+          }
+
+          // Browser rejected unmute (paused or re-muted)
+          if (attempt < 3) {
+            // Keep video playing muted, then retry
+            vid2.muted = true;
+            if (vid2.paused) vid2.play().catch(() => {});
+            window.setTimeout(() => doUnmute(attempt + 1), attempt === 1 ? 600 : 1200);
+          } else {
+            // All retries failed — show tap-to-unmute overlay
+            vid2.muted = true;
+            if (vid2.paused) vid2.play().catch(() => {});
             mutedRef.current = true;
             setMuted(true);
             setNeedsUnmute(true);
-            // Keep isAutoplayMuteRef.current = true so status badge stays hidden
-          }).catch(() => {
-            mutedRef.current = true;
-            setMuted(true);
-            setNeedsUnmute(true);
-          });
-        } else if (v.muted) {
-          // Still playing but browser re-muted it — needs an explicit tap.
-          mutedRef.current = true;
-          setMuted(true);
-          setNeedsUnmute(true);
-          // Keep isAutoplayMuteRef.current = true so status badge stays hidden
-        } else {
-          // Successfully unmuted — from here on, mute/unmute shows status
-          isAutoplayMuteRef.current = false;
-          mutedRef.current = false;
-          setMuted(false);
-          setNeedsUnmute(false);
-        }
-      }, 250);
+          }
+        }, isIOS ? 400 : 250);
+      };
+
+      doUnmute(1);
     };
 
     if (Hls.isSupported()) {
@@ -1520,7 +1509,7 @@ export default function Player({
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              {statusMessage.startsWith("Volume") || statusMessage === "Unmuted" ? (
+              {statusMessage.startsWith("Volume") ? (
                 <>
                   <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                   <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
