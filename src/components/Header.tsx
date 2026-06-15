@@ -44,9 +44,18 @@ export default function Header() {
     };
     window.addEventListener("revtv:refresh-done", onDone);
     window.addEventListener("revtv:refresh-error", onError);
+
+    // Auto-start loading animation on every page visit/refresh
+    const onStart = () => {
+      setRefreshState("loading");
+      loadingStartRef.current = Date.now();
+    };
+    window.addEventListener("revtv:refresh-start", onStart);
+
     return () => {
       window.removeEventListener("revtv:refresh-done", onDone);
       window.removeEventListener("revtv:refresh-error", onError);
+      window.removeEventListener("revtv:refresh-start", onStart);
       if (resetTimer.current) clearTimeout(resetTimer.current);
     };
   }, []);
