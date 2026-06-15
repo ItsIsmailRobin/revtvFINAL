@@ -43,15 +43,21 @@ function ChannelCount({ count, activeTag }: { count:number; activeTag:string }) 
 }
 
 export default function App() {
-  // Seed from the last cached playlist (localStorage) so channels and the
-  // player populate INSTANTLY on a brand-new tab / hard refresh, before the
-  // live M3U fetch resolves. A fresh fetch always runs in the background
-  // (see useEffect below) and replaces this the moment it completes.
+  // Seed from the last cached playlist (localStorage / window.__revtv_cache__)
+  // so channels and the player populate INSTANTLY on every tab/refresh.
+  // The inline <script> in index.html starts the M3U fetch before React loads
+  // and writes the parsed result to window.__revtv_cache__ as soon as it
+  // arrives — so by the time this runs, channels may already be fresh.
   const [channels, setChannels] = useState<Channel[]>(() => {
     const cached = getCachedPlaylist<Channel[]>();
     return cached && cached.length ? cached : [];
   });
-  const [loading, setLoading]       = useState(() => channels.length === 0);
+  const [loading, setLoading] = useState(() => {
+    // Only show skeleton if we truly have nothing to show
+    const w = window as any;
+    const hasCache = !!(w.__revtv_cache__?.length);
+    return !hasCache;
+  });
   const [error, setError]           = useState<string | null>(null);
   const [activeTag, setActiveTag]   = useState<string>("All");
   const [activeChannel, setActiveChannel] = useState<Channel | null>(() => {
@@ -93,21 +99,42 @@ export default function App() {
 
   const fetchPlaylist = async () => {
     try {
-      // Only show the channel-list skeleton if we have nothing cached yet
-      // (true first-ever visit). If we already have cached channels, keep
-      // showing them instantly while this fetch refreshes in the background.
-      if (channelsRef.current.length === 0) setLoading(true);
       setError(null);
 
-      // Re-use the early prefetch Promise kicked off by the inline <script>
-      // in index.html — it started fetching the M3U the instant the HTML
-      // was parsed, so by the time React mounts the result is often already
-      // available (zero extra network round-trip).
       const w = window as any;
+
+      // Fast path: the inline prefetch script in index.html may have already
+      // fetched AND parsed the M3U into window.__revtv_cache__ by the time
+      // React mounts. If so, channels are already up-to-date — just apply
+      // them and skip the skeleton entirely.
+      if (w.__revtv_cache__?.length && w.__revtv_prefetch__ === null) {
+        // Prefetch fully resolved before we mounted — use it directly.
+        const parsed = w.__revtv_cache__ as Channel[];
+        setChannels(parsed);
+        setLoading(false);
+        setActiveChannel(prev => {
+          let restored: Channel | null = null;
+          try {
+            const savedId = getFresh("revtv:lastChannelId");
+            if (savedId) restored = parsed.find(c => c.id === savedId) || null;
+          } catch {}
+          if (restored) return restored;
+          if (prev) { const s = parsed.find(c => c.id === prev.id); if (s) return s; }
+          return parsed[0];
+        });
+        window.dispatchEvent(new CustomEvent("revtv:refresh-done"));
+        return;
+      }
+
+      // Slow path: prefetch is still in-flight or failed — show skeleton only
+      // if we have no channels at all, then await the prefetch result.
+      if (channelsRef.current.length === 0) setLoading(true);
+
+      // Re-use the early prefetch Promise — it started before React loaded.
       let text: string | null = null;
       if (w.__revtv_prefetch__) {
         text = await w.__revtv_prefetch__;
-        w.__revtv_prefetch__ = null; // consume once; subsequent calls re-fetch
+        w.__revtv_prefetch__ = null; // consume once
       }
       if (!text) {
         const res = await fetch(PLAYLIST_URL, { cache: "no-store" });

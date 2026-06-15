@@ -77,6 +77,8 @@
     <meta http-equiv="origin-trial" content="" />
     <!-- Prefetch common CDN/stream origins to reduce DNS lookup latency -->
     <link rel="dns-prefetch" href="https://cloudflare.com" />
+    <link rel="dns-prefetch" href="https://8.8.8.8" />
+    <link rel="dns-prefetch" href="https://8.8.4.4" />
     <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
     <link rel="dns-prefetch" href="https://objects.githubusercontent.com" />
     <link rel="dns-prefetch" href="https://github.com" />
@@ -175,6 +177,79 @@
   </head>
   <body>
     <div id="root"></div>
+
+    <!--
+      Early playlist prefetch — starts the M3U fetch the instant the HTML
+      is parsed, before React bundles are downloaded or evaluated.
+      Also embeds a compact M3U parser so channels are parsed and written
+      to window.__revtv_cache__ the moment the network response arrives —
+      React reads this synchronously from useState initializer (zero wait).
+    -->
+    <script>
+      (function () {
+        var PLAYLIST_URL = "https://raw.githubusercontent.com/ItsIsmailRobin/playlisttv/refs/heads/main/playlist.m3u";
+        var CACHE_KEY    = "revtv:playlistCache";
+        var EXCLUDE      = ["welcome to playz tv", "playz tv | new app", "playz tv"];
+
+        function isExcluded(name, group) {
+          var t = (name + " " + group).toLowerCase();
+          return EXCLUDE.some(function(k) { return t.indexOf(k) !== -1 || group.toLowerCase().indexOf("welcome to playz") !== -1; });
+        }
+
+        function parseM3U(text) {
+          var lines = text.split(/\r?\n/);
+          var channels = [];
+          var cur = null;
+          var getAttr = function(attrs, key) {
+            var re = new RegExp(key + '="([^"]*)"', "i");
+            var m = attrs.match(re);
+            return m ? m[1] : "";
+          };
+          for (var i = 0; i < lines.length; i++) {
+            var line = lines[i].trim();
+            if (!line) continue;
+            if (line.indexOf("#EXTINF:") === 0) {
+              var info = line.substring(8);
+              var ci   = info.lastIndexOf(",");
+              var attrs = ci !== -1 ? info.substring(0, ci) : info;
+              var name  = ci !== -1 ? info.substring(ci + 1).trim() : "";
+              cur = { name: name, logo: getAttr(attrs, "tvg-logo"), group: getAttr(attrs, "group-title") || "Uncategorized", url: "" };
+            } else if (line[0] !== "#" && cur && (line.indexOf("http://") === 0 || line.indexOf("https://") === 0 || line.indexOf("rtmp://") === 0 || line[0] === "/")) {
+              cur.url = line;
+              if (!isExcluded(cur.name, cur.group) && cur.name && cur.url) {
+                cur.id = cur.name + "-" + channels.length;
+                channels.push(cur);
+              }
+              cur = null;
+            }
+          }
+          return channels;
+        }
+
+        // Seed from localStorage immediately — synchronous, zero latency.
+        try {
+          var raw = window.localStorage.getItem(CACHE_KEY);
+          if (raw) window.__revtv_cache__ = JSON.parse(raw);
+        } catch (e) {}
+
+        // Kick off live fetch immediately. Parse M3U right here as soon as
+        // the response arrives — write result to window.__revtv_cache__ and
+        // localStorage so React reads it instantly on mount.
+        window.__revtv_prefetch__ = fetch(PLAYLIST_URL, { cache: "no-store" })
+          .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+          .then(function (text) {
+            var parsed = parseM3U(text);
+            if (parsed.length) {
+              window.__revtv_cache__ = parsed;
+              try { window.localStorage.setItem(CACHE_KEY, JSON.stringify(parsed)); } catch(e) {}
+            }
+            window.__revtv_prefetch__ = null; // signal: fully resolved
+            return text;
+          })
+          .catch(function () { return null; });
+      })();
+    </script>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

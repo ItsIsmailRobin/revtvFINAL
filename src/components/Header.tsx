@@ -90,7 +90,7 @@ export default function Header() {
 
   return (
     <header className="relative z-20 flex items-center justify-between border-b border-white/5 bg-black/50 px-4 py-3 sm:px-8 sm:py-4">
-      <div className="flex items-center gap-3 sm:gap-4">
+      <div className="flex items-center gap-3 sm:gap-4" style={{ animation: "hdrFadeIn 700ms cubic-bezier(.4,0,.2,1) both" }}>
         <button onClick={handleLogoClick} aria-label="RevTV - Go to homepage"
           className="group block transition-all duration-300 hover:scale-105 active:scale-95">
           <img src="https://i.postimg.cc/RZGz0gz9/Logo.png" alt="RevTV"
@@ -100,7 +100,7 @@ export default function Header() {
         </button>
 
         {/* Inline BD clock — no border, dot + HH:MM:SS AM/PM */}
-        <div className="flex items-center gap-1.5 pl-1">
+        <div className="flex items-center gap-1.5 pl-1" style={{ animation: "hdrFadeIn 700ms 120ms cubic-bezier(.4,0,.2,1) both" }}>
           <span className="relative inline-flex h-2 w-2 items-center justify-center shrink-0" style={{ marginLeft: "-3px" }}>
             <span
               className="absolute h-1.5 w-1.5 rounded-full"
@@ -132,6 +132,7 @@ export default function Header() {
           border: "none",
           boxShadow: "none",
           borderRadius: "8px",
+          animation: "hdrFadeIn 700ms 240ms cubic-bezier(.4,0,.2,1) both",
         }}>
         {/* Dot / spinner / tick */}
         <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
@@ -169,6 +170,10 @@ export default function Header() {
       </button>
 
       <style>{`
+        @keyframes hdrFadeIn {
+          0%   { opacity: 0; transform: translateY(-6px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
         @keyframes updatePulse {
           0%,100% { opacity:.75; }
           50%      { opacity:1; text-shadow:0 0 14px rgba(52,191,128,0.85),0 0 22px rgba(52,191,128,0.4); }
