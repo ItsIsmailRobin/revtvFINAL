@@ -321,9 +321,13 @@ function stageStyle(stage: string) {
 }
 
 // ─── Match card ───────────────────────────────────────────────────
-function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
+function MatchCard({ match, isToday, scoreMap }: { match: Match; isToday: boolean; scoreMap: Record<string, [number, number]> }) {
   const over = isOver(match), live = isLive(match), final = match.stage === "⭐ Final";
-  const hasScore = match.scoreA !== undefined && match.scoreB !== undefined;
+  // Use live-fetched scores (from ESPN) if available, fall back to hardcoded scores
+  const fetchedScore = scoreMap[`${match.id}`];
+  const scoreA = fetchedScore ? fetchedScore[0] : match.scoreA;
+  const scoreB = fetchedScore ? fetchedScore[1] : match.scoreB;
+  const hasScore = scoreA !== undefined && scoreB !== undefined;
   const ss = stageStyle(match.stage);
   const d = new Date(`${match.date}T${match.time}:00+06:00`);
   const timeLabel = d.toLocaleTimeString("en-BD", { hour:"2-digit", minute:"2-digit", hour12:true, timeZone:"Asia/Dhaka" });
@@ -405,8 +409,6 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
                 borderRadius:"3px", objectFit:"cover",
                 border:"1px solid rgba(255,255,255,0.10)",
                 flexShrink:0,
-                opacity: canReveal && showResult ? 0 : 1,
-                transition: "opacity 300ms ease",
               }}
               onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
             <span style={{
@@ -421,7 +423,7 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
           <div style={{ width:"clamp(52px,18vw,76px)", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"2px", padding:"0 1px" }}>
             {live && hasScore ? (
               <>
-                <Score a={match.scoreA!} b={match.scoreB!} live />
+                <Score a={scoreA!} b={scoreB!} live />
                 <div className="flex items-center gap-1 mt-0.5">
                   <span className="relative flex h-1.5 w-1.5 shrink-0">
                     <span className="absolute inset-0 rounded-full" style={{ backgroundColor:"rgba(139,92,246,0.7)", animation:"livePulseRing 2s ease-in-out infinite" }} />
@@ -440,22 +442,13 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
                 <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.10em", color:"#c4b5fd", animation:"liveLabelPulse 2s ease-in-out infinite"}}>Ongoing</span>
               </div>
             ) : over && hasScore ? (
-              /* Crossfade between "Full Time" and the final result on hover (PC only) */
-              <div style={{ position:"relative", display:"flex", alignItems:"center", justifyContent:"center", width:"100%", minHeight:"30px" }}>
+              /* Show score directly — no hover needed, always visible */
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", width:"100%", minHeight:"30px", gap:"3px" }}>
+                <Score a={scoreA!} b={scoreB!} big />
                 <span style={{
-                  position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center",
-                  fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"10px", fontWeight:700,
-                  letterSpacing:"0.08em", color:"rgba(255,255,255,0.28)", textTransform:"uppercase", textAlign:"center",
-                  opacity: canReveal && showResult ? 0 : 1,
-                  transition: "opacity 300ms ease",
+                  fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"8px", fontWeight:700,
+                  letterSpacing:"0.10em", color:"rgba(255,255,255,0.22)", textTransform:"uppercase", textAlign:"center",
                 }}>Full Time</span>
-                <div style={{
-                  position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center",
-                  opacity: canReveal && showResult ? 1 : 0,
-                  transition: "opacity 300ms ease",
-                }}>
-                  <Score a={match.scoreA!} b={match.scoreB!} big />
-                </div>
               </div>
             ) : over ? (
               <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"10px", fontWeight:700, letterSpacing:"0.08em", color:"rgba(255,255,255,0.28)", textTransform:"uppercase", display:"block", textAlign:"center", width:"100%"}}>Full Time</span>
@@ -472,8 +465,6 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
                 borderRadius:"3px", objectFit:"cover",
                 border:"1px solid rgba(255,255,255,0.10)",
                 flexShrink:0,
-                opacity: canReveal && showResult ? 0 : 1,
-                transition: "opacity 300ms ease",
               }}
               onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
             <span style={{
@@ -523,7 +514,7 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
 }
 
 // ─── Day column ───────────────────────────────────────────────────
-function DayColumn({ dayGroup, todayBD }: { dayGroup: { date: string; matches: Match[] }; todayBD: string }) {
+function DayColumn({ dayGroup, todayBD, scoreMap }: { dayGroup: { date: string; matches: Match[] }; todayBD: string; scoreMap: Record<string, [number, number]> }) {
   const isToday = dayGroup.date === todayBD;
   const d = new Date(dayGroup.date + "T12:00:00+06:00");
   const weekday = d.toLocaleDateString("en-BD", { weekday:"long", timeZone:"Asia/Dhaka" });
@@ -561,7 +552,7 @@ function DayColumn({ dayGroup, todayBD }: { dayGroup: { date: string; matches: M
 
       {/* Match cards */}
       <div className="flex flex-col gap-2">
-        {dayGroup.matches.map(m => <MatchCard key={m.id} match={m} isToday={isToday} />)}
+        {dayGroup.matches.map(m => <MatchCard key={m.id} match={m} isToday={isToday} scoreMap={scoreMap} />)}
       </div>
     </div>
   );
@@ -578,6 +569,82 @@ export default function FifaSchedule() {
     for (let i = 0; i < allDays.length; i += colsPerPage) p.push(allDays.slice(i, i + colsPerPage));
     return p;
   })();
+
+  // ── Live score fetching ──────────────────────────────────────────
+  // scoreMap: key = "TeamA|TeamB" (sorted), value = [scoreA, scoreB]
+  const [scoreMap, setScoreMap] = useState<Record<string, [number, number]>>({});
+
+  useEffect(() => {
+    // Normalize team names for fuzzy matching
+    const norm = (s: string) => s.toLowerCase()
+      .replace(/[^a-z0-9 ]/g, "")
+      .replace(/\b(and|&)\b/g, "and")
+      .trim();
+
+    const fetchScores = async () => {
+      try {
+        // ESPN public API — FIFA World Cup 2026 (league=FIFA.WORLD)
+        const res = await fetch(
+          "https://site.api.espn.com/apis/site/v2/sports/soccer/FIFA.WORLD/scoreboard?limit=200&dates=20260601-20261220",
+          { signal: AbortSignal.timeout(8000) }
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        const events: unknown[] = data?.events ?? [];
+        const map: Record<string, [number, number]> = {};
+
+        for (const ev of events) {
+          const e = ev as Record<string, unknown>;
+          const comps = (e.competitions as Record<string, unknown>[])?.[0];
+          if (!comps) continue;
+          const status = (comps.status as Record<string, unknown>)?.type as Record<string, unknown>;
+          // Only include completed matches
+          if (status?.completed !== true) continue;
+          const competitors = comps.competitors as Record<string, unknown>[];
+          if (!competitors || competitors.length < 2) continue;
+
+          // ESPN returns home/away; find each
+          const home = competitors.find((c: Record<string, unknown>) => c.homeAway === "home");
+          const away = competitors.find((c: Record<string, unknown>) => c.homeAway === "away");
+          if (!home || !away) continue;
+
+          const homeTeam = norm((home.team as Record<string, unknown>)?.displayName as string ?? "");
+          const awayTeam = norm((away.team as Record<string, unknown>)?.displayName as string ?? "");
+          const homeScore = parseInt(String(home.score ?? "-1"), 10);
+          const awayScore = parseInt(String(away.score ?? "-1"), 10);
+          if (homeScore < 0 || awayScore < 0) continue;
+
+          // Match against our MATCHES list by normalized team name
+          for (const m of MATCHES) {
+            const mA = norm(m.teamA), mB = norm(m.teamB);
+            // Try both orderings (home=teamA or home=teamB)
+            if (
+              (homeTeam.includes(mA) || mA.includes(homeTeam)) &&
+              (awayTeam.includes(mB) || mB.includes(awayTeam))
+            ) {
+              map[`${m.id}`] = [homeScore, awayScore];
+              break;
+            }
+            if (
+              (homeTeam.includes(mB) || mB.includes(homeTeam)) &&
+              (awayTeam.includes(mA) || mA.includes(awayTeam))
+            ) {
+              map[`${m.id}`] = [awayScore, homeScore];
+              break;
+            }
+          }
+        }
+        setScoreMap(map);
+      } catch {
+        // Silently ignore fetch errors — show nothing instead of crashing
+      }
+    };
+
+    fetchScores();
+    // Re-fetch every 5 minutes to get latest results
+    const id = setInterval(fetchScores, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // Reactive today — single 30s interval drives both live-match ticks and current-day date refresh
   const [todayBD, setTodayBD] = useState(() => bdTodayStr());
@@ -704,7 +771,7 @@ export default function FifaSchedule() {
               overflow:"visible",
             }}>
             {current.map(dayGroup => (
-              <DayColumn key={dayGroup.date} dayGroup={dayGroup} todayBD={todayBD} />
+              <DayColumn key={dayGroup.date} dayGroup={dayGroup} todayBD={todayBD} scoreMap={scoreMap} />
             ))}
           </div>
         </div>
