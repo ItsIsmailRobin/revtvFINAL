@@ -169,6 +169,7 @@ export default function Player({
   // user gesture to unmute. Shows a one-tap "Tap to unmute" overlay.
   const [needsUnmute, setNeedsUnmute] = useState(false);
   const statusTimerRef = useRef<number | null>(null);
+  const suppressNextVolumeStatusRef = useRef(false);
 
     const showStatus = useCallback((msg: string) => {
     setStatusMessage(msg);
@@ -218,6 +219,11 @@ export default function Player({
     if (!channel) return;
     // Suppress the status badge for the very first autoplay-forced mute
     if (isAutoplayMuteRef.current && muted) return;
+    // Suppress when user just tapped "Tap to unmute" — no volume badge needed
+    if (suppressNextVolumeStatusRef.current) {
+      suppressNextVolumeStatusRef.current = false;
+      return;
+    }
     showStatus(
       muted || volume === 0
         ? "Muted"
@@ -916,6 +922,12 @@ export default function Player({
     armHide();
   }, [armHide]);
 
+  // Tap-to-unmute handler — unmutes without showing the volume status badge
+  const handleTapToUnmute = useCallback(() => {
+    suppressNextVolumeStatusRef.current = true;
+    toggleMute();
+  }, [toggleMute]);
+
   const changeVolume = useCallback(
     (val: number) => {
       const newVol = Math.round(Math.max(0, Math.min(1, val)) * 100) / 100;
@@ -1604,6 +1616,7 @@ export default function Player({
               const v = videoRef.current;
               if (v) { v.muted = false; v.volume = volumeRef.current || 1; }
               isAutoplayMuteRef.current = false; // user interacted — show status normally
+              suppressNextVolumeStatusRef.current = true; // don't show volume badge on unmute
               mutedRef.current = false;
               setMuted(false);
               setNeedsUnmute(false);
