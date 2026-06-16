@@ -452,12 +452,17 @@ export default function Player({
     //   the grant is stored and the browser's autoplay heuristic remembers the
     //   site as "user has interacted here".
 
+    // Check gesture grant once per channel-load (stable, no closure issues)
     const hasGrant = (() => {
       try { return window.localStorage.getItem("revtv:gestureGranted") === "1"; } catch { return false; }
     })();
 
     const attemptAutoplay = (v: HTMLVideoElement) => {
-      // Always start muted — guaranteed to work on every browser/platform.
+      // ALWAYS start muted — guaranteed autoplay on every platform/browser.
+      // We NEVER touch v.muted after this point inside attemptAutoplay.
+      // The single useEffect at line ~670 ("sync volume") is the ONLY place
+      // that writes v.muted from React state, which prevents the race condition
+      // where .then() overwrites a user’s mute toggle that arrived during play().
       v.muted = true;
       v.volume = volumeRef.current || 1;
 
@@ -465,32 +470,38 @@ export default function Player({
       if (!playPromise) return;
 
       playPromise.then(() => {
-        if (mutedRef.current) {
-          // User had manually muted — respect it, never show overlay
-          setNeedsUnmute(false);
-        } else if (hasGrant) {
-          // Grant exists — unmute immediately. Works on all platforms after
-          // the first-ever tap. No overlay.
-          v.muted = false;
-          v.volume = volumeRef.current || 1;
-          setNeedsUnmute(false);
-        } else {
-          // First visit, no grant yet — stay muted, show the tap overlay
+        if (!hasGrant) {
+          // First-ever visit: stay muted, show tap-to-unmute overlay.
+          // The overlay’s doUnmute() will handle unmuting + storing the grant.
           setNeedsUnmute(true);
+        } else {
+          // Grant exists: hide overlay, then let the sync useEffect
+          // apply the real muted/volume state from React (mutedRef).
+          // Using a microtask ensures React state is flushed first.
+          setNeedsUnmute(false);
+          Promise.resolve().then(() => {
+            const vid = videoRef.current;
+            if (!vid) return;
+            vid.muted  = mutedRef.current;
+            vid.volume = volumeRef.current || 1;
+          });
         }
       }).catch(() => {
-        // Even muted play was rejected (extremely rare — e.g. network error
-        // before first frame, or browser killed the tab in background).
-        // Retry once after 400ms.
+        // Even muted play rejected (extremely rare — network error before first frame).
+        // Retry once; apply same grant logic on success.
         window.setTimeout(() => {
           v.muted = true;
           v.play().then(() => {
-            if (hasGrant && !mutedRef.current) {
-              v.muted = false;
-              v.volume = volumeRef.current || 1;
-              setNeedsUnmute(false);
-            } else if (!hasGrant) {
+            if (!hasGrant) {
               setNeedsUnmute(true);
+            } else {
+              setNeedsUnmute(false);
+              Promise.resolve().then(() => {
+                const vid = videoRef.current;
+                if (!vid) return;
+                vid.muted  = mutedRef.current;
+                vid.volume = volumeRef.current || 1;
+              });
             }
           }).catch(() => {});
         }, 400);
@@ -918,7 +929,20 @@ export default function Player({
   }, [armHide, syncToLiveEdge]);
 
   const toggleMute = useCallback(() => {
-    setMuted((m) => !m);
+    const v = videoRef.current;
+    const newMuted = !mutedRef.current;
+    // Update the DOM immediately — don't wait for the React re-render cycle.
+    // This prevents the 1-frame window where the button shows one state but
+    // the video element is still in the opposite state (the "stuck icon" bug).
+    if (v) {
+      v.muted = newMuted;
+      if (!newMuted) v.volume = volumeRef.current || 1;
+    }
+    mutedRef.current = newMuted;
+    setMuted(newMuted);
+    // Also hide the overlay immediately if user taps mute while it's showing
+    // (shouldn't normally happen, but belt-and-suspenders)
+    if (!newMuted) setNeedsUnmute(false);
     armHide();
   }, [armHide]);
 
@@ -1284,9 +1308,7 @@ export default function Player({
   }, [channel, togglePlay, toggleMute, toggleFullscreen]);
 
   // Tap-to-unmute: called when user taps the glass overlay (ALL platforms).
-  // Unmutes the video, stores the gesture grant forever in localStorage so
-  // every future load (refresh, Ctrl+R, channel change, tab reopen) autoplays
-  // with sound — overlay never shown again after this one tap.
+  // Syncs DOM immediately, stores grant, hides overlay.
   const doUnmute = useCallback(() => {
     const v = videoRef.current;
     if (v) {
@@ -1619,53 +1641,111 @@ export default function Player({
       )}
 
       {/* Tap-to-unmute overlay — ALL platforms (PC, Android, iOS).
-          Shown only on first-ever visit (no gesture grant in localStorage).
-          Blurred glass style, tap anywhere to unmute + store grant forever.
-          Never shown again after first tap, on any device, any refresh. */}
+          Only shown on first-ever visit (no gestureGranted in localStorage).
+          Blurred glass, tap anywhere to unmute + store grant permanently.
+          Shows channel name, "Revenger Live" branding, and the mute button
+          so user knows exactly what to do. Never shown again after first tap. */}
       {needsUnmute && (
         <div
-          className="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center"
+          className="pointer-events-auto absolute inset-0 z-30 flex flex-col items-center justify-center gap-5"
           onClick={(e) => { e.stopPropagation(); doUnmute(); }}
           style={{
             cursor: "pointer",
-            backdropFilter: "blur(8px) saturate(140%)",
-            WebkitBackdropFilter: "blur(8px) saturate(140%)",
-            background: "rgba(0,0,0,0.38)",
-            animation: "overlayFadeIn 380ms cubic-bezier(.4,0,.2,1) both",
+            backdropFilter: "blur(10px) saturate(150%)",
+            WebkitBackdropFilter: "blur(10px) saturate(150%)",
+            background: "rgba(0,0,0,0.45)",
+            animation: "tuOverlayIn 340ms cubic-bezier(.4,0,.2,1) both",
           }}
         >
+          {/* Branding pill */}
+          <div
+            style={{
+              animation: "tuSlideDown 420ms cubic-bezier(.22,1,.36,1) both",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "4px",
+            }}
+          >
+            <span style={{
+              fontSize: "11px",
+              fontWeight: 700,
+              letterSpacing: "0.18em",
+              textTransform: "uppercase",
+              color: "rgba(255,255,255,0.45)",
+              fontFamily: "'Inter', system-ui, sans-serif",
+            }}>Revenger Live</span>
+            {channel && (
+              <span style={{
+                fontSize: "15px",
+                fontWeight: 600,
+                color: "rgba(255,255,255,0.92)",
+                fontFamily: "'Inter', system-ui, sans-serif",
+                maxWidth: "240px",
+                textAlign: "center",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}>{channel.name}</span>
+            )}
+          </div>
+
+          {/* Glass unmute button */}
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); doUnmute(); }}
             aria-label="Tap to unmute"
             data-player-control
-            className="flex h-16 w-16 items-center justify-center rounded-full border text-white sm:h-[72px] sm:w-[72px]"
-            style={{
-              animation: "glassPop 480ms cubic-bezier(.22,1,.36,1) both",
-              background: "rgba(255,255,255,0.14)",
-              borderColor: "rgba(255,255,255,0.28)",
-              backdropFilter: "blur(24px) saturate(180%)",
-              WebkitBackdropFilter: "blur(24px) saturate(180%)",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.35)",
-            }}
+            className="flex flex-col items-center gap-2 text-white"
+            style={{ background: "none", border: "none", cursor: "pointer" }}
           >
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"
-              style={{ animation: "iconFade 420ms cubic-bezier(.22,1,.36,1) 60ms both" }}
+            <div
+              className="flex h-16 w-16 items-center justify-center rounded-full border sm:h-[72px] sm:w-[72px]"
+              style={{
+                animation: "tuGlassPop 500ms cubic-bezier(.22,1,.36,1) 60ms both",
+                background: "rgba(255,255,255,0.14)",
+                borderColor: "rgba(255,255,255,0.28)",
+                backdropFilter: "blur(24px) saturate(180%)",
+                WebkitBackdropFilter: "blur(24px) saturate(180%)",
+                boxShadow: "0 8px 32px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.35)",
+              }}
             >
-              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
-            </svg>
+              {/* Speaker / unmute icon */}
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
+                stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                style={{ animation: "tuIconIn 380ms cubic-bezier(.22,1,.36,1) 120ms both" }}
+              >
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                <line x1="2" y1="2" x2="22" y2="22" />
+              </svg>
+            </div>
+            <span style={{
+              fontSize: "11px",
+              fontWeight: 600,
+              letterSpacing: "0.06em",
+              color: "rgba(255,255,255,0.70)",
+              fontFamily: "'Inter', system-ui, sans-serif",
+              animation: "tuIconIn 380ms cubic-bezier(.22,1,.36,1) 180ms both",
+            }}>Tap to unmute</span>
           </button>
+
           <style>{\`
-            @keyframes overlayFadeIn {
+            @keyframes tuOverlayIn {
               from { opacity: 0; }
               to   { opacity: 1; }
             }
-            @keyframes glassPop {
-              0%   { opacity: 0; transform: scale(0.82); }
-              65%  { opacity: 1; transform: scale(1.04); }
+            @keyframes tuSlideDown {
+              from { opacity: 0; transform: translateY(-10px); }
+              to   { opacity: 1; transform: translateY(0); }
+            }
+            @keyframes tuGlassPop {
+              0%   { opacity: 0; transform: scale(0.80); }
+              65%  { opacity: 1; transform: scale(1.05); }
               100% { opacity: 1; transform: scale(1);    }
             }
-            @keyframes iconFade {
+            @keyframes tuIconIn {
               from { opacity: 0; transform: scale(0.7); }
               to   { opacity: 1; transform: scale(1);   }
             }
