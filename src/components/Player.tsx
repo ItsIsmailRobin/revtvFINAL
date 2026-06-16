@@ -1641,119 +1641,58 @@ export default function Player({
       )}
 
       {/* Tap-to-unmute overlay — ALL platforms (PC, Android, iOS).
-          Only shown on first-ever visit (no gestureGranted in localStorage).
-          Blurred glass, tap anywhere to unmute + store grant permanently.
-          Shows channel name, "Revenger Live" branding, and the mute button
-          so user knows exactly what to do. Never shown again after first tap. */}
+          Only shown on first-ever visit. Blur + glass button, same style
+          as the paused-play overlay. Tap anywhere to unmute + store grant. */}
       {needsUnmute && (
         <div
-          className="pointer-events-auto absolute inset-0 z-30 flex flex-col items-center justify-center gap-5"
+          className="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center"
           onClick={(e) => { e.stopPropagation(); doUnmute(); }}
           style={{
             cursor: "pointer",
-            backdropFilter: "blur(10px) saturate(150%)",
-            WebkitBackdropFilter: "blur(10px) saturate(150%)",
-            background: "rgba(0,0,0,0.45)",
-            animation: "tuOverlayIn 340ms cubic-bezier(.4,0,.2,1) both",
+            backdropFilter: "blur(8px) saturate(140%)",
+            WebkitBackdropFilter: "blur(8px) saturate(140%)",
+            background: "rgba(0,0,0,0.38)",
+            animation: "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both",
           }}
         >
-          {/* Branding pill */}
-          <div
-            style={{
-              animation: "tuSlideDown 420ms cubic-bezier(.22,1,.36,1) both",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "4px",
-            }}
-          >
-            <span style={{
-              fontSize: "11px",
-              fontWeight: 700,
-              letterSpacing: "0.18em",
-              textTransform: "uppercase",
-              color: "rgba(255,255,255,0.45)",
-              fontFamily: "'Inter', system-ui, sans-serif",
-            }}>Revenger Live</span>
-            {channel && (
-              <span style={{
-                fontSize: "15px",
-                fontWeight: 600,
-                color: "rgba(255,255,255,0.92)",
-                fontFamily: "'Inter', system-ui, sans-serif",
-                maxWidth: "240px",
-                textAlign: "center",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}>{channel.name}</span>
-            )}
-          </div>
-
-          {/* Glass unmute button */}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); doUnmute(); }}
-            aria-label="Tap to unmute"
-            data-player-control
-            className="flex flex-col items-center gap-2 text-white"
-            style={{ background: "none", border: "none", cursor: "pointer" }}
-          >
-            <div
-              className="flex h-16 w-16 items-center justify-center rounded-full border sm:h-[72px] sm:w-[72px]"
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); doUnmute(); }}
+              aria-label="Tap to unmute"
+              data-player-control
+              className="flex h-16 w-16 items-center justify-center rounded-full border text-white sm:h-[72px] sm:w-[72px]"
               style={{
-                animation: "tuGlassPop 500ms cubic-bezier(.22,1,.36,1) 60ms both",
+                animation: "iosGlassPop 480ms cubic-bezier(.22,1,.36,1) both",
                 background: "rgba(255,255,255,0.14)",
                 borderColor: "rgba(255,255,255,0.28)",
                 backdropFilter: "blur(24px) saturate(180%)",
                 WebkitBackdropFilter: "blur(24px) saturate(180%)",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.35)",
+                boxShadow: "0 8px 32px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.35)",
               }}
             >
-              {/* Speaker / unmute icon */}
-              <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
                 stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                style={{ animation: "tuIconIn 380ms cubic-bezier(.22,1,.36,1) 120ms both" }}
+                style={{ animation: "iosIconFade 420ms cubic-bezier(.22,1,.36,1) 60ms both" }}
               >
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-                <line x1="2" y1="2" x2="22" y2="22" />
+                <line x1="23" y1="9" x2="17" y2="15" />
+                <line x1="17" y1="9" x2="23" y2="15" />
               </svg>
-            </div>
+            </button>
             <span style={{
               fontSize: "11px",
               fontWeight: 600,
               letterSpacing: "0.06em",
               color: "rgba(255,255,255,0.70)",
               fontFamily: "'Inter', system-ui, sans-serif",
-              animation: "tuIconIn 380ms cubic-bezier(.22,1,.36,1) 180ms both",
+              animation: "iosIconFade 420ms cubic-bezier(.22,1,.36,1) 120ms both",
             }}>Tap to unmute</span>
-          </button>
-
-          <style>{\`
-            @keyframes tuOverlayIn {
-              from { opacity: 0; }
-              to   { opacity: 1; }
-            }
-            @keyframes tuSlideDown {
-              from { opacity: 0; transform: translateY(-10px); }
-              to   { opacity: 1; transform: translateY(0); }
-            }
-            @keyframes tuGlassPop {
-              0%   { opacity: 0; transform: scale(0.80); }
-              65%  { opacity: 1; transform: scale(1.05); }
-              100% { opacity: 1; transform: scale(1);    }
-            }
-            @keyframes tuIconIn {
-              from { opacity: 0; transform: scale(0.7); }
-              to   { opacity: 1; transform: scale(1);   }
-            }
-          \`}</style>
+          </div>
         </div>
       )}
 
-      {/* Top overlay (channel info) */}
+            {/* Top overlay (channel info) */}
       <div
         className={cn(
           "pointer-events-none absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/80 via-black/40 to-transparent p-4 transition-all duration-500 sm:p-5",
