@@ -181,6 +181,36 @@
     <div id="root"></div>
 
     <!--
+      Refresh key interceptor — converts Ctrl+R / F5 / Cmd+R into a soft
+      same-URL navigation (identical to what the logo click does).
+      This keeps the browser audio context alive so autoplay with sound
+      continues working after a "refresh", exactly like the logo tap does.
+      Without this, a true page reload destroys the audio context and
+      browsers block unmuted autoplay again.
+    -->
+    <script>
+      (function () {
+        document.addEventListener("keydown", function (e) {
+          // F5 — plain refresh (all platforms)
+          var isF5 = e.key === "F5";
+          // Ctrl+R — Windows/Linux
+          var isCtrlR = e.ctrlKey && !e.metaKey && (e.key === "r" || e.key === "R");
+          // Cmd+R — macOS
+          var isCmdR = e.metaKey && !e.ctrlKey && (e.key === "r" || e.key === "R");
+
+          if (isF5 || isCtrlR || isCmdR) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            // Navigate to the same URL — identical to logo click.
+            // The browser treats this as a same-origin navigation, not a
+            // true reload, so the audio context stays unlocked.
+            window.location.href = window.location.origin + window.location.pathname + window.location.search + window.location.hash;
+          }
+        }, true); // capture phase — intercepts before anything else sees the key
+      })();
+    </script>
+
+    <!--
       Early playlist prefetch — seeds channels from localStorage immediately
       (synchronous, zero latency) so channels show on first paint.
       Also starts a network fetch in the background to get fresh data.
