@@ -228,11 +228,8 @@
         //    to same URL (= soft navigation, not a reload).
         window.addEventListener('beforeunload', function (e) {
           if (_realNav) return; // genuine navigation — let it go
-          // Cancel the unload and redirect instead
-          e.preventDefault();
-          // Some browsers need returnValue set to show the "leave?" dialog —
-          // we DON'T want that dialog, so we redirect immediately before the
-          // browser has a chance to show it.
+          // Redirect to same URL immediately — no preventDefault, no dialog.
+          // Setting location.href here converts the reload into a navigation.
           window.location.href = window.location.href;
         });
       })();

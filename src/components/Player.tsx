@@ -1687,7 +1687,7 @@ export default function Player({
               color: "rgba(255,255,255,0.70)",
               fontFamily: "'Inter', system-ui, sans-serif",
               animation: "iosIconFade 420ms cubic-bezier(.22,1,.36,1) 120ms both",
-            }}>Tap to unmute</span>
+            }}>Tap to Unmute</span>
           </div>
         </div>
       )}
