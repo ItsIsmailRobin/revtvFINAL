@@ -66,18 +66,28 @@ export default function Player({
   const hasStartedPlaybackRef = useRef(false);
 
   const [playing, setPlaying] = useState(false);
-  // Restore muted/volume for THIS session only (sessionStorage + 10-min
-  // inactivity expiry — see utils/persist.ts). On Android/iOS, never
-  // restore: volume/mute always reset to defaults each session.
+
+  // ── Mute/Volume persistence ────────────────────────────────────────────
+  // ALL platforms (PC, Android, iOS): restore muted state from localStorage
+  // across refreshes, tab opens, logo taps, and channel switches.
+  // Default: unmuted (false). Only store/restore "muted=true" since that's
+  // the only case where we want to remember the user's choice.
   const [muted, setMuted] = useState<boolean>(() => {
-    if (detectIsMobile()) return false;
-    return getFresh("revtv:muted") === "true";
+    try {
+      return window.localStorage.getItem("revtv:muted") === "true";
+    } catch {
+      return false;
+    }
   });
   const [volume, setVolume] = useState<number>(() => {
-    if (detectIsMobile()) return 1;
-    const v = parseFloat(getFresh("revtv:volume") ?? "1");
-    return isNaN(v) ? 1 : Math.min(1, Math.max(0, v));
+    try {
+      const v = parseFloat(window.localStorage.getItem("revtv:volume") ?? "1");
+      return isNaN(v) ? 1 : Math.min(1, Math.max(0, v));
+    } catch {
+      return 1;
+    }
   });
+
   // Refs mirroring muted/volume so the channel-switch effect (which only
   // re-runs on channel change) can read the latest user preference
   // without forcing a full HLS re-attach on every mute/volume toggle.
@@ -85,11 +95,11 @@ export default function Player({
   const volumeRef = useRef(volume);
   useEffect(() => {
     mutedRef.current = muted;
-    if (!detectIsMobile()) setPersisted("revtv:muted", String(muted));
+    try { window.localStorage.setItem("revtv:muted", String(muted)); } catch {}
   }, [muted]);
   useEffect(() => {
     volumeRef.current = volume;
-    if (!detectIsMobile()) setPersisted("revtv:volume", String(volume));
+    try { window.localStorage.setItem("revtv:volume", String(volume)); } catch {}
   }, [volume]);
   // Brightness: in-memory only on every platform (never persisted), and
   // explicitly reset to default each session on Android/iOS per above —
@@ -165,13 +175,13 @@ export default function Player({
   // when the user changes them via keyboard, then fades out after 3s.
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [statusVisible, setStatusVisible] = useState(false);
-  // True when the browser forced muted autoplay and we're waiting for a
-  // user gesture to unmute. Shows a one-tap "Tap to unmute" overlay.
-  const [needsUnmute, setNeedsUnmute] = useState(false);
+  // iOS only: true when autoplay with sound failed (first visit, no prior gesture).
+  // Shows a blurred overlay with a play icon — one tap starts sound.
+  // After that tap, all subsequent refreshes/channel changes play with sound automatically.
+  const [iosNeedsPlay, setIosNeedsPlay] = useState(false);
   const statusTimerRef = useRef<number | null>(null);
-  const suppressNextVolumeStatusRef = useRef(false);
 
-    const showStatus = useCallback((msg: string) => {
+  const showStatus = useCallback((msg: string) => {
     setStatusMessage(msg);
     setStatusVisible(true);
     if (statusTimerRef.current) window.clearTimeout(statusTimerRef.current);
@@ -209,42 +219,21 @@ export default function Player({
     });
   }, [aspectLabel, showStatus]);
 
-  // Track if this is the initial autoplay mute (suppress status badge for it)
-  const isAutoplayMuteRef = useRef(true);
-  // Track previous muted value to detect mute-only toggles vs volume changes
+  // Show volume status when volume changes via keyboard/wheel (not on mute toggles)
   const prevMutedRef = useRef(muted);
-  // Suppress volume/mute badge on the very first render (page load / refresh)
   const isFirstRenderRef = useRef(true);
-
-  // Show volume status when it changes (e.g. via keyboard)
-  // But suppress the "Muted" badge on the initial autoplay mute —
-  // we show "Tap to unmute" overlay for that instead.
-  // When manually muted/unmuted: show "Muted" / "Unmuted" label (not volume %).
   useEffect(() => {
-    // Always skip on the very first render — nothing has changed yet
     if (isFirstRenderRef.current) {
       isFirstRenderRef.current = false;
       prevMutedRef.current = muted;
       return;
     }
     if (!channel) return;
-    // Suppress the status badge for the very first autoplay-forced mute
-    if (isAutoplayMuteRef.current && muted) return;
-    // Suppress when user just tapped "Tap to unmute" — no volume badge needed
-    if (suppressNextVolumeStatusRef.current) {
-      suppressNextVolumeStatusRef.current = false;
-      prevMutedRef.current = muted;
-      return;
-    }
     const mutedChanged = muted !== prevMutedRef.current;
     prevMutedRef.current = muted;
-    if (mutedChanged) {
-      // Manual mute — no label shown (removed per user request)
-    } else {
-      // Volume wheel/keyboard change — show volume % (only if not muted)
-      if (!muted && volume > 0) {
-        showStatus(`Volume: ${Math.round(volume * 100)}%`);
-      }
+    if (!mutedChanged && !muted && volume > 0) {
+      // Volume wheel/keyboard change — show volume %
+      showStatus(`Volume: ${Math.round(volume * 100)}%`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [volume, muted]);
@@ -350,11 +339,9 @@ export default function Player({
       window.clearTimeout(waitingTimer);
       recoverScheduled = false;
       nativeErrorRetries = 0;
-      const firstStart = !hasStartedPlaybackRef.current;
       hasStartedPlaybackRef.current = true;
       setLoading(false);
       setPlaying(true);
-      if (firstStart) tryUnmuteAfterStart();
     };
     const onWaiting  = () => {
       // On mobile, a brief "waiting" event is normal during ABR level
@@ -437,75 +424,64 @@ export default function Player({
     video.addEventListener("ended",   onEnded);
     video.addEventListener("error",   onError);
 
-    // ── Autoplay-with-sound ──────────────────────────────────────────────
-    // Always start muted — guaranteed to autoplay on every platform.
-    // Then the instant "playing" fires, try to unmute.
-    // PC / Android: unmute succeeds silently (play() satisfies autoplay policy).
-    //   If browser pauses or re-mutes → show "Tap To Unmute" as last resort.
-    // iOS: always show "Tap To Unmute" — Safari requires a real user gesture.
+    // ── Autoplay with sound ──────────────────────────────────────────────
+    // PC & Android: play unmuted directly — no restriction, no muted fallback.
+    //   Volume and mute state are restored from localStorage (persists across
+    //   refreshes, tab reopens, logo taps, and channel changes).
+    // iOS (Safari): attempt unmuted play. If browser rejects it (no prior
+    //   gesture in this browsing context), fall back to muted + show the
+    //   blurred overlay with a play icon so the user taps once.
+    //   After that one tap, localStorage records "iosGestureGranted" and
+    //   every subsequent load (refresh, logo tap, channel change) will play
+    //   unmuted automatically without showing the overlay again.
 
     const attemptAutoplay = (v: HTMLVideoElement) => {
-      v.muted = true;
-      v.play().catch(() => {
-        // Even muted autoplay was blocked (rare) — retry shortly.
-        window.setTimeout(() => { v.play().catch(() => {}); }, 300);
-      });
-    };
-
-    // Called once on the first "playing" event for this channel load.
-    const tryUnmuteAfterStart = () => {
-      const v = videoRef.current;
-      if (!v) return;
-
-      // User deliberately muted — respect it, no overlay.
-      if (mutedRef.current) {
-        isAutoplayMuteRef.current = false;
-        setNeedsUnmute(false);
-        return;
-      }
-
-      // iOS — always needs a real tap, no silent unmute possible.
-      if (isIOS) {
-        mutedRef.current = true;
-        setMuted(true);
-        setNeedsUnmute(true);
-        return;
-      }
-
-      // PC & Android — try unmuting. The muted play() above satisfied the
-      // autoplay policy so this usually works immediately.
-      // Check after 250ms: if paused (Android rejected unmuted playback)
-      // or still muted (browser re-muted it) → show "Tap To Unmute".
-      v.muted = false;
+      v.muted = mutedRef.current;
       v.volume = volumeRef.current;
-      window.setTimeout(() => {
-        const v2 = videoRef.current;
-        if (!v2) return;
-        if (v2.paused) {
-          // Browser paused on unmute — go back muted, resume, show overlay.
-          v2.muted = true;
-          v2.play().then(() => {
-            mutedRef.current = true;
-            setMuted(true);
-            setNeedsUnmute(true);
+
+      if (isIOS) {
+        // Check if we already have a gesture grant from a prior tap
+        const hasGrant = (() => {
+          try { return window.localStorage.getItem("revtv:iosGestureGranted") === "1"; } catch { return false; }
+        })();
+
+        if (hasGrant) {
+          // User has tapped before — try unmuted directly
+          v.muted = mutedRef.current;
+          v.play().then(() => {
+            setIosNeedsPlay(false);
           }).catch(() => {
-            mutedRef.current = true;
-            setMuted(true);
-            setNeedsUnmute(true);
+            // Rare: grant expired or revoked — fall back to muted + overlay
+            v.muted = true;
+            v.play().catch(() => {});
+            setIosNeedsPlay(true);
           });
-        } else if (v2.muted) {
-          // Still playing but browser re-muted it — show overlay.
-          mutedRef.current = true;
-          setMuted(true);
-          setNeedsUnmute(true);
         } else {
-          // Successfully unmuted.
-          isAutoplayMuteRef.current = false;
-          mutedRef.current = false;
-          setMuted(false);
-          setNeedsUnmute(false);
+          // First visit on iOS — try unmuted, expect rejection, show overlay
+          v.play().then(() => {
+            // Succeeded unmuted (rare on first visit, but possible)
+            setIosNeedsPlay(false);
+            try { window.localStorage.setItem("revtv:iosGestureGranted", "1"); } catch {}
+          }).catch(() => {
+            // Expected: autoplay with sound blocked on first iOS visit
+            v.muted = true;
+            v.play().catch(() => {
+              // Even muted failed — retry once
+              window.setTimeout(() => v.play().catch(() => {}), 300);
+            });
+            setIosNeedsPlay(true);
+          });
         }
-      }, 250);
+      } else {
+        // PC & Android: play unmuted directly (no restriction)
+        v.muted = mutedRef.current;
+        v.volume = volumeRef.current;
+        v.play().catch(() => {
+          // Very rare edge case — retry once
+          window.setTimeout(() => v.play().catch(() => {}), 300);
+        });
+        setIosNeedsPlay(false);
+      }
     };
 
     if (Hls.isSupported()) {
@@ -928,10 +904,7 @@ export default function Player({
   }, [armHide, syncToLiveEdge]);
 
   const toggleMute = useCallback(() => {
-    // From first manual mute toggle onward, show mute/unmute status badge normally
-    isAutoplayMuteRef.current = false;
     setMuted((m) => !m);
-    setNeedsUnmute(false);
     armHide();
   }, [armHide]);
 
@@ -1296,25 +1269,28 @@ export default function Player({
     return () => document.removeEventListener("keydown", onKey);
   }, [channel, togglePlay, toggleMute, toggleFullscreen]);
 
-  // Unmute helper — used by tap-anywhere-to-unmute
-  const doUnmuteNow = useCallback(() => {
+  // iOS tap-to-play: called when user taps the blurred overlay on iOS.
+  // Unmutes, resumes, stores the gesture grant so future loads autoplay with sound.
+  const doIosPlay = useCallback(() => {
     const v = videoRef.current;
-    if (v) { v.muted = false; v.volume = volumeRef.current || 1; }
-    isAutoplayMuteRef.current = false;
-    suppressNextVolumeStatusRef.current = true;
+    if (v) {
+      v.muted = false;
+      v.volume = volumeRef.current || 1;
+      // Resume if paused (muted autoplay was playing in background)
+      if (v.paused) v.play().catch(() => {});
+    }
     mutedRef.current = false;
     setMuted(false);
-    setNeedsUnmute(false);
-    // Remember that user has granted unmute gesture — used on next refresh
-    // to attempt unmuting automatically before showing the overlay.
-    try { window.localStorage.setItem("revtv:unmuteGrant", "1"); } catch {}
+    setIosNeedsPlay(false);
+    // Remember gesture grant — next refresh/channel will autoplay with sound
+    try { window.localStorage.setItem("revtv:iosGestureGranted", "1"); } catch {}
   }, []);
 
   const onVideoClick = (e: ReactMouseEvent) => {
     if (isSwiping.current) return;
     e.stopPropagation();
-    // If "Tap to Unmute" is showing, any tap on the player unmutes — never pause
-    if (needsUnmute) { doUnmuteNow(); return; }
+    // If iOS needs a tap to start, any tap on the player triggers it
+    if (iosNeedsPlay) { doIosPlay(); return; }
     togglePlay();
   };
 
@@ -1435,7 +1411,7 @@ export default function Player({
           with an iOS-style frosted play button that scales/fades in
           smoothly. Clicking anywhere resumes playback. Hidden while
           loading/transitioning so it doesn't fight those overlays. */}
-      {channel && !playing && !loading && !error && !fsTransitioning && hasStartedPlaybackRef.current && !needsUnmute && (
+      {channel && !playing && !loading && !error && !fsTransitioning && hasStartedPlaybackRef.current && !iosNeedsPlay && (
         <div
           className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 backdrop-blur-[2px]"
           style={{ animation: "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both" }}
@@ -1629,50 +1605,45 @@ export default function Player({
         </div>
       )}
 
-      {/* Tap-to-unmute overlay — whole player area is tappable, not just button */}
-      {needsUnmute && (
+      {/* iOS — tap to play with sound overlay.
+          Only shown on iOS when autoplay with sound was blocked (first visit,
+          no gesture grant yet). Full blur over the video; tapping anywhere
+          starts sound and stores the grant so future loads are automatic. */}
+      {iosNeedsPlay && (
         <div
           className="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center"
-          onClick={(e) => { e.stopPropagation(); doUnmuteNow(); }}
-          style={{ cursor: "pointer" }}
+          onClick={(e) => { e.stopPropagation(); doIosPlay(); }}
+          style={{
+            cursor: "pointer",
+            backdropFilter: "blur(8px) saturate(140%)",
+            WebkitBackdropFilter: "blur(8px) saturate(140%)",
+            background: "rgba(0,0,0,0.38)",
+            animation: "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both",
+          }}
         >
-          {/* Small glass pill — matches play/mute button style */}
-          <div
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); doIosPlay(); }}
+            aria-label="Tap to play with sound"
+            data-player-control
+            className="flex h-16 w-16 items-center justify-center rounded-full border text-white sm:h-[72px] sm:w-[72px]"
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "7px 14px",
-              borderRadius: "999px",
+              animation: "iosGlassPop 480ms cubic-bezier(.22,1,.36,1) both",
               background: "rgba(255,255,255,0.14)",
-              border: "1px solid rgba(255,255,255,0.28)",
-              backdropFilter: "blur(12px) saturate(160%)",
-              WebkitBackdropFilter: "blur(12px) saturate(160%)",
-              boxShadow: "0 4px 16px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.30)",
-              fontSize: "11px",
-              fontWeight: 600,
-              letterSpacing: "0.03em",
-              color: "rgba(255,255,255,0.90)",
-              fontFamily: "'Inter', system-ui, sans-serif",
-              animation: "tapUnmuteIn 320ms cubic-bezier(0.22,1,0.36,1) both",
-              userSelect: "none",
-              WebkitUserSelect: "none",
+              borderColor: "rgba(255,255,255,0.28)",
+              backdropFilter: "blur(24px) saturate(180%)",
+              WebkitBackdropFilter: "blur(24px) saturate(180%)",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.35)",
             }}
           >
-            {/* Speaker icon */}
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"
-              style={{ opacity: 0.80, flexShrink: 0 }}>
-              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+            <svg
+              width="26" height="26" viewBox="0 0 24 24" fill="currentColor"
+              className="ml-1"
+              style={{ animation: "iosIconFade 420ms cubic-bezier(.22,1,.36,1) 60ms both" }}
+            >
+              <polygon points="5 3 19 12 5 21 5 3" />
             </svg>
-            Tap To Unmute
-          </div>
-          <style>{`
-            @keyframes tapUnmuteIn {
-              0%   { opacity: 0; transform: scale(0.88); }
-              70%  { opacity: 1; transform: scale(1.03); }
-              100% { opacity: 1; transform: scale(1);    }
-            }
-          `}</style>
+          </button>
         </div>
       )}
 
@@ -1768,7 +1739,7 @@ export default function Player({
           </button>
 
           {/* Volume — hover + scroll wheel to adjust on PC. Hidden when tap-to-unmute overlay is active */}
-          <div ref={volumeWheelRef} className={`group/vol flex items-center gap-1.5${needsUnmute ? " hidden" : ""}`}>
+          <div ref={volumeWheelRef} className="group/vol flex items-center gap-1.5">
             <button
               onClick={toggleMute}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white  transition-all duration-300 hover:scale-110 hover:border-white/30 hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
