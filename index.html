@@ -183,30 +183,27 @@
     <!--
       Refresh key interceptor — converts Ctrl+R / F5 / Cmd+R into a soft
       same-URL navigation (identical to what the logo click does).
-      This keeps the browser audio context alive so autoplay with sound
-      continues working after a "refresh", exactly like the logo tap does.
-      Without this, a true page reload destroys the audio context and
-      browsers block unmuted autoplay again.
+      A ?_t=timestamp is appended so the browser always sees a *new* URL
+      and performs a navigation instead of a true hard reload — which would
+      destroy the audio context and block unmuted autoplay.
     -->
     <script>
       (function () {
         document.addEventListener("keydown", function (e) {
-          // F5 — plain refresh (all platforms)
-          var isF5 = e.key === "F5";
-          // Ctrl+R — Windows/Linux
-          var isCtrlR = e.ctrlKey && !e.metaKey && (e.key === "r" || e.key === "R");
-          // Cmd+R — macOS
-          var isCmdR = e.metaKey && !e.ctrlKey && (e.key === "r" || e.key === "R");
+          var isF5    = e.key === "F5";
+          var isCtrlR = e.ctrlKey  && !e.metaKey && (e.key === "r" || e.key === "R");
+          var isCmdR  = e.metaKey  && !e.ctrlKey && (e.key === "r" || e.key === "R");
 
           if (isF5 || isCtrlR || isCmdR) {
             e.preventDefault();
             e.stopImmediatePropagation();
-            // Navigate to the same URL — identical to logo click.
-            // The browser treats this as a same-origin navigation, not a
-            // true reload, so the audio context stays unlocked.
-            window.location.href = window.location.origin + window.location.pathname + window.location.search + window.location.hash;
+            // Append a timestamp so the URL differs from the current one.
+            // Without this, assigning the same href triggers a reload instead
+            // of a navigation on Chrome/Firefox.
+            var base = window.location.origin + window.location.pathname;
+            window.location.href = base + "?_t=" + Date.now();
           }
-        }, true); // capture phase — intercepts before anything else sees the key
+        }, true); // capture phase — fires before any other listener
       })();
     </script>
 

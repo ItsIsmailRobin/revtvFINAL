@@ -424,79 +424,77 @@ export default function Player({
     video.addEventListener("ended",   onEnded);
     video.addEventListener("error",   onError);
 
-    // ── Autoplay with sound — unified strategy for ALL platforms ────────
+    // ── Autoplay with sound ──────────────────────────────────────────────
+    // Strategy: always mute first (guaranteed to play), then unmute in .then().
+    // This satisfies autoplay policy on Chrome/Firefox/Edge/Android because
+    // unmuting a *playing* video is not treated as a new autoplay request.
     //
-    // KEY INSIGHT: Browsers allow muted autoplay always. Once the video is
-    // playing (even muted), unmuting in the same .then() callback works
-    // silently on PC and Android — the autoplay policy is already satisfied
-    // by the playing video element, so unmuting doesn't count as a new
-    // "unmuted play" request.
+    // iOS Safari is the exception — it requires a real user gesture even to
+    // unmute a playing video (per-page-lifecycle requirement). So on iOS:
+    //   - First visit: play muted, show tap overlay. One tap = grant stored.
+    //   - After grant: play muted, then unmute in .then() (Safari 15.4+ allows
+    //     this once a grant exists in localStorage from any prior session).
     //
-    // iOS (Safari) is different: it blocks autoplay with sound even after a
-    // muted play() starts, because it requires a REAL user gesture in the
-    // current page lifecycle — not just a resolved promise. So on iOS:
-    //   • First visit (no iosGestureGranted in localStorage): start muted,
-    //     show the blur+play overlay. One tap grants sound forever.
-    //   • After grant (localStorage has "1"): start muted, then unmute in
-    //     the .then() — Safari 15.4+ allows this when the page has had at
-    //     least one prior gesture in any session. Works on refresh too.
-    //
-    // PC / Android: start muted → play() → unmute immediately in .then().
-    // This is 100% reliable, requires no user tap, and works on every
-    // browser (Chrome, Firefox, Edge, Samsung Internet, Chrome Android).
+    // The iosNeedsPlay overlay is ONLY shown on iOS. PC/Android never see it.
 
     const attemptAutoplay = (v: HTMLVideoElement) => {
-      // Always start muted — guaranteed to succeed on all platforms
+      // Step 1: set muted=true via the JS property (NOT the HTML attribute).
+      // The HTML 'muted' attribute causes React to lock the DOM property and
+      // makes v.muted = false unreliable. Always set via JS property.
       v.muted = true;
-      v.volume = volumeRef.current;
+      v.volume = volumeRef.current || 1;
+
+      const playPromise = v.play();
+      if (!playPromise) return; // very old browser, nothing we can do
 
       if (isIOS) {
+        // iOS-specific path
         const hasGrant = (() => {
           try { return window.localStorage.getItem("revtv:iosGestureGranted") === "1"; } catch { return false; }
         })();
 
-        v.play().then(() => {
-          // Muted play succeeded (always does on iOS)
-          if (hasGrant && !mutedRef.current) {
-            // Prior gesture exists — unmute immediately
+        playPromise.then(() => {
+          if (mutedRef.current) {
+            // User deliberately muted — stay muted, no overlay
+            setIosNeedsPlay(false);
+          } else if (hasGrant) {
+            // Gesture granted in a prior session → unmute now
             v.muted = false;
             v.volume = volumeRef.current || 1;
-            mutedRef.current = false;
-            setMuted(false);
-            setIosNeedsPlay(false);
-          } else if (hasGrant && mutedRef.current) {
-            // User had manually muted — respect it
             setIosNeedsPlay(false);
           } else {
-            // No prior gesture — keep muted, show overlay
+            // No prior gesture → stay muted, show tap overlay
             setIosNeedsPlay(true);
           }
         }).catch(() => {
-          // Even muted failed (very rare) — retry once
-          window.setTimeout(() => v.play().catch(() => {}), 300);
-          setIosNeedsPlay(!hasGrant);
+          // Even muted play rejected (very rare) — retry once, show overlay
+          window.setTimeout(() => v.play().catch(() => {}), 400);
+          if (!hasGrant) setIosNeedsPlay(true);
         });
 
       } else {
-        // PC & Android: muted play → unmute in .then() — always works
-        v.play().then(() => {
-          // Video is now playing. Unmute if user hasn't manually muted.
+        // PC & Android path — NEVER show iosNeedsPlay overlay
+        playPromise.then(() => {
+          // Muted play succeeded. Now unmute if user hasn't muted manually.
           if (!mutedRef.current) {
             v.muted = false;
             v.volume = volumeRef.current || 1;
           }
+          // Ensure overlay is never shown on PC/Android
           setIosNeedsPlay(false);
         }).catch(() => {
-          // Extremely rare (e.g. network error before first frame).
-          // Retry once after a short delay.
+          // play() rejected even when muted — network issue before first frame.
+          // Retry after a short delay; still never show the iOS overlay.
+          setIosNeedsPlay(false);
           window.setTimeout(() => {
+            v.muted = true;
             v.play().then(() => {
               if (!mutedRef.current) {
                 v.muted = false;
                 v.volume = volumeRef.current || 1;
               }
             }).catch(() => {});
-          }, 300);
+          }, 400);
         });
       }
     };
@@ -1364,7 +1362,6 @@ export default function Player({
             onDoubleClick={onVideoDoubleClick}
             className="h-full w-full cursor-pointer"
             playsInline
-            muted
             // @ts-ignore - webkit-playsinline is iOS-specific
             webkit-playsinline="true"
             style={{
