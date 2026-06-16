@@ -178,44 +178,31 @@
     </script>
 
     <!--
-      RELOAD INTERCEPTOR — must be in <head> so it registers before any
-      React code runs. Converts every reload gesture into a soft same-URL
-      navigation, identical to the logo tap. This keeps the browser audio
-      context alive so autoplay-with-sound works after "reload" just like
-      it does after a logo tap.
+      RELOAD INTERCEPTOR — converts ALL reload gestures into soft same-URL
+      navigation (identical to logo tap), so autoplay-with-sound works.
 
-      Covers:
-        • Ctrl+R / F5 / Cmd+R  (keyboard)
-        • Browser reload button (beforeunload → redirect)
-        • Swipe-down-to-refresh on Android Chrome / iOS Safari (same)
+      TWO strategies, one for each reload type:
 
-      HOW:
-        Keyboard keys are intercepted in capture phase before the browser
-        sees them. For the reload button / swipe refresh, we use
-        beforeunload: if the page is about to unload and the user did NOT
-        navigate away (no link clicked, no form submit), we redirect to
-        the same URL instead — which the browser sees as a navigation, not
-        a reload, preserving the audio context.
+      1. KEYBOARD (Ctrl+R / F5 / Cmd+R):
+         Intercepted in keydown capture phase — preventDefault stops the
+         browser reload, then location.href does the soft navigation instead.
 
-      SAFE EXIT: clicks on external links and normal navigations set a
-      flag so beforeunload lets them through untouched.
+      2. RELOAD BUTTON + SWIPE-TO-REFRESH (Android/iOS):
+         beforeunload cannot cancel these (browsers block it intentionally).
+         Instead: on the NEW page load, check if it was a reload via
+         performance.navigation.type or PerformanceNavigationTiming.
+         If it was a reload, immediately soft-navigate to the same URL —
+         which re-runs the page as a navigation (not a reload), preserving
+         the audio context exactly like a logo tap does.
+         A sessionStorage flag prevents the redirect from looping.
     -->
     <script>
       (function () {
-        // Flag: set true when a real navigation (link/form) is happening
-        // so beforeunload doesn't hijack it.
-        var _realNav = false;
-        document.addEventListener('click', function (e) {
-          var t = e.target && e.target.closest('a');
-          if (t && t.href && t.href !== window.location.href) _realNav = true;
-        }, true);
-        document.addEventListener('submit', function () { _realNav = true; }, true);
-
-        // 1. Keyboard: Ctrl+R, F5, Cmd+R
+        // ── Strategy 1: Keyboard reloads ──────────────────────────────
         document.addEventListener('keydown', function (e) {
-          var isF5     = e.key === 'F5';
-          var isCtrlR  = e.ctrlKey  && !e.metaKey && (e.key === 'r' || e.key === 'R');
-          var isCmdR   = e.metaKey  && !e.ctrlKey && (e.key === 'r' || e.key === 'R');
+          var isF5    = e.key === 'F5';
+          var isCtrlR = e.ctrlKey && !e.metaKey && (e.key === 'r' || e.key === 'R');
+          var isCmdR  = e.metaKey && !e.ctrlKey && (e.key === 'r' || e.key === 'R');
           if (isF5 || isCtrlR || isCmdR) {
             e.preventDefault();
             e.stopImmediatePropagation();
@@ -223,15 +210,35 @@
           }
         }, true);
 
-        // 2. Reload button + swipe-to-refresh:
-        //    If we're unloading but no real navigation happened, redirect
-        //    to same URL (= soft navigation, not a reload).
-        window.addEventListener('beforeunload', function (e) {
-          if (_realNav) return; // genuine navigation — let it go
-          // Redirect to same URL immediately — no preventDefault, no dialog.
-          // Setting location.href here converts the reload into a navigation.
-          window.location.href = window.location.href;
-        });
+        // ── Strategy 2: Reload button / swipe-to-refresh ──────────────
+        // Detect if this page load was caused by a reload.
+        // Use a sessionStorage flag to prevent redirect loops.
+        var LOOP_KEY = '_revtv_reload_nav';
+        if (sessionStorage.getItem(LOOP_KEY)) {
+          // This load was our own redirect — clear flag and continue normally.
+          sessionStorage.removeItem(LOOP_KEY);
+        } else {
+          // Check navigation type
+          var isReload = false;
+          try {
+            // Modern API (Chrome 57+, Firefox 58+, Safari 15.4+)
+            var nav = performance.getEntriesByType('navigation')[0];
+            if (nav && nav.type === 'reload') isReload = true;
+          } catch (e1) {}
+          if (!isReload) {
+            try {
+              // Legacy API fallback
+              if (performance.navigation && performance.navigation.type === 1) isReload = true;
+            } catch (e2) {}
+          }
+
+          if (isReload) {
+            // Was a reload (button or swipe). Set flag then soft-navigate.
+            // The flag stops the next load (our redirect) from looping.
+            sessionStorage.setItem(LOOP_KEY, '1');
+            window.location.href = window.location.href;
+          }
+        }
       })();
     </script>
   </head>
