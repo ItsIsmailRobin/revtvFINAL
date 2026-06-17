@@ -1649,9 +1649,9 @@ export default function Player({
           onClick={(e) => { e.stopPropagation(); doUnmute(); }}
           style={{
             cursor: "pointer",
-            backdropFilter: "blur(8px) saturate(140%)",
-            WebkitBackdropFilter: "blur(8px) saturate(140%)",
-            background: "rgba(0,0,0,0.38)",
+            backdropFilter: "blur(3px) saturate(110%)",
+            WebkitBackdropFilter: "blur(3px) saturate(110%)",
+            background: "rgba(0,0,0,0.18)",
             animation: "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both",
           }}
         >
