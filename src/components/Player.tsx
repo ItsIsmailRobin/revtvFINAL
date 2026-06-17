@@ -190,6 +190,16 @@ export default function Player({
   // or the grant-exists unmute path. The sync-volume useEffect reads this
   // ref to avoid overriding v.muted=true during the muted-autoplay window.
   const autoplayMutedRef = useRef(false);
+  // Timestamp of the most recent "grant exists -> auto-unmute" attempt
+  // (see onMutedPlayStarted below). Some browsers will silently force-pause
+  // playback if JS unmutes a video on a page load that wasn't recognized as
+  // gesture-driven (a plain hard refresh / Ctrl+R / pull-to-refresh, as
+  // opposed to a click-driven navigation like the logo tap, which browsers
+  // do treat as gesture-qualified). onPause uses this timestamp to detect
+  // that exact case and recover gracefully — falling back to muted autoplay
+  // + the tap-to-unmute overlay — instead of leaving the player stuck
+  // paused and silent.
+  const recentAutoUnmuteRef = useRef(0);
   const statusTimerRef = useRef<number | null>(null);
 
   const showStatus = useCallback((msg: string) => {
@@ -258,6 +268,7 @@ export default function Player({
     setPlaying(false);
     userPausedRef.current = false;
     setUserPaused(false);
+    recentAutoUnmuteRef.current = 0;
     lastLiveSnapRef.current = 0;
     // Suppress the pause overlay until the new channel has actually
     // started playing at least once — prevents the glass play button
@@ -370,7 +381,33 @@ export default function Player({
     };
     const onPause    = () => {
       setPlaying(false);
-      if (!userPausedRef.current) scheduleRecover(isIOS ? 1800 : isMobile ? 1500 : 700);
+      if (userPausedRef.current) return;
+
+      // Did the browser just force-pause this video right after we
+      // auto-unmuted it (the "grant exists" path in onMutedPlayStarted)?
+      // This happens on page loads the browser doesn't treat as
+      // gesture-qualified — typically a plain hard refresh / Ctrl+R /
+      // pull-to-refresh — as opposed to a click-driven navigation like the
+      // logo tap, which IS treated as gesture-qualified and never gets
+      // punished this way. Recover by falling back to muted autoplay and
+      // surfacing the tap-to-unmute overlay, instead of leaving the
+      // player stuck paused and silent.
+      const v = videoRef.current;
+      const sinceUnmute = recentAutoUnmuteRef.current ? Date.now() - recentAutoUnmuteRef.current : Infinity;
+      if (v && !v.muted && sinceUnmute < 2500) {
+        recentAutoUnmuteRef.current = 0;
+        autoplayMutedRef.current = true; // re-enter the muted-autoplay window
+        v.muted = true;
+        v.play().then(() => {
+          setNeedsUnmute(true); // one tap restores sound, same as first-visit overlay
+        }).catch(() => {
+          autoplayMutedRef.current = false;
+          scheduleRecover(isIOS ? 1800 : isMobile ? 1500 : 700);
+        });
+        return;
+      }
+
+      scheduleRecover(isIOS ? 1800 : isMobile ? 1500 : 700);
     };
     const onStalled  = () => { scheduleRecover(isIOS ? 2000 : isMobile ? 2000 : 1000); };   // buffer empty — recover
     const onEnded    = () => {
@@ -483,8 +520,10 @@ export default function Player({
         setNeedsUnmute(false);
         const vid = videoRef.current;
         if (vid) {
+          const willUnmute = !mutedRef.current;
           vid.muted  = mutedRef.current;
           vid.volume = volumeRef.current || 1;
+          if (willUnmute) recentAutoUnmuteRef.current = Date.now();
         }
       }
     };

@@ -178,23 +178,38 @@
     </script>
 
     <!--
-      RELOAD INTERCEPTOR — converts ALL reload gestures into soft same-URL
-      navigation (identical to logo tap), so autoplay-with-sound works.
+      RELOAD INTERCEPTOR — converts reload gestures into a soft same-URL
+      navigation (identical in spirit to a logo tap), so the autoplay-with-
+      sound logic in Player.tsx gets the best possible shot at running
+      cleanly. The grant flag it relies on ("revtv:gestureGranted") lives in
+      localStorage, so it survives every reload type below indefinitely.
 
       TWO strategies, one for each reload type:
 
-      1. KEYBOARD (Ctrl+R / F5 / Cmd+R):
+      1. KEYBOARD (Ctrl+R / Cmd+R / F5):
          Intercepted in keydown capture phase — preventDefault stops the
-         browser reload, then location.href does the soft navigation instead.
+         browser reload, then location.href does the soft navigation instead,
+         from inside the same trusted key-press event (just like the logo
+         tap is a trusted click) — this is what lets the browser treat it as
+         a gesture-driven navigation.
 
       2. RELOAD BUTTON + SWIPE-TO-REFRESH (Android/iOS):
-         beforeunload cannot cancel these (browsers block it intentionally).
-         Instead: on the NEW page load, check if it was a reload via
-         performance.navigation.type or PerformanceNavigationTiming.
-         If it was a reload, immediately soft-navigate to the same URL —
-         which re-runs the page as a navigation (not a reload), preserving
-         the audio context exactly like a logo tap does.
-         A sessionStorage flag prevents the redirect from looping.
+         These can't be intercepted before they happen — they're handled by
+         the browser/OS chrome, outside the page entirely. Instead: on the
+         NEW page load, check via PerformanceNavigationTiming whether this
+         load was a reload. If so, immediately soft-navigate to the same
+         URL once. A localStorage flag (not sessionStorage, so it survives
+         even if reloads happen in quick succession) prevents the redirect
+         from looping.
+
+      NOTE: Even with both strategies, a reload-button click or swipe-to-
+      refresh has no trusted in-page event for us to piggyback on, so some
+      browsers may still decline to treat the resulting load as gesture-
+      qualified for autoplay-with-sound purposes. Player.tsx has a matching
+      safety net for that case: if the browser force-pauses playback right
+      after the auto-unmute attempt, it gracefully falls back to muted
+      autoplay + the familiar tap-to-unmute overlay instead of leaving the
+      player stuck paused and silent.
     -->
     <script>
       (function () {
@@ -212,11 +227,11 @@
 
         // ── Strategy 2: Reload button / swipe-to-refresh ──────────────
         // Detect if this page load was caused by a reload.
-        // Use a sessionStorage flag to prevent redirect loops.
-        var LOOP_KEY = '_revtv_reload_nav';
-        if (sessionStorage.getItem(LOOP_KEY)) {
+        // Use a localStorage flag to prevent redirect loops.
+        var LOOP_KEY = 'revtv:reloadNav';
+        if (window.localStorage.getItem(LOOP_KEY)) {
           // This load was our own redirect — clear flag and continue normally.
-          sessionStorage.removeItem(LOOP_KEY);
+          window.localStorage.removeItem(LOOP_KEY);
         } else {
           // Check navigation type
           var isReload = false;
@@ -235,7 +250,7 @@
           if (isReload) {
             // Was a reload (button or swipe). Set flag then soft-navigate.
             // The flag stops the next load (our redirect) from looping.
-            sessionStorage.setItem(LOOP_KEY, '1');
+            window.localStorage.setItem(LOOP_KEY, '1');
             window.location.href = window.location.href;
           }
         }
