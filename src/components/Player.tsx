@@ -194,6 +194,13 @@ export default function Player({
   // From then on (refresh, Ctrl+R, hard reload, channel change, tab reopen)
   // the player always autoplays with sound. Overlay never shown again.
   const [needsUnmute, setNeedsUnmute] = useState(false);
+  // True while the tap-to-unmute overlay is playing its fade-out exit animation.
+  // The overlay stays mounted during the animation so it can fade smoothly,
+  // then is fully removed once the animation completes.
+  const [unmuteFading, setUnmuteFading] = useState(false);
+  // When switching channels (isManualSelect), the overlay should vanish
+  // instantly (no lingering fade) — this ref tracks that case.
+  const unmuteFadeTimerRef = useRef<number | null>(null);
   // True while the autoplay-muted phase is active (overlay shown OR about
   // to be shown). Set synchronously by the HLS effect, cleared by doUnmute
   // or the grant-exists unmute path. The sync-volume useEffect reads this
@@ -221,6 +228,23 @@ export default function Player({
   }, []);
 
   const presentationFullscreen = isFullscreen || fsOverride;
+
+  // Dismiss the tap-to-unmute overlay: quick fade-out then fully remove.
+  // Pass instant=true to skip the animation (e.g. on channel switch).
+  const dismissUnmuteOverlay = useCallback((instant = false) => {
+    if (unmuteFadeTimerRef.current) window.clearTimeout(unmuteFadeTimerRef.current);
+    if (instant) {
+      setUnmuteFading(false);
+      setNeedsUnmute(false);
+      return;
+    }
+    // Start fade-out animation, then remove after it completes (180ms)
+    setUnmuteFading(true);
+    unmuteFadeTimerRef.current = window.setTimeout(() => {
+      setNeedsUnmute(false);
+      setUnmuteFading(false);
+    }, 180);
+  }, []);
 
   // Human-readable aspect label
   const aspectLabel = useCallback(
@@ -299,6 +323,13 @@ export default function Player({
     // on every platform (PC, Android, iOS).
     const isManualSelect = !!(channel && manualChannelIds?.has(channel.id));
     if (isManualSelect && channel) manualChannelIds!.delete(channel.id);
+    // On manual channel switch, dismiss any lingering unmute overlay instantly
+    // (no fade — the switch itself is already a fast visual transition).
+    if (isManualSelect) {
+      if (unmuteFadeTimerRef.current) window.clearTimeout(unmuteFadeTimerRef.current);
+      setUnmuteFading(false);
+      setNeedsUnmute(false);
+    }
 
     // iOS (incl. iPadOS "desktop" UA on Safari) has strict autoplay-with-sound
     // privacy rules — attempting the "play unmuted, fall back to muted, then
@@ -418,6 +449,7 @@ export default function Player({
         v.muted = true;
         v.play().then(() => {
           setNeedsUnmute(true); // one tap restores sound, same as first-visit overlay
+          setUnmuteFading(false);
         }).catch(() => {
           autoplayMutedRef.current = false;
           scheduleRecover(isIOS ? 1800 : isMobile ? 1500 : 700);
@@ -535,12 +567,14 @@ export default function Player({
         // First-ever visit: stay muted, show tap-to-unmute overlay.
         // autoplayMutedRef stays true — cleared synchronously by doUnmute().
         setNeedsUnmute(true);
+        setUnmuteFading(false);
       } else {
         // Grant exists: unmute immediately now that we have a playing element.
         // Clear the flag BEFORE writing v.muted so the sync-volume effect
         // does not interfere (it reads the ref synchronously).
         autoplayMutedRef.current = false;
         setNeedsUnmute(false);
+        setUnmuteFading(false);
         const vid = videoRef.current;
         if (vid) {
           const willUnmute = !mutedRef.current;
@@ -632,13 +666,12 @@ export default function Player({
         // ── Buffer sizing ─────────────────────────────────────────────
         // Mobile networks (cellular / flaky WiFi) need a much deeper
         // cushion than desktop to avoid the "play 2s → rebuffer" loop.
-        // 30s/20MB ahead-buffer absorbs multi-second jitter without
-        // re-entering the loading state. The extra CPU/memory cost is
-        // worth it versus a player that's unwatchable.
-        backBufferLength:    isMobile ? 10 :  8,  // how much to keep behind currentTime
-        maxBufferLength:     isMobile ? 30 : 10,  // target ahead-buffer in seconds
-        maxMaxBufferLength:  isMobile ? 60 : 16,  // hard cap
-        maxBufferSize:       isMobile ?  20_000_000 : 12_000_000, // 20 MB / 12 MB
+        // Generous ahead-buffer absorbs multi-second jitter without
+        // re-entering the loading state.
+        backBufferLength:    isMobile ? 10 :  8,   // keep behind currentTime
+        maxBufferLength:     isMobile ? 40 : 20,   // target ahead-buffer (raised for smoother play)
+        maxMaxBufferLength:  isMobile ? 90 : 30,   // hard cap (raised to allow deeper fill)
+        maxBufferSize:       isMobile ?  30_000_000 : 20_000_000, // 30 MB / 20 MB
         maxBufferHole:       isMobile ? 1.0 : 0.5, // tolerate larger gaps before "stalled"
 
         // ── Quality / ABR ─────────────────────────────────────────────
@@ -649,56 +682,43 @@ export default function Player({
         // screen size.
         startLevel:          -1,                 // auto on all platforms
         capLevelToPlayerSize: true,               // never load resolution > screen size
-        abrEwmaDefaultEstimate: isMobile ? 250_000 : 800_000, // initial BW guess
+        abrEwmaDefaultEstimate: isMobile ? 500_000 : 1_500_000, // higher initial BW guess = faster start quality
         // Less twitchy ABR on mobile — fewer quality switches means
         // fewer brief re-buffer blips while switching renditions.
-        // But react QUICKLY to a bandwidth drop (fast EWMA) so we don't
-        // stay stuck on a bitrate the connection can't sustain — that's
-        // what causes the long "stuck buffering" stalls. Be slower to
-        // upgrade back up (slow EWMA on the up side) to avoid yo-yo'ing.
-        abrBandWidthFactor:   isMobile ? 0.8 : 0.85,
-        abrBandWidthUpFactor: isMobile ? 0.6 : 0.60,
+        // Be conservative going up, quick going down to avoid sustained stalls.
+        abrBandWidthFactor:   isMobile ? 0.85 : 0.90,
+        abrBandWidthUpFactor: isMobile ? 0.65 : 0.65,
         abrEwmaFastLive:  isMobile ? 2.0 : 3.0,
         abrEwmaSlowLive:  isMobile ? 9.0 : 9.0,
 
         // ── Stall / nudge ─────────────────────────────────────────────
-        // maxStarvationDelay: how long to wait with a buffer before
-        // giving up and forcing a lower quality / stalling. A larger
-        // value on mobile means HLS waits longer for the buffer to
-        // refill instead of repeatedly bailing out.
-        maxStarvationDelay:  isMobile ? 8 : 2,
-        maxLoadingDelay:     isMobile ? 8 : 3,
-        // Internal HLS nudge: tiny seek when buffer gap detected.
-        // A smaller nudge on mobile = smaller, less noticeable
-        // micro-jump when bridging a gap (the "stuck for 1-2s then
-        // resumes" feeling is often this nudge firing repeatedly).
-        nudgeOffset:         isMobile ? 0.1 : 0.2,
-        nudgeMaxRetry:       isMobile ? 16 : 10,
-        highBufferWatchdogPeriod: isMobile ? 4 : 3, // check for buffer issues every Ns
+        // Larger starvation delay = wait longer for buffer to refill
+        // before bailing (reduces "loading flash" on slow connections).
+        maxStarvationDelay:  isMobile ? 10 : 4,
+        maxLoadingDelay:     isMobile ? 10 : 4,
+        // Smaller nudge = less noticeable micro-jump when bridging a gap.
+        nudgeOffset:         isMobile ? 0.08 : 0.15,
+        nudgeMaxRetry:       isMobile ? 20 : 12,
+        highBufferWatchdogPeriod: isMobile ? 4 : 3,
 
         // ── Fragment loading ──────────────────────────────────────────
-        // More retries + shorter delays = faster recovery from hiccups
-        fragLoadingMaxRetry:     6,
-        manifestLoadingMaxRetry: 5,
-        levelLoadingMaxRetry:    5,
-        fragLoadingRetryDelay:   400,
-        manifestLoadingRetryDelay: 400,
-        levelLoadingRetryDelay:  400,
-        fragLoadingMaxRetryTimeout: 4000,
+        // More retries + shorter delays = faster recovery from hiccups.
+        fragLoadingMaxRetry:     8,
+        manifestLoadingMaxRetry: 6,
+        levelLoadingMaxRetry:    6,
+        fragLoadingRetryDelay:   300,
+        manifestLoadingRetryDelay: 300,
+        levelLoadingRetryDelay:  300,
+        fragLoadingMaxRetryTimeout: 3000,
 
         // ── Live sync ─────────────────────────────────────────────────
-        // The buffer cushion above (30s) is what absorbs jitter — we
-        // don't need to sit unusually far from the live edge too, which
-        // can itself cause a long initial "catching up" buffering phase
-        // on mobile. A modest +1 vs desktop is enough.
+        // Stay close enough to live edge without starving the buffer.
         liveSyncDurationCount:       isMobile ? 3 : 2,
-        liveMaxLatencyDurationCount: isMobile ? 8 : 4,
-        // Drift tolerance before HLS snaps to live edge internally
+        liveMaxLatencyDurationCount: isMobile ? 10 : 6,
         maxFragLookUpTolerance: isMobile ? 0.5 : 0.2,
-        // Don't let hls.js force a live-edge seek the moment latency
-        // creeps up — let the buffer cushion absorb it instead.
         liveDurationInfinity: false,
 
+        // Progressive loading: start playing as soon as first fragments arrive.
         progressive: true,
       });
       hlsRef.current = hls;
@@ -1100,7 +1120,7 @@ export default function Player({
     setMuted(newMuted);
     // Also hide the overlay immediately if user taps mute while it's showing
     // (shouldn't normally happen, but belt-and-suspenders)
-    if (!newMuted) setNeedsUnmute(false);
+    if (!newMuted) dismissUnmuteOverlay(true);
     armHide();
   }, [armHide]);
 
@@ -1466,7 +1486,7 @@ export default function Player({
   }, [channel, togglePlay, toggleMute, toggleFullscreen]);
 
   // Tap-to-unmute: called when user taps the glass overlay (ALL platforms).
-  // Syncs DOM immediately, stores grant, hides overlay.
+  // Syncs DOM immediately, stores grant, triggers fade-out animation on overlay.
   const doUnmute = useCallback(() => {
     // Clear the autoplay-muted guard BEFORE writing v.muted so the
     // sync-volume effect (if it fires) does not immediately re-mute.
@@ -1480,7 +1500,8 @@ export default function Player({
     }
     mutedRef.current = false;
     setMuted(false);
-    setNeedsUnmute(false);
+    // Fade out the overlay quickly (180ms) then remove it from DOM
+    dismissUnmuteOverlay(false);
     try { window.localStorage.setItem("revtv:gestureGranted", "1"); } catch {}
 
     // This tap is the very first genuine, trusted click the browser has
@@ -1498,7 +1519,7 @@ export default function Player({
         window.location.href = window.location.origin + window.location.pathname;
       }
     } catch {}
-  }, []);
+  }, [dismissUnmuteOverlay]);
 
   const onVideoClick = (e: ReactMouseEvent) => {
     if (isSwiping.current) return;
@@ -1820,7 +1841,9 @@ export default function Player({
 
       {/* Tap-to-unmute overlay — ALL platforms (PC, Android, iOS).
           Only shown on first-ever visit. Blur + glass button, same style
-          as the paused-play overlay. Tap anywhere to unmute + store grant. */}
+          as the paused-play overlay. Tap anywhere to unmute + store grant.
+          On tap: quick fade-out animation (180ms) then removed from DOM.
+          On channel switch (manual): dismissed instantly, no animation. */}
       {needsUnmute && (
         <div
           className="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center"
@@ -1831,7 +1854,9 @@ export default function Player({
             backdropFilter: "blur(4px) saturate(130%) brightness(1.08)",
             WebkitBackdropFilter: "blur(4px) saturate(130%) brightness(1.08)",
             background: "rgba(255,255,255,0.06)",
-            animation: "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both",
+            animation: unmuteFading
+              ? "unmuteFadeOut 180ms cubic-bezier(.4,0,.2,1) both"
+              : "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both",
           }}
         >
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
@@ -2185,6 +2210,11 @@ export default function Player({
         @keyframes fadeInOverlay {
           from { opacity: 0; }
           to   { opacity: 1; }
+        }
+        /* Quick fade-out for the tap-to-unmute overlay when tapped */
+        @keyframes unmuteFadeOut {
+          0%   { opacity: 1; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+          100% { opacity: 0; backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); }
         }
         /* Zap dot pulse — the green dot overlaid on the zap icon
            pulses with a soft scale + opacity flicker. */
