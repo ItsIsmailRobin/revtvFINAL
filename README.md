@@ -127,14 +127,14 @@ npm run build
 ## 💡 Why RevTV?
 
 ```
-┌──────────────────────────────────────────┐
-│  ✦ 100% FREE — No subscriptions          │
-│  ✦ NO SIGNUP — Just open and watch       │
-│  ✦ OPEN SOURCE — Community driven         │
-│  ✦ HD STREAMING — Buffer-free experience  │
-│  ✦ 1000+ Channels — Movies, Sports, TV   │
-│  ✦ REGULAR UPDATES — Always improving     │
-└──────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  ✦  100% FREE        ───  No subscriptions                  │
+│  ✦  NO SIGNUP        ───  Just open and watch               │
+│  ✦  OPEN SOURCE      ───  Community driven                  │
+│  ✦  HD STREAMING     ───  Buffer-free experience            │
+│  ✦  1000+ CHANNELS   ───  Movies, Sports, TV                │
+│  ✦  REGULAR UPDATES  ───  Always improving                  │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
