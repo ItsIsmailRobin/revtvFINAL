@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { Channel } from "../utils/parseM3U";
 import { cn } from "../utils/cn";
 
@@ -8,16 +9,49 @@ interface ChannelListProps {
   loading: boolean;
 }
 
+/** Walk up the DOM to find the nearest scrollable ancestor. */
+function getScrollParent(el: HTMLElement): HTMLElement | null {
+  let node: HTMLElement | null = el.parentElement;
+  while (node && node !== document.body) {
+    const { overflow, overflowY } = window.getComputedStyle(node);
+    if (/auto|scroll/.test(overflow + overflowY) && node.scrollHeight > node.clientHeight) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
 export default function ChannelList({
   channels,
   activeId,
   onSelect,
   loading,
 }: ChannelListProps) {
+  const activeRef = useRef<HTMLButtonElement>(null);
+  const scrolledIdRef = useRef<string | null>(null);
+
+  // Scroll the active channel into view INSIDE the sidebar panel only.
+  // Never touches window.scrollY — the page position stays wherever it is.
+  useEffect(() => {
+    if (loading || !activeId) return;
+    if (scrolledIdRef.current === activeId) return;
+    scrolledIdRef.current = activeId;
+    const el = activeRef.current;
+    if (!el) return;
+    const panel = getScrollParent(el);
+    if (!panel) return;
+    // Center the active item inside the scrollable panel
+    const elTop    = el.offsetTop;
+    const elHeight = el.offsetHeight;
+    const panelH   = panel.clientHeight;
+    panel.scrollTop = elTop - panelH / 2 + elHeight / 2;
+  }, [activeId, loading]);
+
   if (loading) {
     return (
-      <div className="flex flex-col px-3 pb-3 pt-1 sm:px-4" style={{ gap: "8px" }}>
-        {Array.from({ length: 8 }).map((_, i) => (
+      <div className="flex flex-col px-3 pb-3 pt-1" style={{ gap: "8px" }}>
+        {Array.from({ length: 5 }).map((_, i) => (
           <div
             key={i}
             className="h-[60px] w-full animate-pulse rounded-xl border border-white/5 bg-white/[0.03]"
@@ -52,14 +86,15 @@ export default function ChannelList({
 
   return (
     <div
-      className="flex flex-col px-3 pb-3 pt-1 sm:px-4"
-      style={{ gap: "8px", maxHeight: "420px", overflowY: "auto", scrollbarWidth: "none", msOverflowStyle: "none" }}
+      className="flex flex-col px-3 pb-3 pt-1"
+      style={{ gap: "8px" }}
     >
       {channels.map((ch, i) => {
         const isActive = ch.id === activeId;
         return (
           <button
             key={ch.id}
+            ref={isActive ? activeRef : null}
             onClick={() => onSelect(ch)}
             style={{
               animation: `chEnter 380ms cubic-bezier(.4,0,.2,1) ${Math.min(i * 14, 280)}ms both`,
@@ -91,7 +126,8 @@ export default function ChannelList({
                 <img
                   src={ch.logo}
                   alt={ch.name}
-                  loading="lazy"
+                  loading="eager"
+                  decoding="async"
                   referrerPolicy="no-referrer"
                   className="h-full w-full rounded-full object-contain transition-transform duration-500 group-hover:scale-110"
                   style={{ background: "transparent" }}

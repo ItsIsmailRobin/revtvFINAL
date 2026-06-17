@@ -27,7 +27,7 @@ const MATCHES: Match[] = [
   { id:5, stage:"Group B", date:"2026-06-14", time:"01:00", teamA:"Qatar", flagA:f("qa"), teamB:"Switzerland", flagB:f("ch"), city:"Santa Clara", venue:"Levi's Stadium" },
   { id:6, stage:"Group C", date:"2026-06-14", time:"04:00", teamA:"Brazil", flagA:f("br"), teamB:"Morocco", flagB:f("ma"), city:"East Rutherford", venue:"MetLife Stadium" },
   { id:7, stage:"Group C", date:"2026-06-14", time:"07:00", teamA:"Haiti", flagA:f("ht"), teamB:"Scotland", flagB:f("gb-sct"), city:"Foxborough", venue:"Gillette Stadium" },
-  { id:8, stage:"Group D", date:"2026-06-14", time:"22:00", teamA:"Australia", flagA:f("au"), teamB:"Türkiye", flagB:f("tr"), city:"Vancouver", venue:"BC Place" },
+  { id:8, stage:"Group D", date:"2026-06-14", time:"10:00", teamA:"Australia", flagA:f("au"), teamB:"Türkiye", flagB:f("tr"), city:"Vancouver", venue:"BC Place" },
   { id:9, stage:"Group E", date:"2026-06-14", time:"23:00", teamA:"Germany", flagA:f("de"), teamB:"Curaçao", flagB:f("cw"), city:"Houston", venue:"NRG Stadium" },
   { id:10, stage:"Group F", date:"2026-06-15", time:"02:00", teamA:"Netherlands", flagA:f("nl"), teamB:"Japan", flagB:f("jp"), city:"Arlington", venue:"AT&T Stadium" },
   { id:11, stage:"Group E", date:"2026-06-15", time:"05:00", teamA:"Ivory Coast", flagA:f("ci"), teamB:"Ecuador", flagB:f("ec"), city:"Philadelphia", venue:"Lincoln Financial" },
@@ -54,7 +54,7 @@ const MATCHES: Match[] = [
   { id:32, stage:"Group D", date:"2026-06-20", time:"09:00", teamA:"Türkiye", flagA:f("tr"), teamB:"Paraguay", flagB:f("py"), city:"Santa Clara", venue:"Levi's Stadium" },
   { id:33, stage:"Group F", date:"2026-06-20", time:"23:00", teamA:"Netherlands", flagA:f("nl"), teamB:"Sweden", flagB:f("se"), city:"Houston", venue:"NRG Stadium" },
   { id:34, stage:"Group E", date:"2026-06-21", time:"02:00", teamA:"Germany", flagA:f("de"), teamB:"Ivory Coast", flagB:f("ci"), city:"Toronto", venue:"BMO Field" },
-  { id:35, stage:"Group E", date:"2026-06-21", time:"06:00", teamA:"Ecuador", flagA:f("ec"), teamB:"Curaçao", flagB:f("cw"), city:"Kansas City", venue:"Arrowhead Stadium" },
+  { id:35, stage:"Group E", date:"2026-06-21", time:"09:00", teamA:"Ecuador", flagA:f("ec"), teamB:"Curaçao", flagB:f("cw"), city:"Kansas City", venue:"Arrowhead Stadium" },
   { id:36, stage:"Group F", date:"2026-06-21", time:"10:00", teamA:"Tunisia", flagA:f("tn"), teamB:"Japan", flagB:f("jp"), city:"Monterrey", venue:"Estadio BBVA" },
   { id:37, stage:"Group H", date:"2026-06-21", time:"22:00", teamA:"Spain", flagA:f("es"), teamB:"Saudi Arabia", flagB:f("sa"), city:"Atlanta", venue:"Mercedes-Benz Stadium" },
   { id:38, stage:"Group G", date:"2026-06-22", time:"01:00", teamA:"Belgium", flagA:f("be"), teamB:"Iran", flagB:f("ir"), city:"Los Angeles", venue:"SoFi Stadium" },
@@ -93,7 +93,7 @@ const MATCHES: Match[] = [
   { id:71, stage:"Group J", date:"2026-06-28", time:"08:00", teamA:"Algeria", flagA:f("dz"), teamB:"Austria", flagB:f("at"), city:"Kansas City", venue:"Arrowhead Stadium" },
   { id:72, stage:"Group J", date:"2026-06-28", time:"08:00", teamA:"Jordan", flagA:f("jo"), teamB:"Argentina", flagB:f("ar"), city:"Arlington", venue:"AT&T Stadium" },
   { id:73, stage:"Round of 32", date:"2026-06-29", time:"01:00", teamA:"R-up A", flagA:f("xx"), teamB:"R-up B", flagB:f("xx"), city:"Los Angeles", venue:"SoFi Stadium" },
-  { id:74, stage:"Round of 32", date:"2026-06-29", time:"23:00", teamA:"Win C", flagA:f("xx"), teamB:"R-up F", flagB:f("xx"), city:"Houston", venue:"NRG Stadium" },
+  { id:74, stage:"Round of 32", date:"2026-06-29", time:"05:00", teamA:"Win C", flagA:f("xx"), teamB:"R-up F", flagB:f("xx"), city:"Houston", venue:"NRG Stadium" },
   { id:75, stage:"Round of 32", date:"2026-06-30", time:"02:30", teamA:"Win E", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"Foxborough", venue:"Gillette Stadium" },
   { id:76, stage:"Round of 32", date:"2026-06-30", time:"07:00", teamA:"Win F", flagA:f("xx"), teamB:"R-up C", flagB:f("xx"), city:"Monterrey", venue:"Estadio BBVA" },
   { id:77, stage:"Round of 32", date:"2026-06-30", time:"23:00", teamA:"R-up E", flagA:f("xx"), teamB:"R-up I", flagB:f("xx"), city:"Arlington", venue:"AT&T Stadium" },
@@ -101,10 +101,10 @@ const MATCHES: Match[] = [
   { id:79, stage:"Round of 32", date:"2026-07-01", time:"07:00", teamA:"Win A", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"Mexico City", venue:"Estadio Azteca" },
   { id:80, stage:"Round of 32", date:"2026-07-01", time:"22:00", teamA:"Win L", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"Atlanta", venue:"Mercedes-Benz Stadium" },
   { id:81, stage:"Round of 32", date:"2026-07-02", time:"02:00", teamA:"Win G", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"Seattle", venue:"Lumen Field" },
-  { id:82, stage:"Round of 32", date:"2026-07-02", time:"06:00", teamA:"Win D", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"Santa Clara", venue:"Levi's Stadium" },
+  { id:82, stage:"Round of 32", date:"2026-07-02", time:"02:00", teamA:"Win D", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"Santa Clara", venue:"Levi's Stadium" },
   { id:83, stage:"Round of 32", date:"2026-07-03", time:"01:00", teamA:"Win H", flagA:f("xx"), teamB:"R-up J", flagB:f("xx"), city:"Los Angeles", venue:"SoFi Stadium" },
   { id:84, stage:"Round of 32", date:"2026-07-03", time:"05:00", teamA:"R-up K", flagA:f("xx"), teamB:"R-up L", flagB:f("xx"), city:"Toronto", venue:"BMO Field" },
-  { id:85, stage:"Round of 32", date:"2026-07-03", time:"09:00", teamA:"Win B", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"Vancouver", venue:"BC Place" },
+  { id:85, stage:"Round of 32", date:"2026-07-03", time:"07:00", teamA:"Win B", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"Vancouver", venue:"BC Place" },
   { id:86, stage:"Round of 32", date:"2026-07-04", time:"00:00", teamA:"R-up D", flagA:f("xx"), teamB:"R-up G", flagB:f("xx"), city:"Arlington", venue:"AT&T Stadium" },
   { id:87, stage:"Round of 32", date:"2026-07-04", time:"04:00", teamA:"Win J", flagA:f("xx"), teamB:"R-up H", flagB:f("xx"), city:"Miami", venue:"Hard Rock Stadium" },
   { id:88, stage:"Round of 32", date:"2026-07-04", time:"07:30", teamA:"Win K", flagA:f("xx"), teamB:"Best 3rd", flagB:f("xx"), city:"Kansas City", venue:"Arrowhead Stadium" },
@@ -127,13 +127,21 @@ const MATCHES: Match[] = [
 ];
 
 // ─── Time helpers ─────────────────────────────────────────────────
-function bdNow() {
-  const utcMs = Date.now() + new Date().getTimezoneOffset() * 60_000;
-  return new Date(utcMs + 6 * 3600_000);
+// bdNow() returns the current moment as a real Date — used for numeric comparisons only.
+// matchStart() uses a +06:00 offset literal so comparisons are always in true UTC ms.
+function bdNow() { return new Date(); }
+
+// bdTodayStr() returns the current date in BD (Asia/Dhaka) as YYYY-MM-DD.
+// Uses Intl/toLocaleDateString so it's correct regardless of the user's browser timezone.
+function bdTodayStr(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" });
 }
+
 function matchStart(m: Match) { return new Date(`${m.date}T${m.time}:00+06:00`); }
-function isOver(m: Match)  { return matchStart(m) < bdNow(); }
-function isLive(m: Match)  { const s = matchStart(m).getTime(), n = bdNow().getTime(); return n >= s && n <= s + 110*60000; }
+// A match is truly over only after start + 115 min (90 + stoppages + half-time buffer).
+// This prevents matches from showing "Full Time" the moment they kick off.
+function isOver(m: Match)  { return matchStart(m).getTime() + 115*60000 < bdNow().getTime(); }
+function isLive(m: Match)  { const s = matchStart(m).getTime(), n = bdNow().getTime(); return n >= s && n <= s + 115*60000; }
 
 function groupByDate(matches: Match[]): { date: string; matches: Match[] }[] {
   const map: Record<string, Match[]> = {};
@@ -142,7 +150,7 @@ function groupByDate(matches: Match[]): { date: string; matches: Match[] }[] {
 }
 
 function todayPageIndex(pages: { date: string; matches: Match[] }[][], colsPerPage: number): number {
-  const today = bdNow().toISOString().slice(0,10);
+  const today = bdTodayStr();
   const idx = pages.findIndex(pg => pg.some(d => d.date >= today));
   return idx >= 0 ? idx : 0;
 }
@@ -167,19 +175,29 @@ function Countdown({ match }: { match: Match }) {
     return () => clearInterval(id);
   }, [match]);
 
+  // isLive covers start → start+115min, isOver covers start+115min onwards
   if (isLive(match)) return (
     <div className="flex items-center justify-center gap-1.5">
       <span className="relative flex h-2 w-2 shrink-0">
-        <span className="absolute inset-0 animate-ping rounded-full bg-green-400 opacity-75" />
-        <span className="relative h-2 w-2 rounded-full bg-green-400" style={{boxShadow:"0 0 6px #4ade80,0 0 12px #4ade80"}} />
+        <span className="absolute inset-0 rounded-full" style={{
+          backgroundColor: "rgba(139,92,246,0.7)",
+          animation: "livePulseRing 2s ease-in-out infinite",
+        }} />
+        <span className="relative h-2 w-2 rounded-full" style={{
+          backgroundColor: "#a78bfa",
+          boxShadow: "0 0 6px rgba(167,139,250,0.9), 0 0 14px rgba(139,92,246,0.6)",
+          animation: "liveDotGlow 2s ease-in-out infinite",
+        }} />
       </span>
-      <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"13px", fontWeight:700, letterSpacing:"0.12em", color:"#86efac", textShadow:"0 0 10px rgba(74,222,128,0.7)"}}>LIVE</span>
+      <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"13px", fontWeight:700, letterSpacing:"0.12em", color:"#c4b5fd", textShadow:"0 0 10px rgba(167,139,250,0.8), 0 0 20px rgba(139,92,246,0.5)", animation:"liveLabelPulse 2s ease-in-out infinite"}}>LIVE</span>
     </div>
   );
 
-  if (ms <= 0) return (
-    <div style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.25)", textTransform:"uppercase", textAlign:"center", lineHeight:1, padding:"2px 4px"}}>Full Time</div>
-  );
+  if (isOver(match)) {
+    return (
+      <div style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.25)", textTransform:"uppercase", textAlign:"center", lineHeight:1, padding:"2px 4px"}}>Full Time</div>
+    );
+  }
 
   const totalSec = Math.floor(ms / 1000);
   const d = Math.floor(totalSec / 86400);
@@ -193,9 +211,9 @@ function Countdown({ match }: { match: Match }) {
     ? [{ v: pad(d), l:"Day" }, { v: pad(h), l:"Hours" }, { v: pad(mi), l:"Min" }, { v: pad(sc), l:"Second" }]
     : [{ v: pad(h), l:"Hours" }, { v: pad(mi), l:"Min" }, { v: pad(sc), l:"Second" }];
 
-  const numSz = d > 0 ? "20px" : "24px";
-  const colSz = d > 0 ? "16px" : "19px";
-  const colW  = d > 0 ? "30px" : "36px";
+  const numSz = d > 0 ? "clamp(13px,3.5vw,20px)" : "clamp(15px,4.5vw,24px)";
+  const colSz = d > 0 ? "clamp(11px,3vw,16px)" : "clamp(13px,3.8vw,19px)";
+  const colW  = d > 0 ? "clamp(22px,6vw,30px)" : "clamp(26px,7.5vw,36px)";
 
   return (
     <div style={{ display:"flex", alignItems:"center", gap:0 }}>
@@ -258,8 +276,8 @@ function Score({ a, b, live, big }: { a: number; b: number; live?: boolean; big?
         fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
         fontSize:sz,
         fontWeight:800,
-        color: live ? "#86efac" : "#fff",
-        textShadow: live ? "0 0 12px rgba(74,222,128,0.6)" : "0 0 12px rgba(255,255,255,0.25)",
+        color: live ? "#c4b5fd" : "#fff",
+        textShadow: live ? "0 0 12px rgba(167,139,250,0.7)" : "0 0 12px rgba(255,255,255,0.25)",
         lineHeight:1,
         letterSpacing:"-0.01em",
       }}>{a}</span>
@@ -268,8 +286,8 @@ function Score({ a, b, live, big }: { a: number; b: number; live?: boolean; big?
         fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif",
         fontSize:sz,
         fontWeight:800,
-        color: live ? "#86efac" : "#fff",
-        textShadow: live ? "0 0 12px rgba(74,222,128,0.6)" : "0 0 12px rgba(255,255,255,0.25)",
+        color: live ? "#c4b5fd" : "#fff",
+        textShadow: live ? "0 0 12px rgba(167,139,250,0.7)" : "0 0 12px rgba(255,255,255,0.25)",
         lineHeight:1,
         letterSpacing:"-0.01em",
       }}>{b}</span>
@@ -290,9 +308,13 @@ function stageStyle(stage: string) {
 }
 
 // ─── Match card ───────────────────────────────────────────────────
-function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
+function MatchCard({ match, isToday, scoreMap }: { match: Match; isToday: boolean; scoreMap: Record<string, [number, number]> }) {
   const over = isOver(match), live = isLive(match), final = match.stage === "⭐ Final";
-  const hasScore = match.scoreA !== undefined && match.scoreB !== undefined;
+  // Use live-fetched scores (from ESPN) if available, fall back to hardcoded scores
+  const fetchedScore = scoreMap[`${match.id}`];
+  const scoreA = fetchedScore ? fetchedScore[0] : match.scoreA;
+  const scoreB = fetchedScore ? fetchedScore[1] : match.scoreB;
+  const hasScore = scoreA !== undefined && scoreB !== undefined;
   const ss = stageStyle(match.stage);
   const d = new Date(`${match.date}T${match.time}:00+06:00`);
   const timeLabel = d.toLocaleTimeString("en-BD", { hour:"2-digit", minute:"2-digit", hour12:true, timeZone:"Asia/Dhaka" });
@@ -316,25 +338,24 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
     <div
       onMouseEnter={() => { if (canReveal) setShowResult(true); }}
       onMouseLeave={() => { if (canReveal) setShowResult(false); }}
-      className="relative overflow-hidden rounded-xl transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.01]"
+      className="relative rounded-xl transition-all duration-300 hover:-translate-y-0.5 hover:scale-[1.01]"
       style={{
         background: live
-          ? "linear-gradient(135deg,rgba(15,40,15,0.75),rgba(10,30,10,0.65))"
+          ? "linear-gradient(135deg,rgba(75,28,125,0.78),rgba(50,12,100,0.68))"
           : over
           ? "rgba(255,255,255,0.02)"
           : isToday
           ? "linear-gradient(135deg,rgba(139,92,246,0.13),rgba(79,42,201,0.07))"
           : "rgba(255,255,255,0.035)",
-        border: `1px solid ${live ? "rgba(74,222,128,0.30)" : isToday ? "rgba(167,139,250,0.65)" : over ? "rgba(255,255,255,0.05)" : "rgba(139,92,246,0.13)"}`,
+        border: `1px solid ${live ? "rgba(139,92,246,0.30)" : isToday ? "rgba(167,139,250,0.45)" : over ? "rgba(255,255,255,0.05)" : "rgba(139,92,246,0.13)"}`,
         boxShadow: live
-          ? "0 0 20px rgba(74,222,128,0.12),0 2px 10px rgba(0,0,0,0.4)"
+          ? "inset 0 0 12px rgba(139,92,246,0.12), inset 0 0 24px rgba(139,92,246,0.06)"
           : final
-          ? "0 0 20px rgba(251,191,36,0.08),0 2px 10px rgba(0,0,0,0.4)"
+          ? "inset 0 0 14px rgba(251,191,36,0.04)"
           : isToday
-          ? "0 0 20px rgba(139,92,246,0.25),0 0 40px rgba(139,92,246,0.12),0 2px 8px rgba(0,0,0,0.3)"
-          : "0 1px 6px rgba(0,0,0,0.22)",
-        // Live card gets a pulse animation
-        animation: live ? "cardPulseCPU 3s ease-in-out infinite" : "none",
+          ? "inset 0 0 14px rgba(139,92,246,0.08)"
+          : "none",
+        animation: live ? "cardPulseCPU 4s ease-in-out infinite" : "none",
         cursor: canReveal ? "pointer" : "default",
       }}>
 
@@ -342,10 +363,10 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px"
         style={{ background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.10),transparent)" }} />
 
-      {/* Live pulse overlay */}
+      {/* Live pulse overlay — inset glow only, no outer bleed */}
       {live && (
         <div className="pointer-events-none absolute inset-0 rounded-xl"
-          style={{ boxShadow:"inset 0 0 28px rgba(74,222,128,0.07)", animation:"liveGlow 2s ease-in-out infinite" }} />
+          style={{ animation:"liveGlow 4s ease-in-out infinite" }} />
       )}
 
       <div className="px-3 py-3">
@@ -366,94 +387,113 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
         </div>
 
         {/* Teams + score row */}
-        <div className="flex items-center justify-between gap-2">
+        <div style={{ display:"flex", alignItems:"center", gap:"4px", width:"100%" }}>
           {/* Team A */}
-          <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-            {/* Flag fades out smoothly while the result is revealed (PC hover only) */}
+          <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", alignItems:"center", gap:"4px", overflow:"hidden" }}>
             <img src={match.flagA} alt={match.teamA}
-              className="h-7 w-11 rounded-sm object-cover shadow-md sm:h-8 sm:w-12"
               style={{
+                width:"clamp(32px,9vw,48px)", height:"clamp(20px,6vw,32px)",
+                borderRadius:"3px", objectFit:"cover",
                 border:"1px solid rgba(255,255,255,0.10)",
-                opacity: canReveal && showResult ? 0 : 1,
-                transition: "opacity 300ms ease",
+                flexShrink:0,
               }}
               onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
             <span style={{
-              fontFamily:"'Inter',sans-serif", fontSize:"11px", fontWeight:600,
+              fontFamily:"'Inter',sans-serif", fontSize:"clamp(9px,2.5vw,11px)", fontWeight:600,
               color: over && !live ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.88)",
               textAlign:"center", lineHeight:"1.2",
-              maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", display:"block",
+              width:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", display:"block",
             }}>{match.teamA}</span>
           </div>
 
-          {/* Centre: score or countdown */}
-          <div className="flex shrink-0 flex-col items-center gap-0.5 px-1">
+          {/* Centre: score or countdown — clamp width for mobile/desktop */}
+          <div style={{ width:"clamp(52px,18vw,76px)", flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"2px", padding:"0 1px" }}>
             {live && hasScore ? (
-              <>
-                <Score a={match.scoreA!} b={match.scoreB!} live />
-                <div className="flex items-center gap-1 mt-0.5">
-                  <span className="h-1.5 w-1.5 animate-ping rounded-full bg-green-400 opacity-80" />
-                  <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"8px", fontWeight:700, letterSpacing:"0.14em", color:"#86efac", textTransform:"uppercase"}}>Live</span>
-                </div>
-              </>
-            ) : over && hasScore ? (
-              /* Crossfade between "Full Time" and the final result on hover (PC only) */
-              <div className="relative flex items-center justify-center" style={{ minWidth:"56px", minHeight:"30px" }}>
-                <span style={{
-                  position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center",
-                  fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700,
-                  letterSpacing:"0.12em", color:"rgba(255,255,255,0.28)", textTransform:"uppercase", textAlign:"center",
-                  opacity: canReveal && showResult ? 0 : 1,
-                  transition: "opacity 300ms ease",
-                }}>Full Time</span>
-                <div style={{
-                  position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center",
-                  opacity: canReveal && showResult ? 1 : 0,
-                  transition: "opacity 300ms ease",
-                }}>
-                  <Score a={match.scoreA!} b={match.scoreB!} big />
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", width:"100%", gap:"4px" }}>
+                <Score a={scoreA!} b={scoreB!} live />
+                <div className="flex items-center gap-1">
+                  <span className="relative flex h-1.5 w-1.5 shrink-0">
+                    <span className="absolute inset-0 rounded-full" style={{ backgroundColor:"rgba(139,92,246,0.7)", animation:"livePulseRing 2s ease-in-out infinite" }} />
+                    <span className="relative h-1.5 w-1.5 rounded-full" style={{ backgroundColor:"#a78bfa" }} />
+                  </span>
+                  <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"8px", fontWeight:700, letterSpacing:"0.14em", color:"#c4b5fd", textTransform:"uppercase", animation:"liveLabelPulse 2s ease-in-out infinite"}}>Live</span>
                 </div>
               </div>
+            ) : live ? (
+              /* Live but no score yet */
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:"6px", width:"100%" }}>
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="absolute inset-0 rounded-full" style={{ backgroundColor:"rgba(139,92,246,0.7)", animation:"livePulseRing 2s ease-in-out infinite" }} />
+                  <span className="relative h-2 w-2 rounded-full" style={{ backgroundColor:"#a78bfa", boxShadow:"0 0 6px rgba(167,139,250,0.9)" }} />
+                </span>
+                <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.10em", color:"#c4b5fd", animation:"liveLabelPulse 2s ease-in-out infinite"}}>Live</span>
+              </div>
+            ) : over && hasScore ? (
+              /* Show score directly — no hover needed, always visible */
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", width:"100%", minHeight:"30px", gap:"3px" }}>
+                <Score a={scoreA!} b={scoreB!} big />
+                <span style={{
+                  fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"8px", fontWeight:700,
+                  letterSpacing:"0.10em", color:"rgba(255,255,255,0.22)", textTransform:"uppercase", textAlign:"center",
+                }}>Full Time</span>
+              </div>
             ) : over ? (
-              <span style={{fontFamily:"'Space Grotesk','Space Grotesk Fallback',sans-serif", fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", color:"rgba(255,255,255,0.28)", textTransform:"uppercase", display:"block", textAlign:"center"}}>Full Time</span>
+              <Countdown match={match} />
             ) : (
               <Countdown match={match} />
             )}
           </div>
 
           {/* Team B */}
-          <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+          <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", alignItems:"center", gap:"4px", overflow:"hidden" }}>
             <img src={match.flagB} alt={match.teamB}
-              className="h-7 w-11 rounded-sm object-cover shadow-md sm:h-8 sm:w-12"
               style={{
+                width:"clamp(32px,9vw,48px)", height:"clamp(20px,6vw,32px)",
+                borderRadius:"3px", objectFit:"cover",
                 border:"1px solid rgba(255,255,255,0.10)",
-                opacity: canReveal && showResult ? 0 : 1,
-                transition: "opacity 300ms ease",
+                flexShrink:0,
               }}
               onError={e => { (e.target as HTMLImageElement).style.display="none"; }} />
             <span style={{
-              fontFamily:"'Inter',sans-serif", fontSize:"11px", fontWeight:600,
+              fontFamily:"'Inter',sans-serif", fontSize:"clamp(9px,2.5vw,11px)", fontWeight:600,
               color: over && !live ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.88)",
               textAlign:"center", lineHeight:"1.2",
-              maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", display:"block",
+              width:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", display:"block",
             }}>{match.teamB}</span>
           </div>
         </div>
 
-        {/* Venue */}
-        <div style={{fontFamily:"'Inter',sans-serif", fontSize:"9px", color:"rgba(255,255,255,0.17)", fontWeight:400, textAlign:"center", marginTop:"6px", letterSpacing:"0.01em"}}>
+        {/* Venue — always perfectly centred */}
+        <div style={{
+          fontFamily:"'Inter',sans-serif", fontSize:"9px", color:"rgba(255,255,255,0.17)",
+          fontWeight:400, textAlign:"center", marginTop:"6px", letterSpacing:"0.01em",
+          width:"100%", display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+        }}>
           {match.venue}
         </div>
       </div>
 
       <style>{`
         @keyframes liveGlow {
-          0%,100%{box-shadow:inset 0 0 20px rgba(74,222,128,0.05)}
-          50%{box-shadow:inset 0 0 32px rgba(74,222,128,0.12)}
+          0%,100%{ box-shadow: inset 0 0 10px rgba(139,92,246,0.08) }
+          50%    { box-shadow: inset 0 0 18px rgba(139,92,246,0.16) }
         }
         @keyframes cardPulseCPU {
-          0%,100%{outline:2px solid rgba(74,222,128,0.15); outline-offset:0px;}
-          50%{outline:2px solid rgba(74,222,128,0.42); outline-offset:1px;}
+          0%,100%{ box-shadow: inset 0 0 10px rgba(139,92,246,0.08), inset 0 0 20px rgba(139,92,246,0.04); border-color: rgba(139,92,246,0.28); }
+          50%    { box-shadow: inset 0 0 18px rgba(139,92,246,0.18), inset 0 0 36px rgba(139,92,246,0.08); border-color: rgba(167,139,250,0.50); }
+        }
+        @keyframes livePulseRing {
+          0%   { transform: scale(1);   opacity: 0.8; }
+          60%  { transform: scale(2.6); opacity: 0; }
+          100% { transform: scale(2.6); opacity: 0; }
+        }
+        @keyframes liveDotGlow {
+          0%,100% { box-shadow: 0 0 5px rgba(167,139,250,0.8), 0 0 10px rgba(139,92,246,0.5); }
+          50%     { box-shadow: 0 0 10px rgba(167,139,250,1),  0 0 22px rgba(139,92,246,0.9); }
+        }
+        @keyframes liveLabelPulse {
+          0%,100% { opacity: 0.85; }
+          50%     { opacity: 1; }
         }
       `}</style>
     </div>
@@ -461,7 +501,7 @@ function MatchCard({ match, isToday }: { match: Match; isToday: boolean }) {
 }
 
 // ─── Day column ───────────────────────────────────────────────────
-function DayColumn({ dayGroup, todayBD }: { dayGroup: { date: string; matches: Match[] }; todayBD: string }) {
+function DayColumn({ dayGroup, todayBD, scoreMap }: { dayGroup: { date: string; matches: Match[] }; todayBD: string; scoreMap: Record<string, [number, number]> }) {
   const isToday = dayGroup.date === todayBD;
   const d = new Date(dayGroup.date + "T12:00:00+06:00");
   const weekday = d.toLocaleDateString("en-BD", { weekday:"long", timeZone:"Asia/Dhaka" });
@@ -472,9 +512,12 @@ function DayColumn({ dayGroup, todayBD }: { dayGroup: { date: string; matches: M
       {/* Day header */}
       <div className="rounded-lg px-3 py-2.5"
         style={{
-          background: isToday ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.035)",
-          border: `1px solid ${isToday ? "rgba(139,92,246,0.38)" : "rgba(255,255,255,0.07)"}`,
-          boxShadow: isToday ? "0 0 16px rgba(139,92,246,0.13)" : "none",
+          background: isToday ? "rgba(139,92,246,0.20)" : "rgba(255,255,255,0.035)",
+          border: `1px solid ${isToday ? "rgba(167,139,250,0.55)" : "rgba(255,255,255,0.07)"}`,
+          boxShadow: isToday
+            ? "0 0 20px rgba(139,92,246,0.35), 0 0 40px rgba(139,92,246,0.18), inset 0 0 12px rgba(167,139,250,0.08)"
+            : "none",
+          transition: "box-shadow 0.5s ease",
         }}>
         <div className="flex flex-col gap-0.5">
           <span style={{
@@ -496,7 +539,7 @@ function DayColumn({ dayGroup, todayBD }: { dayGroup: { date: string; matches: M
 
       {/* Match cards */}
       <div className="flex flex-col gap-2">
-        {dayGroup.matches.map(m => <MatchCard key={m.id} match={m} isToday={isToday} />)}
+        {dayGroup.matches.map(m => <MatchCard key={m.id} match={m} isToday={isToday} scoreMap={scoreMap} />)}
       </div>
     </div>
   );
@@ -514,7 +557,146 @@ export default function FifaSchedule() {
     return p;
   })();
 
-  const todayBD = bdNow().toISOString().slice(0,10);
+  // ── Live score fetching ──────────────────────────────────────────
+  // scoreMap: key = "TeamA|TeamB" (sorted), value = [scoreA, scoreB]
+  const [scoreMap, setScoreMap] = useState<Record<string, [number, number]>>({});
+
+  useEffect(() => {
+    // Normalize team names for fuzzy matching
+    const norm = (s: string) => s.toLowerCase()
+      .replace(/[^a-z0-9 ]/g, "")
+      .replace(/\b(and|&)\b/g, "and")
+      .trim();
+
+    const fetchScores = async () => {
+      try {
+        const map: Record<string, [number, number]> = {};
+
+        // ── Source 1: ESPN full schedule + live scoreboard ────────────────
+        const espnFetch = async () => {
+          const [schedRes, liveRes] = await Promise.allSettled([
+            fetch(
+              "https://site.api.espn.com/apis/site/v2/sports/soccer/FIFA.WORLD/scoreboard?limit=200&dates=20260601-20261220",
+              { signal: AbortSignal.timeout(8000) }
+            ),
+            fetch(
+              "https://site.api.espn.com/apis/site/v2/sports/soccer/FIFA.WORLD/scoreboard",
+              { signal: AbortSignal.timeout(8000) }
+            ),
+          ]);
+
+          const allEvents: unknown[] = [];
+          if (schedRes.status === "fulfilled" && schedRes.value.ok) {
+            const d = await schedRes.value.json();
+            allEvents.push(...(d?.events ?? []));
+          }
+          if (liveRes.status === "fulfilled" && liveRes.value.ok) {
+            const d = await liveRes.value.json();
+            const existingIds = new Set(allEvents.map((e: unknown) => (e as Record<string, unknown>).id));
+            for (const ev of (d?.events ?? [])) {
+              if (!existingIds.has((ev as Record<string, unknown>).id)) allEvents.push(ev);
+            }
+          }
+          return allEvents;
+        };
+
+        // ── Source 2: TheSportsDB free API for FIFA WC 2026 ──────────────
+        const sportsdbFetch = async (): Promise<Array<{ teamA: string; teamB: string; scoreA: number; scoreB: number }>> => {
+          // TheSportsDB: league 4480 = FIFA World Cup
+          const res = await fetch(
+            "https://www.thesportsdb.com/api/v1/json/3/eventsseason.php?id=4480&s=2026",
+            { signal: AbortSignal.timeout(8000) }
+          );
+          if (!res.ok) return [];
+          const data = await res.json();
+          const results: Array<{ teamA: string; teamB: string; scoreA: number; scoreB: number }> = [];
+          for (const ev of (data?.events ?? [])) {
+            const scoreA = parseInt(ev.intHomeScore ?? "-1", 10);
+            const scoreB = parseInt(ev.intAwayScore ?? "-1", 10);
+            if (scoreA < 0 || scoreB < 0) continue;
+            results.push({
+              teamA: String(ev.strHomeTeam ?? ""),
+              teamB: String(ev.strAwayTeam ?? ""),
+              scoreA,
+              scoreB,
+            });
+          }
+          return results;
+        };
+
+        // ── Parallel fetch all sources ────────────────────────────────────
+        const [espnEvents, sportsdbResults] = await Promise.all([
+          espnFetch().catch(() => []),
+          sportsdbFetch().catch(() => []),
+        ]);
+
+        // ── Process ESPN events ───────────────────────────────────────────
+        for (const ev of espnEvents) {
+          const e = ev as Record<string, unknown>;
+          const comps = (e.competitions as Record<string, unknown>[])?.[0];
+          if (!comps) continue;
+          const status = (comps.status as Record<string, unknown>)?.type as Record<string, unknown>;
+          const isCompleted = status?.completed === true;
+          const isInProgress = status?.state === "in" || String(status?.description ?? "").toLowerCase().includes("progress");
+          if (!isCompleted && !isInProgress) continue;
+          const competitors = comps.competitors as Record<string, unknown>[];
+          if (!competitors || competitors.length < 2) continue;
+
+          const home = competitors.find((c: Record<string, unknown>) => c.homeAway === "home");
+          const away = competitors.find((c: Record<string, unknown>) => c.homeAway === "away");
+          if (!home || !away) continue;
+
+          const homeTeam = norm((home.team as Record<string, unknown>)?.displayName as string ?? "");
+          const awayTeam = norm((away.team as Record<string, unknown>)?.displayName as string ?? "");
+          const homeScore = parseInt(String(home.score ?? "-1"), 10);
+          const awayScore = parseInt(String(away.score ?? "-1"), 10);
+          if (homeScore < 0 || awayScore < 0) continue;
+
+          for (const m of MATCHES) {
+            if (map[`${m.id}`]) continue; // already have score for this match
+            const mA = norm(m.teamA), mB = norm(m.teamB);
+            if (
+              (homeTeam.includes(mA) || mA.includes(homeTeam)) &&
+              (awayTeam.includes(mB) || mB.includes(awayTeam))
+            ) { map[`${m.id}`] = [homeScore, awayScore]; break; }
+            if (
+              (homeTeam.includes(mB) || mB.includes(homeTeam)) &&
+              (awayTeam.includes(mA) || mA.includes(awayTeam))
+            ) { map[`${m.id}`] = [awayScore, homeScore]; break; }
+          }
+        }
+
+        // ── Fill gaps using TheSportsDB (crosscheck / fallback) ───────────
+        for (const r of sportsdbResults) {
+          const rA = norm(r.teamA), rB = norm(r.teamB);
+          for (const m of MATCHES) {
+            if (map[`${m.id}`]) continue; // ESPN already has it
+            const mA = norm(m.teamA), mB = norm(m.teamB);
+            if (
+              (rA.includes(mA) || mA.includes(rA)) &&
+              (rB.includes(mB) || mB.includes(rB))
+            ) { map[`${m.id}`] = [r.scoreA, r.scoreB]; break; }
+            if (
+              (rA.includes(mB) || mB.includes(rA)) &&
+              (rB.includes(mA) || mA.includes(rB))
+            ) { map[`${m.id}`] = [r.scoreB, r.scoreA]; break; }
+          }
+        }
+
+        setScoreMap(map);
+      } catch {
+        // Silently ignore fetch errors — show nothing instead of crashing
+      }
+    };
+
+    fetchScores();
+    // Re-fetch every 30 seconds for live match score updates
+    const id = setInterval(fetchScores, 30 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Reactive today — single 30s interval drives both live-match ticks and current-day date refresh
+  const [todayBD, setTodayBD] = useState(() => bdTodayStr());
   const [page, setPage] = useState(() => todayPageIndex(pages, colsPerPage));
   const [dir, setDir] = useState<1 | -1>(1);
   const [animKey, setAnimKey] = useState(0);
@@ -530,8 +712,30 @@ export default function FifaSchedule() {
   }, [colsPerPage]);
 
   useEffect(() => {
-    const id = setInterval(() => tick(t => t + 1), 30_000);
-    return () => clearInterval(id);
+    // Refresh every 30s for live-match ticks
+    const id = setInterval(() => {
+      tick(t => t + 1);
+      setTodayBD(bdTodayStr()); // always correct BD date via Intl API
+    }, 30_000);
+
+    // Also schedule an exact flip at the next BD midnight so the glow switches immediately
+    const scheduleNextMidnight = () => {
+      const now = new Date();
+      const bdMidnight = new Date(now.toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" }) + "T00:00:00+06:00");
+      const nextMidnight = new Date(bdMidnight.getTime() + 24 * 3600_000);
+      const msUntilMidnight = nextMidnight.getTime() - now.getTime();
+      return setTimeout(() => {
+        setTodayBD(bdTodayStr());
+        tick(t => t + 1);
+        scheduleNextMidnight(); // reschedule for the next midnight
+      }, msUntilMidnight);
+    };
+    const midnightTimer = scheduleNextMidnight();
+
+    return () => {
+      clearInterval(id);
+      clearTimeout(midnightTimer);
+    };
   }, []);
 
   const navigate = (delta: 1 | -1) => {
@@ -587,20 +791,11 @@ export default function FifaSchedule() {
         }}>Based on Bangladesh Standard Time</p>
       </div>
 
-      {/* Page range label — hidden on mobile */}
-      <div className="mb-3 hidden items-center justify-between sm:flex">
-        <div />
-        <div style={{fontFamily:"'Inter',sans-serif", fontSize:"11px", color:"rgba(255,255,255,0.3)", fontWeight:500}}>
-          <span>{fmtD(pageStart)}</span>
-          {pageStart !== pageEnd && <><span className="mx-1" style={{color:"rgba(255,255,255,0.15)"}}>–</span><span>{fmtD(pageEnd)}</span></>}
-        </div>
-      </div>
-
-      {/* Navigation + content */}
-      <div className="flex items-stretch gap-2 sm:gap-3">
-        {/* Prev */}
+      {/* Navigation + content — arrows absolute so NO overflow:hidden ancestor kills the card glows */}
+      <div style={{ position:"relative", paddingLeft:"44px", paddingRight:"44px" }}>
+        {/* Prev arrow */}
         <button onClick={() => navigate(-1)} disabled={page === 0}
-          className="group flex w-9 shrink-0 flex-col items-center justify-center rounded-xl transition-all duration-200 active:scale-95"
+          className="group absolute left-0 top-0 bottom-0 z-10 flex w-9 flex-col items-center justify-center rounded-xl transition-all duration-200 active:scale-95"
           style={{
             background: page === 0 ? "rgba(255,255,255,0.02)" : "rgba(139,92,246,0.12)",
             border: "none",
@@ -613,23 +808,26 @@ export default function FifaSchedule() {
           </span>
         </button>
 
-        {/* Days grid */}
-        <div ref={containerRef} className="min-w-0 flex-1 overflow-hidden">
-          <div key={animKey} className="grid gap-3"
+        {/* Days grid — only the animated slide div clips, with vertical padding so top/bottom glow escapes */}
+        <div ref={containerRef} style={{ overflow:"visible" }}>
+          <div key={animKey}
             style={{
+              display:"grid",
+              gap:"12px",
               gridTemplateColumns: `repeat(${current.length},1fr)`,
               animation: `slideIn${dir > 0 ? "Right" : "Left"} 320ms cubic-bezier(.4,0,.2,1)`,
               willChange: "transform, opacity",
+              overflow:"visible",
             }}>
             {current.map(dayGroup => (
-              <DayColumn key={dayGroup.date} dayGroup={dayGroup} todayBD={todayBD} />
+              <DayColumn key={dayGroup.date} dayGroup={dayGroup} todayBD={todayBD} scoreMap={scoreMap} />
             ))}
           </div>
         </div>
 
-        {/* Next */}
+        {/* Next arrow */}
         <button onClick={() => navigate(1)} disabled={page >= pages.length - 1}
-          className="group flex w-9 shrink-0 flex-col items-center justify-center rounded-xl transition-all duration-200 active:scale-95"
+          className="group absolute right-0 top-0 bottom-0 z-10 flex w-9 flex-col items-center justify-center rounded-xl transition-all duration-200 active:scale-95"
           style={{
             background: page >= pages.length-1 ? "rgba(255,255,255,0.02)" : "rgba(139,92,246,0.12)",
             border: "none",
@@ -648,11 +846,11 @@ export default function FifaSchedule() {
 
       <style>{`
         @keyframes slideInRight {
-          from { opacity:0; transform:translateX(32px); }
+          from { opacity:0; transform:translateX(18px); }
           to   { opacity:1; transform:translateX(0); }
         }
         @keyframes slideInLeft {
-          from { opacity:0; transform:translateX(-32px); }
+          from { opacity:0; transform:translateX(-18px); }
           to   { opacity:1; transform:translateX(0); }
         }
       `}</style>
