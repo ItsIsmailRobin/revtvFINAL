@@ -15,6 +15,14 @@ interface PlayerProps {
   channel: Channel | null;
   /** Called when a stream fails fatally — parent uses this to skip to next channel */
   onStreamError?: (channel: Channel) => void;
+  /** Channel IDs that were just chosen by an explicit tap on the channel
+   *  list (as opposed to the page loading, restoring the last channel, or
+   *  an automatic skip-on-error). A genuine tap is a real user gesture —
+   *  Player consumes (deletes) the id once it reads it, and uses it to
+   *  skip the muted-first / tap-to-unmute dance and autoplay unmuted
+   *  directly. Shared mutable Set so it can be updated without forcing an
+   *  extra render on the parent. */
+  manualChannelIds?: Set<string>;
 }
 
 interface GestureState {
@@ -39,6 +47,7 @@ function detectIsMobile(): boolean {
 export default function Player({
   channel,
   onStreamError,
+  manualChannelIds,
 }: PlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -60,6 +69,9 @@ export default function Player({
   // Tracks whether the user deliberately paused — prevents auto-resume from
   // firing when the user hits the pause button intentionally.
   const userPausedRef = useRef(false);
+  // React state mirror of userPausedRef — needed so the paused overlay
+  // condition re-renders when the user taps pause/play.
+  const [userPaused, setUserPaused] = useState(false);
   // Tracks whether the current channel has started playing at least once
   // since being switched to — used to suppress the pause/play glass
   // overlay during the brief loading window right after a channel switch.
@@ -182,11 +194,28 @@ export default function Player({
   // From then on (refresh, Ctrl+R, hard reload, channel change, tab reopen)
   // the player always autoplays with sound. Overlay never shown again.
   const [needsUnmute, setNeedsUnmute] = useState(false);
+  // True while the tap-to-unmute overlay is playing its fade-out exit animation.
+  // The overlay stays mounted during the animation so it can fade smoothly,
+  // then is fully removed once the animation completes.
+  const [unmuteFading, setUnmuteFading] = useState(false);
+  // When switching channels (isManualSelect), the overlay should vanish
+  // instantly (no lingering fade) — this ref tracks that case.
+  const unmuteFadeTimerRef = useRef<number | null>(null);
   // True while the autoplay-muted phase is active (overlay shown OR about
   // to be shown). Set synchronously by the HLS effect, cleared by doUnmute
   // or the grant-exists unmute path. The sync-volume useEffect reads this
   // ref to avoid overriding v.muted=true during the muted-autoplay window.
   const autoplayMutedRef = useRef(false);
+  // Timestamp of the most recent "grant exists -> auto-unmute" attempt
+  // (see onMutedPlayStarted below). Some browsers will silently force-pause
+  // playback if JS unmutes a video on a page load that wasn't recognized as
+  // gesture-driven (a plain hard refresh / Ctrl+R / pull-to-refresh, as
+  // opposed to a click-driven navigation like the logo tap, which browsers
+  // do treat as gesture-qualified). onPause uses this timestamp to detect
+  // that exact case and recover gracefully — falling back to muted autoplay
+  // + the tap-to-unmute overlay — instead of leaving the player stuck
+  // paused and silent.
+  const recentAutoUnmuteRef = useRef(0);
   const statusTimerRef = useRef<number | null>(null);
 
   const showStatus = useCallback((msg: string) => {
@@ -199,6 +228,23 @@ export default function Player({
   }, []);
 
   const presentationFullscreen = isFullscreen || fsOverride;
+
+  // Dismiss the tap-to-unmute overlay: quick fade-out then fully remove.
+  // Pass instant=true to skip the animation (e.g. on channel switch).
+  const dismissUnmuteOverlay = useCallback((instant = false) => {
+    if (unmuteFadeTimerRef.current) window.clearTimeout(unmuteFadeTimerRef.current);
+    if (instant) {
+      setUnmuteFading(false);
+      setNeedsUnmute(false);
+      return;
+    }
+    // Start fade-out animation, then remove after it completes (180ms)
+    setUnmuteFading(true);
+    unmuteFadeTimerRef.current = window.setTimeout(() => {
+      setNeedsUnmute(false);
+      setUnmuteFading(false);
+    }, 180);
+  }, []);
 
   // Human-readable aspect label
   const aspectLabel = useCallback(
@@ -254,6 +300,8 @@ export default function Player({
     setError(null);
     setPlaying(false);
     userPausedRef.current = false;
+    setUserPaused(false);
+    recentAutoUnmuteRef.current = 0;
     lastLiveSnapRef.current = 0;
     // Suppress the pause overlay until the new channel has actually
     // started playing at least once — prevents the glass play button
@@ -266,6 +314,22 @@ export default function Player({
 
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
       (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
+
+    // Was this channel chosen by an explicit tap on the channel list (as
+    // opposed to the page just loading, restoring the last channel, or an
+    // automatic skip-on-error)? If so, we have a fresh, genuine user
+    // gesture to work with — skip the muted-first dance and the
+    // tap-to-unmute overlay entirely and go straight to unmuted autoplay,
+    // on every platform (PC, Android, iOS).
+    const isManualSelect = !!(channel && manualChannelIds?.has(channel.id));
+    if (isManualSelect && channel) manualChannelIds!.delete(channel.id);
+    // On manual channel switch, dismiss any lingering unmute overlay instantly
+    // (no fade — the switch itself is already a fast visual transition).
+    if (isManualSelect) {
+      if (unmuteFadeTimerRef.current) window.clearTimeout(unmuteFadeTimerRef.current);
+      setUnmuteFading(false);
+      setNeedsUnmute(false);
+    }
 
     // iOS (incl. iPadOS "desktop" UA on Safari) has strict autoplay-with-sound
     // privacy rules — attempting the "play unmuted, fall back to muted, then
@@ -366,7 +430,34 @@ export default function Player({
     };
     const onPause    = () => {
       setPlaying(false);
-      if (!userPausedRef.current) scheduleRecover(isIOS ? 1800 : isMobile ? 1500 : 700);
+      if (userPausedRef.current) return;
+
+      // Did the browser just force-pause this video right after we
+      // auto-unmuted it (the "grant exists" path in onMutedPlayStarted)?
+      // This happens on page loads the browser doesn't treat as
+      // gesture-qualified — typically a plain hard refresh / Ctrl+R /
+      // pull-to-refresh — as opposed to a click-driven navigation like the
+      // logo tap, which IS treated as gesture-qualified and never gets
+      // punished this way. Recover by falling back to muted autoplay and
+      // surfacing the tap-to-unmute overlay, instead of leaving the
+      // player stuck paused and silent.
+      const v = videoRef.current;
+      const sinceUnmute = recentAutoUnmuteRef.current ? Date.now() - recentAutoUnmuteRef.current : Infinity;
+      if (v && !v.muted && sinceUnmute < 2500) {
+        recentAutoUnmuteRef.current = 0;
+        autoplayMutedRef.current = true; // re-enter the muted-autoplay window
+        v.muted = true;
+        v.play().then(() => {
+          setNeedsUnmute(true); // one tap restores sound, same as first-visit overlay
+          setUnmuteFading(false);
+        }).catch(() => {
+          autoplayMutedRef.current = false;
+          scheduleRecover(isIOS ? 1800 : isMobile ? 1500 : 700);
+        });
+        return;
+      }
+
+      scheduleRecover(isIOS ? 1800 : isMobile ? 1500 : 700);
     };
     const onStalled  = () => { scheduleRecover(isIOS ? 2000 : isMobile ? 2000 : 1000); };   // buffer empty — recover
     const onEnded    = () => {
@@ -436,18 +527,23 @@ export default function Player({
     // Works identically on PC, Android, and iOS.
     //
     // HOW IT WORKS:
-    //   1. Check localStorage for "revtv:gestureGranted".
+    //   0. MANUAL CHANNEL TAP (isManualSelect=true): the user just tapped this
+    //      channel in the list — a fresh, genuine gesture. Skip everything
+    //      below and autoplay unmuted directly. No overlay, ever.
+    //   1. Otherwise, check localStorage for "revtv:gestureGranted".
     //   2. FIRST VISIT (no grant): autoplay muted → show the glass tap-to-unmute
     //      overlay. User taps → unmute + store grant forever. Done.
-    //   3. ANY SUBSEQUENT LOAD (grant exists — refresh, Ctrl+R, hard reload,
-    //      channel change, logo tap, tab reopen): autoplay muted → immediately
-    //      unmute in the .then() callback. No overlay shown. Always with sound.
+    //   3. ANY SUBSEQUENT AUTOMATIC LOAD (grant exists — refresh, Ctrl+R, hard
+    //      reload, logo tap, tab reopen): autoplay muted → immediately unmute
+    //      in the .then() callback. No overlay shown. Always with sound.
     //
-    // WHY MUTED FIRST:
+    // WHY MUTED FIRST (for path 2/3, not the manual-tap path):
     //   Browsers always allow muted autoplay. Once the video is playing (even
     //   muted), unmuting in the same .then() does NOT count as a new autoplay
     //   request — it is treated as a volume change on an already-playing element.
-    //   This works on Chrome, Firefox, Edge, Chrome Android, Safari (with grant).
+    //   This works on Chrome, Firefox, Edge, Chrome Android, Safari (with grant) —
+    //   except that some browsers will still force-pause it on a page load they
+    //   don't consider gesture-qualified (see onPause's recovery for that case).
     //
     // WHY A GRANT IS NEEDED ON FIRST VISIT:
     //   On the very first page load (ever, or in a fresh private session), there
@@ -467,25 +563,79 @@ export default function Player({
     let iosMetaCleanup: (() => void) | null = null;
 
     const onMutedPlayStarted = () => {
-      if (!hasGrant) {
-        // First-ever visit: stay muted, show tap-to-unmute overlay.
+      // On iOS, check if this page load came from a trusted logo-tap gesture.
+      // The logo tap sets "revtv:logoTapNav" in sessionStorage just before
+      // navigating. We consume (delete) the flag immediately so it only
+      // applies once — for this one load only.
+      let iosLogoTapNav = false;
+      if (isIOS) {
+        try {
+          iosLogoTapNav = sessionStorage.getItem("revtv:logoTapNav") === "1";
+          if (iosLogoTapNav) sessionStorage.removeItem("revtv:logoTapNav");
+        } catch {}
+      }
+
+      if (!hasGrant || (isIOS && !iosLogoTapNav)) {
+        // First-ever visit OR iOS without a trusted logo-tap gesture
+        // (iOS requires a real tap to unmute on every page load —
+        // it does not allow the auto-unmute trick unless this load
+        // was triggered by a direct user tap like the logo):
+        // stay muted, show tap-to-unmute overlay.
         // autoplayMutedRef stays true — cleared synchronously by doUnmute().
         setNeedsUnmute(true);
+        setUnmuteFading(false);
       } else {
         // Grant exists: unmute immediately now that we have a playing element.
         // Clear the flag BEFORE writing v.muted so the sync-volume effect
         // does not interfere (it reads the ref synchronously).
         autoplayMutedRef.current = false;
         setNeedsUnmute(false);
+        setUnmuteFading(false);
         const vid = videoRef.current;
         if (vid) {
+          const willUnmute = !mutedRef.current;
           vid.muted  = mutedRef.current;
           vid.volume = volumeRef.current || 1;
+          if (willUnmute) recentAutoUnmuteRef.current = Date.now();
         }
       }
     };
 
-    const attemptAutoplay = (v: HTMLVideoElement) => {
+    const attemptAutoplay = (v: HTMLVideoElement, direct: boolean) => {
+      if (direct) {
+        // Fresh, genuine user gesture (the user just tapped this channel
+        // in the list) — browsers allow unmuted autoplay directly off a
+        // gesture like this, so skip the muted-first dance and the
+        // tap-to-unmute overlay entirely. Go straight to sound, respecting
+        // whatever mute/volume the user already has set (defaults to
+        // unmuted at 100% on a fresh visit).
+        autoplayMutedRef.current = false;
+        setNeedsUnmute(false);
+        v.muted = mutedRef.current;
+        v.volume = volumeRef.current || 1;
+        if (!mutedRef.current) recentAutoUnmuteRef.current = Date.now();
+        const directPromise = v.play();
+        if (!directPromise) {
+          if (!mutedRef.current) { try { window.localStorage.setItem("revtv:gestureGranted", "1"); } catch {} }
+          return;
+        }
+        directPromise.then(() => {
+          // This genuinely played with sound off a real tap — persist the
+          // grant so future reloads skip straight to "grant exists" mode
+          // too, even if the user's very first interaction ever was a
+          // channel tap rather than the tap-to-unmute overlay.
+          if (!mutedRef.current) { try { window.localStorage.setItem("revtv:gestureGranted", "1"); } catch {} }
+        }).catch(() => {
+          // Very rare safety net (e.g. an unusually strict mobile browser
+          // that doesn't treat this as gesture-qualified) — fall back to
+          // the standard muted-first dance below.
+          const vid = videoRef.current;
+          if (!vid || userPausedRef.current) return;
+          attemptAutoplay(vid, false);
+        });
+        return;
+      }
+
       // Signal that we are in the autoplay-muted window — blocks the
       // sync-volume useEffect from overriding v.muted during this phase.
       autoplayMutedRef.current = true;
@@ -529,16 +679,20 @@ export default function Player({
         // latency for a buffer big enough to absorb network hiccups.
         lowLatencyMode: !isMobile,
 
+        // Prefetch the first fragment before playback starts — this cuts
+        // the initial "loading" window noticeably on all platforms since
+        // the player starts downloading media alongside the manifest parse.
+        startFragPrefetch: true,
+
         // ── Buffer sizing ─────────────────────────────────────────────
         // Mobile networks (cellular / flaky WiFi) need a much deeper
         // cushion than desktop to avoid the "play 2s → rebuffer" loop.
-        // 30s/20MB ahead-buffer absorbs multi-second jitter without
-        // re-entering the loading state. The extra CPU/memory cost is
-        // worth it versus a player that's unwatchable.
-        backBufferLength:    isMobile ? 10 :  8,  // how much to keep behind currentTime
-        maxBufferLength:     isMobile ? 30 : 10,  // target ahead-buffer in seconds
-        maxMaxBufferLength:  isMobile ? 60 : 16,  // hard cap
-        maxBufferSize:       isMobile ?  20_000_000 : 12_000_000, // 20 MB / 12 MB
+        // Generous ahead-buffer absorbs multi-second jitter without
+        // re-entering the loading state.
+        backBufferLength:    isMobile ? 10 :  8,   // keep behind currentTime
+        maxBufferLength:     isMobile ? 40 : 20,   // target ahead-buffer (raised for smoother play)
+        maxMaxBufferLength:  isMobile ? 90 : 30,   // hard cap (raised to allow deeper fill)
+        maxBufferSize:       isMobile ?  30_000_000 : 20_000_000, // 30 MB / 20 MB
         maxBufferHole:       isMobile ? 1.0 : 0.5, // tolerate larger gaps before "stalled"
 
         // ── Quality / ABR ─────────────────────────────────────────────
@@ -549,63 +703,54 @@ export default function Player({
         // screen size.
         startLevel:          -1,                 // auto on all platforms
         capLevelToPlayerSize: true,               // never load resolution > screen size
-        abrEwmaDefaultEstimate: isMobile ? 250_000 : 800_000, // initial BW guess
+        // Higher initial BW estimate = picks a better quality level on
+        // first play instead of starting at the lowest rendition.
+        abrEwmaDefaultEstimate: isMobile ? 800_000 : 2_500_000,
         // Less twitchy ABR on mobile — fewer quality switches means
         // fewer brief re-buffer blips while switching renditions.
-        // But react QUICKLY to a bandwidth drop (fast EWMA) so we don't
-        // stay stuck on a bitrate the connection can't sustain — that's
-        // what causes the long "stuck buffering" stalls. Be slower to
-        // upgrade back up (slow EWMA on the up side) to avoid yo-yo'ing.
-        abrBandWidthFactor:   isMobile ? 0.8 : 0.85,
-        abrBandWidthUpFactor: isMobile ? 0.6 : 0.60,
+        // Be conservative going up, quick going down to avoid sustained stalls.
+        abrBandWidthFactor:   isMobile ? 0.85 : 0.92,
+        abrBandWidthUpFactor: isMobile ? 0.65 : 0.70,
         abrEwmaFastLive:  isMobile ? 2.0 : 3.0,
         abrEwmaSlowLive:  isMobile ? 9.0 : 9.0,
 
         // ── Stall / nudge ─────────────────────────────────────────────
-        // maxStarvationDelay: how long to wait with a buffer before
-        // giving up and forcing a lower quality / stalling. A larger
-        // value on mobile means HLS waits longer for the buffer to
-        // refill instead of repeatedly bailing out.
-        maxStarvationDelay:  isMobile ? 8 : 2,
-        maxLoadingDelay:     isMobile ? 8 : 3,
-        // Internal HLS nudge: tiny seek when buffer gap detected.
-        // A smaller nudge on mobile = smaller, less noticeable
-        // micro-jump when bridging a gap (the "stuck for 1-2s then
-        // resumes" feeling is often this nudge firing repeatedly).
-        nudgeOffset:         isMobile ? 0.1 : 0.2,
-        nudgeMaxRetry:       isMobile ? 16 : 10,
-        highBufferWatchdogPeriod: isMobile ? 4 : 3, // check for buffer issues every Ns
+        // Larger starvation delay = wait longer for buffer to refill
+        // before bailing (reduces "loading flash" on slow connections).
+        maxStarvationDelay:  isMobile ? 10 : 4,
+        maxLoadingDelay:     isMobile ? 10 : 4,
+        // Smaller nudge = less noticeable micro-jump when bridging a gap.
+        nudgeOffset:         isMobile ? 0.08 : 0.12,
+        nudgeMaxRetry:       isMobile ? 20 : 12,
+        highBufferWatchdogPeriod: isMobile ? 4 : 3,
 
         // ── Fragment loading ──────────────────────────────────────────
-        // More retries + shorter delays = faster recovery from hiccups
-        fragLoadingMaxRetry:     6,
-        manifestLoadingMaxRetry: 5,
-        levelLoadingMaxRetry:    5,
-        fragLoadingRetryDelay:   400,
-        manifestLoadingRetryDelay: 400,
-        levelLoadingRetryDelay:  400,
-        fragLoadingMaxRetryTimeout: 4000,
+        // More retries + shorter delays = faster recovery from hiccups.
+        fragLoadingMaxRetry:     8,
+        manifestLoadingMaxRetry: 6,
+        levelLoadingMaxRetry:    6,
+        fragLoadingRetryDelay:   300,
+        manifestLoadingRetryDelay: 300,
+        levelLoadingRetryDelay:  300,
+        fragLoadingMaxRetryTimeout: 3000,
 
         // ── Live sync ─────────────────────────────────────────────────
-        // The buffer cushion above (30s) is what absorbs jitter — we
-        // don't need to sit unusually far from the live edge too, which
-        // can itself cause a long initial "catching up" buffering phase
-        // on mobile. A modest +1 vs desktop is enough.
+        // Stay close enough to live edge without starving the buffer.
+        // 2 segments on desktop = minimal latency with enough cushion.
+        // 3 segments on mobile = extra buffer absorbs network jitter.
         liveSyncDurationCount:       isMobile ? 3 : 2,
-        liveMaxLatencyDurationCount: isMobile ? 8 : 4,
-        // Drift tolerance before HLS snaps to live edge internally
+        liveMaxLatencyDurationCount: isMobile ? 10 : 6,
         maxFragLookUpTolerance: isMobile ? 0.5 : 0.2,
-        // Don't let hls.js force a live-edge seek the moment latency
-        // creeps up — let the buffer cushion absorb it instead.
         liveDurationInfinity: false,
 
+        // Progressive loading: start playing as soon as first fragments arrive.
         progressive: true,
       });
       hlsRef.current = hls;
       hls.loadSource(channel.url);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        attemptAutoplay(video);
+        attemptAutoplay(video, isManualSelect);
       });
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) {
@@ -654,29 +799,40 @@ export default function Player({
       // Native HLS (Safari/iOS)
       //
       // iOS Safari behaviour:
-      //   • Muted autoplay is always allowed.
-      //   • Unmuted autoplay requires a prior user gesture (stored as
-      //     revtv:gestureGranted). Without it iOS silently ignores
-      //     v.muted = false and the video stays muted with no overlay.
+      //   • Muted autoplay is always allowed (even without a gesture).
+      //   • Unmuted autoplay requires a prior user gesture — stored as
+      //     revtv:gestureGranted in localStorage (survives Ctrl+R / reload).
       //
-      // Strategy — identical to Android/PC path via attemptAutoplay:
-      //   FIRST VISIT  : set src, load(), then on loadedmetadata call
-      //                  attemptAutoplay() → muted play → overlay shows.
-      //                  User tap → doUnmute() plays with sound + stores grant.
-      //   RETURN VISIT : same flow but onMutedPlayStarted() unmutes
-      //                  immediately in .then() since grant exists.
+      // Strategy — same flow as Android/PC via attemptAutoplay:
+      //   MANUAL CHANNEL TAP : fresh gesture → unmuted directly, no overlay.
+      //   FIRST VISIT        : load muted → overlay → user tap → sound + grant stored.
+      //   ANY OTHER RELOAD   : grant exists → load muted → auto-unmute in .then().
+      //   (Ctrl+R, logo tap, swipe-refresh — all identical.)
       //
-      // We must wait for loadedmetadata before play() — calling play()
-      // right after src assignment on iOS returns a promise that resolves
-      // before media is ready and the subsequent muted state gets lost.
+      // Why wait for loadedmetadata:
+      //   Calling play() immediately after .src= on iOS can return a promise
+      //   that resolves before the media engine is ready, causing muted state
+      //   to be silently dropped. loadedmetadata guarantees the element is
+      //   ready to accept play() reliably.
+      //   Fallback: if loadedmetadata hasn't fired in 4 s, call play() anyway
+      //   (some streams are slow to deliver initial metadata on iOS).
       video.src = channel.url;
       video.load();
+      let iosMetaFired = false;
       const onMeta = () => {
+        if (iosMetaFired) return;
+        iosMetaFired = true;
         video.removeEventListener("loadedmetadata", onMeta);
         iosMetaCleanup = null;
-        attemptAutoplay(video);
+        attemptAutoplay(video, isManualSelect);
       };
-      iosMetaCleanup = () => video.removeEventListener("loadedmetadata", onMeta);
+      const iosMetaFallback = window.setTimeout(() => {
+        if (!iosMetaFired) onMeta();
+      }, 4000);
+      iosMetaCleanup = () => {
+        video.removeEventListener("loadedmetadata", onMeta);
+        window.clearTimeout(iosMetaFallback);
+      };
       video.addEventListener("loadedmetadata", onMeta);
     } else {
       window.clearTimeout(skipTimer);
@@ -960,6 +1116,7 @@ export default function Player({
     if (!v) return;
     if (v.paused) {
       userPausedRef.current = false;
+      setUserPaused(false);
       // On resume: jump to live edge so viewer gets the latest stream
       syncToLiveEdge();
       v.play().catch(() => {});
@@ -968,6 +1125,7 @@ export default function Player({
       // synchronously inside pause() on some Android browsers, so the
       // ref must already be true when onPause checks it.
       userPausedRef.current = true;
+      setUserPaused(true);
       v.pause();
     }
     armHide();
@@ -987,7 +1145,7 @@ export default function Player({
     setMuted(newMuted);
     // Also hide the overlay immediately if user taps mute while it's showing
     // (shouldn't normally happen, but belt-and-suspenders)
-    if (!newMuted) setNeedsUnmute(false);
+    if (!newMuted) dismissUnmuteOverlay(true);
     armHide();
   }, [armHide]);
 
@@ -1353,11 +1511,12 @@ export default function Player({
   }, [channel, togglePlay, toggleMute, toggleFullscreen]);
 
   // Tap-to-unmute: called when user taps the glass overlay (ALL platforms).
-  // Syncs DOM immediately, stores grant, hides overlay.
+  // Syncs DOM immediately, stores grant, triggers fade-out animation on overlay.
   const doUnmute = useCallback(() => {
     // Clear the autoplay-muted guard BEFORE writing v.muted so the
     // sync-volume effect (if it fires) does not immediately re-mute.
     autoplayMutedRef.current = false;
+    recentAutoUnmuteRef.current = 0;
     const v = videoRef.current;
     if (v) {
       v.muted = false;
@@ -1366,9 +1525,36 @@ export default function Player({
     }
     mutedRef.current = false;
     setMuted(false);
-    setNeedsUnmute(false);
+    // Fade out the overlay quickly (180ms) then remove it from DOM
+    dismissUnmuteOverlay(false);
     try { window.localStorage.setItem("revtv:gestureGranted", "1"); } catch {}
-  }, []);
+
+    // This tap is the very first genuine, trusted click the browser has
+    // seen on this site — the only way to satisfy a browser's "navigated
+    // by a user gesture" autoplay exception, since a script can never fake
+    // a real click. Immediately follow it with ONE same-URL navigation,
+    // exactly like a logo tap. This gives the browser a real "played with
+    // sound right after a gesture-driven navigation" data point for this
+    // origin, which is what lets plain reloads (Ctrl+R, the reload button,
+    // swipe-to-refresh) start autoplaying with sound directly afterwards —
+    // same as a manual logo tap always could. Runs once ever per browser.
+    //
+    // SKIPPED on iOS: iOS Safari's autoplay rules work differently —
+    // the primedOnce navigation causes the page to reload and then
+    // immediately show "Tap to Unmute" again (glitchy loop). On iOS we
+    // simply store the grant and let the user tap to unmute on each hard
+    // reload (iOS always requires a gesture for unmuted autoplay anyway).
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
+    if (!isIOS) {
+      try {
+        if (window.localStorage.getItem("revtv:primedOnce") !== "1") {
+          window.localStorage.setItem("revtv:primedOnce", "1");
+          window.location.href = window.location.origin + window.location.pathname;
+        }
+      } catch {}
+    }
+  }, [dismissUnmuteOverlay]);
 
   const onVideoClick = (e: ReactMouseEvent) => {
     if (isSwiping.current) return;
@@ -1401,7 +1587,12 @@ export default function Player({
         "mx-auto rounded-2xl border border-white/10 aspect-video max-h-[80vh] shadow-2xl shadow-violet-900/10"
   );
   const containerStyle: CSSProperties = {
-    background: "linear-gradient(160deg,#0d0520 0%,#060112 40%,#09021a 70%,#050010 100%)",
+    // In fullscreen on Android, use pure black so the area behind the
+    // video letterbox/pillarbox borders is clean black, not purple gradient.
+    // On iOS and inline (non-fullscreen), keep the branded dark purple gradient.
+    background: presentationFullscreen
+      ? "#000000"
+      : "linear-gradient(160deg,#0d0520 0%,#060112 40%,#09021a 70%,#050010 100%)",
     touchAction: presentationFullscreen ? "none" : "manipulation",
   };
 
@@ -1494,7 +1685,7 @@ export default function Player({
           with an iOS-style frosted play button that scales/fades in
           smoothly. Clicking anywhere resumes playback. Hidden while
           loading/transitioning so it doesn't fight those overlays. */}
-      {channel && !playing && !loading && !error && !fsTransitioning && hasStartedPlaybackRef.current && !needsUnmute && (
+      {channel && userPaused && !loading && !error && !fsTransitioning && !needsUnmute && (
         <div
           className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 backdrop-blur-[2px]"
           style={{ animation: "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both" }}
@@ -1690,7 +1881,9 @@ export default function Player({
 
       {/* Tap-to-unmute overlay — ALL platforms (PC, Android, iOS).
           Only shown on first-ever visit. Blur + glass button, same style
-          as the paused-play overlay. Tap anywhere to unmute + store grant. */}
+          as the paused-play overlay. Tap anywhere to unmute + store grant.
+          On tap: quick fade-out animation (180ms) then removed from DOM.
+          On channel switch (manual): dismissed instantly, no animation. */}
       {needsUnmute && (
         <div
           className="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center"
@@ -1701,7 +1894,9 @@ export default function Player({
             backdropFilter: "blur(4px) saturate(130%) brightness(1.08)",
             WebkitBackdropFilter: "blur(4px) saturate(130%) brightness(1.08)",
             background: "rgba(255,255,255,0.06)",
-            animation: "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both",
+            animation: unmuteFading
+              ? "unmuteFadeOut 180ms cubic-bezier(.4,0,.2,1) both"
+              : "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both",
           }}
         >
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
@@ -2055,6 +2250,11 @@ export default function Player({
         @keyframes fadeInOverlay {
           from { opacity: 0; }
           to   { opacity: 1; }
+        }
+        /* Quick fade-out for the tap-to-unmute overlay when tapped */
+        @keyframes unmuteFadeOut {
+          0%   { opacity: 1; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+          100% { opacity: 0; backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); }
         }
         /* Zap dot pulse — the green dot overlaid on the zap icon
            pulses with a soft scale + opacity flicker. */

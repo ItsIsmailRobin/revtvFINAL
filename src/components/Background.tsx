@@ -10,9 +10,27 @@ function seededRand(seed: number) {
 }
 
 export default function Background() {
-  // New seed every render (page load / hard refresh) so blobs move around
+  // Seed is stable across ALL reloads and navigations (including the
+  // auto-refresh that fires after the first tap-to-unmute, and any
+  // manual logo-tap refresh). On first-ever visit we generate a random
+  // seed and persist it to localStorage; every subsequent load reuses
+  // it so the background never randomly changes on refresh.
+  // Only a manual "change background" action (if added) should clear
+  // "revtv:bgSeed" to pick a new look.
   const blobs = useMemo(() => {
-    const r = seededRand(Date.now() & 0xffff);
+    let seed: number;
+    try {
+      const stored = localStorage.getItem("revtv:bgSeed");
+      if (stored) {
+        seed = parseInt(stored, 10);
+      } else {
+        seed = Date.now() & 0xffff;
+        localStorage.setItem("revtv:bgSeed", String(seed));
+      }
+    } catch {
+      seed = Date.now() & 0xffff;
+    }
+    const r = seededRand(seed);
 
     // Generate 5 random blobs — all pure purple/violet, zero pink/red hue
     // x restricted to 10–90% to avoid heavy left or right edge bias
@@ -31,7 +49,14 @@ export default function Background() {
   }, []);
 
   const midBlobs = useMemo(() => {
-    const r = seededRand((Date.now() & 0xffff) ^ 0xabcd);
+    let seed: number;
+    try {
+      const stored = localStorage.getItem("revtv:bgSeed");
+      seed = stored ? parseInt(stored, 10) : Date.now() & 0xffff;
+    } catch {
+      seed = Date.now() & 0xffff;
+    }
+    const r = seededRand((seed) ^ 0xabcd);
     return Array.from({ length: 3 }, (_, i) => ({
       id: i,
       x: 15 + r() * 70,

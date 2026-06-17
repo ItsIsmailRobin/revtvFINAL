@@ -88,6 +88,10 @@ export default function App() {
   const failedChannelsRef = useRef<Set<string>>(new Set());
   const channelsRef = useRef<Channel[]>(channels);
   useEffect(() => { channelsRef.current = channels; }, [channels]);
+  // Channel ids the user just tapped directly in the channel list (real
+  // gesture) — Player consumes/deletes each id once it reads it, and uses
+  // it to skip the muted-first / tap-to-unmute dance for that switch.
+  const manualChannelIdsRef = useRef<Set<string>>(new Set());
 
   // Remember the currently-watched channel for THIS session only (10-min
   // inactivity expiry + cleared entirely in Incognito — see utils/persist.ts).
@@ -233,6 +237,7 @@ export default function App() {
   const filtered = useMemo(() => activeTag === "All" ? channels : channels.filter(c => c.group === activeTag), [channels, activeTag]);
 
   const handleSelect = (ch: Channel) => {
+    manualChannelIdsRef.current.add(ch.id);
     setActiveChannel(ch);
     // On mobile the channel list is below the player — snap the page
     // instantly to the top so the player is always in view.
@@ -279,7 +284,7 @@ export default function App() {
 
           {/* Left column: player */}
           <div className="flex flex-col">
-            <Player channel={activeChannel} onStreamError={handleStreamError} />
+            <Player channel={activeChannel} onStreamError={handleStreamError} manualChannelIds={manualChannelIdsRef.current} />
           </div>
 
           {/* Right column: sidebar (desktop) — self-start keeps top aligned with player */}
