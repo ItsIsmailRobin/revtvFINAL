@@ -60,6 +60,9 @@ export default function Player({
   // Tracks whether the user deliberately paused — prevents auto-resume from
   // firing when the user hits the pause button intentionally.
   const userPausedRef = useRef(false);
+  // React state mirror of userPausedRef — needed so the paused overlay
+  // condition re-renders when the user taps pause/play.
+  const [userPaused, setUserPaused] = useState(false);
   // Tracks whether the current channel has started playing at least once
   // since being switched to — used to suppress the pause/play glass
   // overlay during the brief loading window right after a channel switch.
@@ -254,6 +257,7 @@ export default function Player({
     setError(null);
     setPlaying(false);
     userPausedRef.current = false;
+    setUserPaused(false);
     lastLiveSnapRef.current = 0;
     // Suppress the pause overlay until the new channel has actually
     // started playing at least once — prevents the glass play button
@@ -654,29 +658,39 @@ export default function Player({
       // Native HLS (Safari/iOS)
       //
       // iOS Safari behaviour:
-      //   • Muted autoplay is always allowed.
-      //   • Unmuted autoplay requires a prior user gesture (stored as
-      //     revtv:gestureGranted). Without it iOS silently ignores
-      //     v.muted = false and the video stays muted with no overlay.
+      //   • Muted autoplay is always allowed (even without a gesture).
+      //   • Unmuted autoplay requires a prior user gesture — stored as
+      //     revtv:gestureGranted in localStorage (survives Ctrl+R / reload).
       //
-      // Strategy — identical to Android/PC path via attemptAutoplay:
-      //   FIRST VISIT  : set src, load(), then on loadedmetadata call
-      //                  attemptAutoplay() → muted play → overlay shows.
-      //                  User tap → doUnmute() plays with sound + stores grant.
-      //   RETURN VISIT : same flow but onMutedPlayStarted() unmutes
-      //                  immediately in .then() since grant exists.
+      // Strategy — same flow as Android/PC via attemptAutoplay:
+      //   FIRST VISIT  : load muted → overlay → user tap → sound + grant stored.
+      //   ANY RELOAD   : grant exists → load muted → auto-unmute in .then().
+      //   (Ctrl+R, logo tap, swipe-refresh, channel switch — all identical.)
       //
-      // We must wait for loadedmetadata before play() — calling play()
-      // right after src assignment on iOS returns a promise that resolves
-      // before media is ready and the subsequent muted state gets lost.
+      // Why wait for loadedmetadata:
+      //   Calling play() immediately after .src= on iOS can return a promise
+      //   that resolves before the media engine is ready, causing muted state
+      //   to be silently dropped. loadedmetadata guarantees the element is
+      //   ready to accept play() reliably.
+      //   Fallback: if loadedmetadata hasn't fired in 4 s, call play() anyway
+      //   (some streams are slow to deliver initial metadata on iOS).
       video.src = channel.url;
       video.load();
+      let iosMetaFired = false;
       const onMeta = () => {
+        if (iosMetaFired) return;
+        iosMetaFired = true;
         video.removeEventListener("loadedmetadata", onMeta);
         iosMetaCleanup = null;
         attemptAutoplay(video);
       };
-      iosMetaCleanup = () => video.removeEventListener("loadedmetadata", onMeta);
+      const iosMetaFallback = window.setTimeout(() => {
+        if (!iosMetaFired) onMeta();
+      }, 4000);
+      iosMetaCleanup = () => {
+        video.removeEventListener("loadedmetadata", onMeta);
+        window.clearTimeout(iosMetaFallback);
+      };
       video.addEventListener("loadedmetadata", onMeta);
     } else {
       window.clearTimeout(skipTimer);
@@ -960,6 +974,7 @@ export default function Player({
     if (!v) return;
     if (v.paused) {
       userPausedRef.current = false;
+      setUserPaused(false);
       // On resume: jump to live edge so viewer gets the latest stream
       syncToLiveEdge();
       v.play().catch(() => {});
@@ -968,6 +983,7 @@ export default function Player({
       // synchronously inside pause() on some Android browsers, so the
       // ref must already be true when onPause checks it.
       userPausedRef.current = true;
+      setUserPaused(true);
       v.pause();
     }
     armHide();
@@ -1494,7 +1510,7 @@ export default function Player({
           with an iOS-style frosted play button that scales/fades in
           smoothly. Clicking anywhere resumes playback. Hidden while
           loading/transitioning so it doesn't fight those overlays. */}
-      {channel && !playing && !loading && !error && !fsTransitioning && hasStartedPlaybackRef.current && !needsUnmute && (
+      {channel && userPaused && !loading && !error && !fsTransitioning && !needsUnmute && (
         <div
           className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 backdrop-blur-[2px]"
           style={{ animation: "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both" }}
