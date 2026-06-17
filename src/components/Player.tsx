@@ -334,8 +334,10 @@ export default function Player({
     // iOS (incl. iPadOS "desktop" UA on Safari) has strict autoplay-with-sound
     // privacy rules — attempting the "play unmuted, fall back to muted, then
     // try to unmute again" trick either fails silently or can leave the
-    // player stuck. On iOS we go straight to muted autoplay (always allowed)
-    // and surface the existing "Tap to unmute" overlay for the user.
+    // player stuck. On iOS (same as Android/PC) we go straight to muted
+    // autoplay first (always allowed), then either auto-unmute or surface
+    // the "Tap to unmute" overlay depending on the stored gesture grant —
+    // see onMutedPlayStarted/hasGrant below.
     const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
       (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
 
@@ -563,25 +565,17 @@ export default function Player({
     let iosMetaCleanup: (() => void) | null = null;
 
     const onMutedPlayStarted = () => {
-      // On iOS, check if this page load came from a trusted logo-tap gesture.
-      // The logo tap sets "revtv:logoTapNav" in sessionStorage just before
-      // navigating. We consume (delete) the flag immediately so it only
-      // applies once — for this one load only.
-      let iosLogoTapNav = false;
-      if (isIOS) {
-        try {
-          iosLogoTapNav = sessionStorage.getItem("revtv:logoTapNav") === "1";
-          if (iosLogoTapNav) sessionStorage.removeItem("revtv:logoTapNav");
-        } catch {}
-      }
-
-      if (!hasGrant || (isIOS && !iosLogoTapNav)) {
-        // First-ever visit OR iOS without a trusted logo-tap gesture
-        // (iOS requires a real tap to unmute on every page load —
-        // it does not allow the auto-unmute trick unless this load
-        // was triggered by a direct user tap like the logo):
-        // stay muted, show tap-to-unmute overlay.
-        // autoplayMutedRef stays true — cleared synchronously by doUnmute().
+      // Same check on every platform (PC, Android, iOS): only the
+      // presence of the stored gesture grant decides whether we show
+      // the tap-to-unmute overlay or auto-unmute immediately. iOS no
+      // longer requires an extra "trusted logo-tap" flag on top of the
+      // grant — that extra condition was causing iOS to show the
+      // tap-to-unmute overlay on every plain reload/refresh even
+      // though a grant already existed, unlike Android/PC.
+      if (!hasGrant) {
+        // First-ever visit (no grant yet): stay muted, show tap-to-unmute
+        // overlay. autoplayMutedRef stays true — cleared synchronously by
+        // doUnmute().
         setNeedsUnmute(true);
         setUnmuteFading(false);
       } else {
