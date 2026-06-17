@@ -17,7 +17,7 @@
 
 <p align="center">
   <a href="https://revtv.vercel.app">
-    <img src="https://img.shields.io/badge/🚀%20Live%20Demo-revtv.vercel.app-00D188?style=for-the-badge&logo=vercel&logoColor=white" alt="Live Demo">
+    <img src="https://img.shields.io/badge/🚀%20Live%20Demo-revtv.vercel.app-00D188?style=for-the-badge&logo=vercel&logoColor=white" alt="Live">
   </a>
   <a href="https://discord.gg/EttmFjhhq5">
     <img src="https://img.shields.io/badge/💬%20Discord-Join%20Server-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord">
