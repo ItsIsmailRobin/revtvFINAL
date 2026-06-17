@@ -563,8 +563,10 @@ export default function Player({
     let iosMetaCleanup: (() => void) | null = null;
 
     const onMutedPlayStarted = () => {
-      if (!hasGrant) {
-        // First-ever visit: stay muted, show tap-to-unmute overlay.
+      if (!hasGrant || isIOS) {
+        // First-ever visit OR iOS (iOS requires a real tap to unmute on
+        // every page load — it does not allow the auto-unmute trick):
+        // stay muted, show tap-to-unmute overlay.
         // autoplayMutedRef stays true — cleared synchronously by doUnmute().
         setNeedsUnmute(true);
         setUnmuteFading(false);
@@ -1513,12 +1515,22 @@ export default function Player({
     // origin, which is what lets plain reloads (Ctrl+R, the reload button,
     // swipe-to-refresh) start autoplaying with sound directly afterwards —
     // same as a manual logo tap always could. Runs once ever per browser.
-    try {
-      if (window.localStorage.getItem("revtv:primedOnce") !== "1") {
-        window.localStorage.setItem("revtv:primedOnce", "1");
-        window.location.href = window.location.origin + window.location.pathname;
-      }
-    } catch {}
+    //
+    // SKIPPED on iOS: iOS Safari's autoplay rules work differently —
+    // the primedOnce navigation causes the page to reload and then
+    // immediately show "Tap to Unmute" again (glitchy loop). On iOS we
+    // simply store the grant and let the user tap to unmute on each hard
+    // reload (iOS always requires a gesture for unmuted autoplay anyway).
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
+    if (!isIOS) {
+      try {
+        if (window.localStorage.getItem("revtv:primedOnce") !== "1") {
+          window.localStorage.setItem("revtv:primedOnce", "1");
+          window.location.href = window.location.origin + window.location.pathname;
+        }
+      } catch {}
+    }
   }, [dismissUnmuteOverlay]);
 
   const onVideoClick = (e: ReactMouseEvent) => {
@@ -1552,7 +1564,12 @@ export default function Player({
         "mx-auto rounded-2xl border border-white/10 aspect-video max-h-[80vh] shadow-2xl shadow-violet-900/10"
   );
   const containerStyle: CSSProperties = {
-    background: "linear-gradient(160deg,#0d0520 0%,#060112 40%,#09021a 70%,#050010 100%)",
+    // In fullscreen on Android, use pure black so the area behind the
+    // video letterbox/pillarbox borders is clean black, not purple gradient.
+    // On iOS and inline (non-fullscreen), keep the branded dark purple gradient.
+    background: presentationFullscreen
+      ? "#000000"
+      : "linear-gradient(160deg,#0d0520 0%,#060112 40%,#09021a 70%,#050010 100%)",
     touchAction: presentationFullscreen ? "none" : "manipulation",
   };
 

@@ -2,6 +2,11 @@ import { useEffect, useRef, useState } from "react";
 
 export default function Header() {
   const handleLogoClick = () => {
+    // Clear the stored background seed so the next load picks a fresh
+    // random background — this is a deliberate manual refresh by the user.
+    // Auto-refresh (primedOnce navigation from tap-to-unmute) does NOT
+    // clear the seed, so the background stays the same during that reload.
+    try { localStorage.removeItem("revtv:bgSeed"); } catch {}
     window.location.href = window.location.origin + window.location.pathname;
   };
 
