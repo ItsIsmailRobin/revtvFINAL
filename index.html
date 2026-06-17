@@ -70,36 +70,14 @@
     <link rel="preconnect" href="https://i.postimg.cc" />
     <link rel="dns-prefetch" href="https://i.postimg.cc" />
 
-    <!-- DNS-over-HTTPS via Cloudflare 1.1.1.1 — faster DNS resolution,
-         no need for VPN. Most modern browsers (Chrome 83+, Firefox 62+,
-         Edge 79+) will use this automatically via Secure DNS settings.
-         The meta tag below hints the browser to use encrypted DNS. -->
-    <meta http-equiv="origin-trial" content="" />
-    <!-- Prefetch common CDN/stream origins to reduce DNS lookup latency -->
-    <link rel="dns-prefetch" href="https://cloudflare.com" />
-    <link rel="dns-prefetch" href="https://8.8.8.8" />
-    <link rel="dns-prefetch" href="https://8.8.4.4" />
-    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
-    <link rel="dns-prefetch" href="https://objects.githubusercontent.com" />
-    <link rel="dns-prefetch" href="https://github.com" />
-
     <!-- Fonts: Inter + Space Grotesk -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 
-    <!-- Favicon — transparent SVG so it renders correctly everywhere,
-         including iOS Dynamic Island / status bar (the previous .ico had
-         an opaque background on iOS). The same URL is used as:
-         • Standard browser tab icon (all browsers)
-         • Apple touch icon (home screen / iOS Safari)
-         • mask-icon (Safari pinned tabs, Dynamic Island hint) -->
-    <link rel="icon" type="image/svg+xml" href="https://raw.githubusercontent.com/ItsIsmailRobin/revtvFINAL/refs/heads/main/favicon.svg" />
-    <link rel="shortcut icon" type="image/svg+xml" href="https://raw.githubusercontent.com/ItsIsmailRobin/revtvFINAL/refs/heads/main/favicon.svg" />
-    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/ItsIsmailRobin/revtvFINAL/refs/heads/main/favicon.svg" />
-    <link rel="mask-icon" href="https://raw.githubusercontent.com/ItsIsmailRobin/revtvFINAL/refs/heads/main/favicon.svg" color="#7c3aed" />
-    <!-- Preload logo to prevent flash/popup on first paint -->
-    <link rel="preload" as="image" href="https://raw.githubusercontent.com/ItsIsmailRobin/revtvFINAL/refs/heads/main/Logo.png" />
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="https://i.postimg.cc/76JJccSN/play.png" />
+    <link rel="apple-touch-icon" href="https://i.postimg.cc/76JJccSN/play.png" />
 
     <!-- Structured Data: WebSite -->
     <script type="application/ld+json">
@@ -183,171 +161,9 @@
       ]
     }
     </script>
-
-    <!--
-      RELOAD INTERCEPTOR — converts reload gestures into a soft same-URL
-      navigation (identical in spirit to a logo tap), so the autoplay-with-
-      sound logic in Player.tsx gets the best possible shot at running
-      cleanly. The grant flag it relies on ("revtv:gestureGranted") lives in
-      localStorage, so it survives every reload type below indefinitely.
-
-      TWO strategies, one for each reload type:
-
-      1. KEYBOARD (Ctrl+R / Cmd+R / F5):
-         Intercepted in keydown capture phase — preventDefault stops the
-         browser reload, then location.href does the soft navigation instead,
-         from inside the same trusted key-press event (just like the logo
-         tap is a trusted click) — this is what lets the browser treat it as
-         a gesture-driven navigation.
-
-      2. RELOAD BUTTON + SWIPE-TO-REFRESH (Android/iOS):
-         These can't be intercepted before they happen — they're handled by
-         the browser/OS chrome, outside the page entirely. Instead: on the
-         NEW page load, check via PerformanceNavigationTiming whether this
-         load was a reload. If so, immediately soft-navigate to the same
-         URL once. A localStorage flag (not sessionStorage, so it survives
-         even if reloads happen in quick succession) prevents the redirect
-         from looping.
-
-      NOTE: Even with both strategies, a reload-button click or swipe-to-
-      refresh has no trusted in-page event for us to piggyback on, so some
-      browsers may still decline to treat the resulting load as gesture-
-      qualified for autoplay-with-sound purposes. Player.tsx has a matching
-      safety net for that case: if the browser force-pauses playback right
-      after the auto-unmute attempt, it gracefully falls back to muted
-      autoplay + the familiar tap-to-unmute overlay instead of leaving the
-      player stuck paused and silent.
-    -->
-    <script>
-      (function () {
-        // ── Strategy 1: Keyboard reloads ──────────────────────────────
-        document.addEventListener('keydown', function (e) {
-          var isF5    = e.key === 'F5';
-          var isCtrlR = e.ctrlKey && !e.metaKey && (e.key === 'r' || e.key === 'R');
-          var isCmdR  = e.metaKey && !e.ctrlKey && (e.key === 'r' || e.key === 'R');
-          if (isF5 || isCtrlR || isCmdR) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            window.location.href = window.location.href;
-          }
-        }, true);
-
-        // ── Strategy 2: Reload button / swipe-to-refresh ──────────────
-        // Detect if this page load was caused by a reload.
-        // Use a localStorage flag to prevent redirect loops.
-        var LOOP_KEY = 'revtv:reloadNav';
-        if (window.localStorage.getItem(LOOP_KEY)) {
-          // This load was our own redirect — clear flag and continue normally.
-          window.localStorage.removeItem(LOOP_KEY);
-        } else {
-          // Check navigation type
-          var isReload = false;
-          try {
-            // Modern API (Chrome 57+, Firefox 58+, Safari 15.4+)
-            var nav = performance.getEntriesByType('navigation')[0];
-            if (nav && nav.type === 'reload') isReload = true;
-          } catch (e1) {}
-          if (!isReload) {
-            try {
-              // Legacy API fallback
-              if (performance.navigation && performance.navigation.type === 1) isReload = true;
-            } catch (e2) {}
-          }
-
-          if (isReload) {
-            // Was a reload (button or swipe). Set flag then soft-navigate.
-            // The flag stops the next load (our redirect) from looping.
-            window.localStorage.setItem(LOOP_KEY, '1');
-            window.location.href = window.location.href;
-          }
-        }
-      })();
-    </script>
   </head>
   <body>
     <div id="root"></div>
-
-    <!--
-      Early playlist prefetch — seeds channels from localStorage immediately
-      (synchronous, zero latency) so channels show on first paint.
-      Also starts a network fetch in the background to get fresh data.
-      The inline M3U parser writes fresh results to window.__revtv_cache__
-      and localStorage — React reads this on mount.
-    -->
-    <script>
-      (function () {
-        var PLAYLIST_URL = "https://raw.githubusercontent.com/ItsIsmailRobin/playlisttv/refs/heads/main/playlist.m3u";
-        var CACHE_KEY    = "revtv:playlistCache";
-        var EXCLUDE      = ["welcome to playz tv", "playz tv | new app", "playz tv"];
-
-        function isExcluded(name, group) {
-          var t = (name + " " + group).toLowerCase();
-          return EXCLUDE.some(function(k) { return t.indexOf(k) !== -1 || group.toLowerCase().indexOf("welcome to playz") !== -1; });
-        }
-
-        function parseM3U(text) {
-          var lines = text.split(/\r?\n/);
-          var channels = [];
-          var cur = null;
-          var getAttr = function(attrs, key) {
-            var re = new RegExp(key + '="([^"]*)"', "i");
-            var m = attrs.match(re);
-            return m ? m[1] : "";
-          };
-          for (var i = 0; i < lines.length; i++) {
-            var line = lines[i].trim();
-            if (!line) continue;
-            if (line.indexOf("#EXTINF:") === 0) {
-              var info = line.substring(8);
-              var ci   = info.lastIndexOf(",");
-              var attrs = ci !== -1 ? info.substring(0, ci) : info;
-              var name  = ci !== -1 ? info.substring(ci + 1).trim() : "";
-              cur = { name: name, logo: getAttr(attrs, "tvg-logo"), group: getAttr(attrs, "group-title") || "Uncategorized", url: "" };
-            } else if (line[0] !== "#" && cur && (line.indexOf("http://") === 0 || line.indexOf("https://") === 0 || line.indexOf("rtmp://") === 0 || line[0] === "/")) {
-              cur.url = line;
-              if (!isExcluded(cur.name, cur.group) && cur.name && cur.url) {
-                cur.id = cur.name + "-" + channels.length;
-                channels.push(cur);
-              }
-              cur = null;
-            }
-          }
-          return channels;
-        }
-
-        // STEP 1: Seed from localStorage IMMEDIATELY — synchronous, zero latency.
-        // This ensures channels are available before React even mounts.
-        try {
-          var raw = window.localStorage.getItem(CACHE_KEY);
-          if (raw) {
-            var parsed = JSON.parse(raw);
-            if (Array.isArray(parsed) && parsed.length) {
-              window.__revtv_cache__ = parsed;
-            }
-          }
-        } catch (e) {}
-
-        // STEP 2: Kick off live network fetch in background.
-        // This updates __revtv_cache__ and localStorage once fresh data arrives.
-        // React will update channels when fetchPlaylist() resolves.
-        window.__revtv_prefetch__ = fetch(PLAYLIST_URL, { cache: "no-store" })
-          .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
-          .then(function (text) {
-            var parsed = parseM3U(text);
-            if (parsed.length) {
-              window.__revtv_cache__ = parsed;
-              try { window.localStorage.setItem(CACHE_KEY, JSON.stringify(parsed)); } catch(e) {}
-            }
-            window.__revtv_prefetch__ = null; // signal: fully resolved
-            return text;
-          })
-          .catch(function () {
-            window.__revtv_prefetch__ = null;
-            return null;
-          });
-      })();
-    </script>
-
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -6,23 +6,6 @@ body,
   height: 100%;
 }
 
-/* iOS rubber-band bounce / Android overscroll: the area exposed beyond
-   the document edge is painted using <html>'s own background (html is
-   the actual scrolling element in standards mode, not body) — it is NOT
-   covered by the fixed Background component, which only fills the live
-   viewport. Without an explicit background here, that area falls back
-   to the browser's default dark canvas (solid black), which is visibly
-   different from the app's deep-purple theme — producing the "black
-   box" flash at the bottom while scrolling, before it settles back to
-   the real background. Setting the same base tone here, plus
-   overscroll-behavior on html itself (in addition to body, since some
-   browsers only honor it on the true scrolling element), fixes this on
-   both iOS and Android. */
-html {
-  background: #0a0220;
-  overscroll-behavior: none;
-}
-
 body {
   margin: 0;
   font-family:

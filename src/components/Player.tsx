@@ -9,20 +9,11 @@ import {
 import Hls from "hls.js";
 import type { Channel } from "../utils/parseM3U";
 import { cn } from "../utils/cn";
-import { getFresh, setPersisted, markActivity } from "../utils/persist";
 
 interface PlayerProps {
   channel: Channel | null;
   /** Called when a stream fails fatally — parent uses this to skip to next channel */
   onStreamError?: (channel: Channel) => void;
-  /** Channel IDs that were just chosen by an explicit tap on the channel
-   *  list (as opposed to the page loading, restoring the last channel, or
-   *  an automatic skip-on-error). A genuine tap is a real user gesture —
-   *  Player consumes (deletes) the id once it reads it, and uses it to
-   *  skip the muted-first / tap-to-unmute dance and autoplay unmuted
-   *  directly. Shared mutable Set so it can be updated without forcing an
-   *  extra render on the parent. */
-  manualChannelIds?: Set<string>;
 }
 
 interface GestureState {
@@ -34,24 +25,12 @@ interface GestureState {
   locked: boolean;
 }
 
-// Module-level so it can be used inside useState initializers (which run
-// before any effects). Mirrors the in-effect isMobile/isIOS checks.
-function detectIsMobile(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return (
-    /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-    (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent))
-  );
-}
-
 export default function Player({
   channel,
   onStreamError,
-  manualChannelIds,
 }: PlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const volumeWheelRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const hideTimerRef = useRef<number | null>(null);
   const gestureLayerRef = useRef<HTMLDivElement>(null);
@@ -69,53 +48,17 @@ export default function Player({
   // Tracks whether the user deliberately paused — prevents auto-resume from
   // firing when the user hits the pause button intentionally.
   const userPausedRef = useRef(false);
-  // React state mirror of userPausedRef — needed so the paused overlay
-  // condition re-renders when the user taps pause/play.
-  const [userPaused, setUserPaused] = useState(false);
-  // Tracks whether the current channel has started playing at least once
-  // since being switched to — used to suppress the pause/play glass
-  // overlay during the brief loading window right after a channel switch.
-  const hasStartedPlaybackRef = useRef(false);
 
   const [playing, setPlaying] = useState(false);
-
-  // ── Mute/Volume persistence ────────────────────────────────────────────
-  // ALL platforms (PC, Android, iOS): restore muted state from localStorage
-  // across refreshes, tab opens, logo taps, and channel switches.
-  // Default: unmuted (false). Only store/restore "muted=true" since that's
-  // the only case where we want to remember the user's choice.
-  const [muted, setMuted] = useState<boolean>(() => {
-    try {
-      return window.localStorage.getItem("revtv:muted") === "true";
-    } catch {
-      return false;
-    }
-  });
-  const [volume, setVolume] = useState<number>(() => {
-    try {
-      const v = parseFloat(window.localStorage.getItem("revtv:volume") ?? "1");
-      return isNaN(v) ? 1 : Math.min(1, Math.max(0, v));
-    } catch {
-      return 1;
-    }
-  });
-
+  const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
   // Refs mirroring muted/volume so the channel-switch effect (which only
   // re-runs on channel change) can read the latest user preference
   // without forcing a full HLS re-attach on every mute/volume toggle.
   const mutedRef = useRef(muted);
   const volumeRef = useRef(volume);
-  useEffect(() => {
-    mutedRef.current = muted;
-    try { window.localStorage.setItem("revtv:muted", String(muted)); } catch {}
-  }, [muted]);
-  useEffect(() => {
-    volumeRef.current = volume;
-    try { window.localStorage.setItem("revtv:volume", String(volume)); } catch {}
-  }, [volume]);
-  // Brightness: in-memory only on every platform (never persisted), and
-  // explicitly reset to default each session on Android/iOS per above —
-  // since it's already not persisted, this is naturally satisfied.
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
+  useEffect(() => { volumeRef.current = volume; }, [volume]);
   const [brightness, setBrightness] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobileDevice, setIsMobileDevice] = useState(false);
@@ -140,85 +83,41 @@ export default function Player({
   type AspectMode = "contain" | "cover" | "fill" | "native";
   const [aspectMode, setAspectMode] = useState<AspectMode>("contain");
 
-  // Per-channel aspect ratio memory:
-  // - On refresh / logo click, the same channel is restored — also
-  //   restore the aspect ratio it was last set to.
-  // - On switching to a different channel, always reset to default
-  //   ("contain"), even if returning to a previously-viewed channel.
-  const lastChannelIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!channel) return;
-    if (lastChannelIdRef.current === channel.id) return;
-    lastChannelIdRef.current = channel.id;
-
-    let restored: AspectMode | null = null;
-    try {
-      const raw = getFresh("revtv:aspect");
-      if (raw) {
-        const saved = JSON.parse(raw);
-        if (
-          saved &&
-          saved.channelId === channel.id &&
-          (saved.aspectMode === "contain" ||
-            saved.aspectMode === "cover" ||
-            saved.aspectMode === "fill" ||
-            saved.aspectMode === "native")
-        ) {
-          restored = saved.aspectMode;
-        }
-      }
-    } catch {}
-
-    setAspectMode(restored ?? "contain");
-  }, [channel?.id]);
-
-  // Keep storage in sync with the current channel + aspect mode, so a
-  // refresh/logo click can restore it for THIS channel only — and only
-  // within the same active session (see utils/persist.ts).
-  useEffect(() => {
-    if (!channel) return;
-    setPersisted(
-      "revtv:aspect",
-      JSON.stringify({ channelId: channel.id, aspectMode })
-    );
-  }, [channel?.id, aspectMode]);
-
   // Status indicator — shows current volume / aspect ratio briefly
   // when the user changes them via keyboard, then fades out after 3s.
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [statusVisible, setStatusVisible] = useState(false);
-  // ALL platforms (PC, Android, iOS): true only on first-ever visit when
-  // no gesture grant exists in localStorage yet.
-  // Shows the glass blurred overlay — tap anywhere to unmute.
-  // After that one tap, "revtv:gestureGranted" is stored forever in localStorage.
-  // From then on (refresh, Ctrl+R, hard reload, channel change, tab reopen)
-  // the player always autoplays with sound. Overlay never shown again.
-  const [needsUnmute, setNeedsUnmute] = useState(false);
-  // True while the tap-to-unmute overlay is playing its fade-out exit animation.
-  // The overlay stays mounted during the animation so it can fade smoothly,
-  // then is fully removed once the animation completes.
-  const [unmuteFading, setUnmuteFading] = useState(false);
-  // When switching channels (isManualSelect), the overlay should vanish
-  // instantly (no lingering fade) — this ref tracks that case.
-  const unmuteFadeTimerRef = useRef<number | null>(null);
-  // True while the autoplay-muted phase is active (overlay shown OR about
-  // to be shown). Set synchronously by the HLS effect, cleared by doUnmute
-  // or the grant-exists unmute path. The sync-volume useEffect reads this
-  // ref to avoid overriding v.muted=true during the muted-autoplay window.
-  const autoplayMutedRef = useRef(false);
-  // Timestamp of the most recent "grant exists -> auto-unmute" attempt
-  // (see onMutedPlayStarted below). Some browsers will silently force-pause
-  // playback if JS unmutes a video on a page load that wasn't recognized as
-  // gesture-driven (a plain hard refresh / Ctrl+R / pull-to-refresh, as
-  // opposed to a click-driven navigation like the logo tap, which browsers
-  // do treat as gesture-qualified). onPause uses this timestamp to detect
-  // that exact case and recover gracefully — falling back to muted autoplay
-  // + the tap-to-unmute overlay — instead of leaving the player stuck
-  // paused and silent.
-  const recentAutoUnmuteRef = useRef(0);
   const statusTimerRef = useRef<number | null>(null);
 
-  const showStatus = useCallback((msg: string) => {
+  // ── Inline BD clock ──────────────────────────────────────────────
+  const [bdClock, setBdClock] = useState(() => {
+    const now = new Date();
+    const utcMs = now.getTime() + now.getTimezoneOffset() * 60_000;
+    const bd = new Date(utcMs + 6 * 3600_000);
+    const h24 = bd.getHours();
+    const mm = String(bd.getMinutes()).padStart(2,"0");
+    const ss = String(bd.getSeconds()).padStart(2,"0");
+    const ampm = h24 >= 12 ? "PM" : "AM";
+    const h12 = ((h24 + 11) % 12) + 1;
+    return { time: `${String(h12).padStart(2,"0")}:${mm}:${ss}`, ampm };
+  });
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      const utcMs = now.getTime() + now.getTimezoneOffset() * 60_000;
+      const bd = new Date(utcMs + 6 * 3600_000);
+      const h24 = bd.getHours();
+      const mm = String(bd.getMinutes()).padStart(2,"0");
+      const ss = String(bd.getSeconds()).padStart(2,"0");
+      const ampm = h24 >= 12 ? "PM" : "AM";
+      const h12 = ((h24 + 11) % 12) + 1;
+      setBdClock({ time: `${String(h12).padStart(2,"0")}:${mm}:${ss}`, ampm });
+    };
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+    const showStatus = useCallback((msg: string) => {
     setStatusMessage(msg);
     setStatusVisible(true);
     if (statusTimerRef.current) window.clearTimeout(statusTimerRef.current);
@@ -228,23 +127,6 @@ export default function Player({
   }, []);
 
   const presentationFullscreen = isFullscreen || fsOverride;
-
-  // Dismiss the tap-to-unmute overlay: quick fade-out then fully remove.
-  // Pass instant=true to skip the animation (e.g. on channel switch).
-  const dismissUnmuteOverlay = useCallback((instant = false) => {
-    if (unmuteFadeTimerRef.current) window.clearTimeout(unmuteFadeTimerRef.current);
-    if (instant) {
-      setUnmuteFading(false);
-      setNeedsUnmute(false);
-      return;
-    }
-    // Start fade-out animation, then remove after it completes (180ms)
-    setUnmuteFading(true);
-    unmuteFadeTimerRef.current = window.setTimeout(() => {
-      setNeedsUnmute(false);
-      setUnmuteFading(false);
-    }, 180);
-  }, []);
 
   // Human-readable aspect label
   const aspectLabel = useCallback(
@@ -273,22 +155,14 @@ export default function Player({
     });
   }, [aspectLabel, showStatus]);
 
-  // Show volume status when volume changes via keyboard/wheel (not on mute toggles)
-  const prevMutedRef = useRef(muted);
-  const isFirstRenderRef = useRef(true);
+  // Show volume status when it changes (e.g. via keyboard)
   useEffect(() => {
-    if (isFirstRenderRef.current) {
-      isFirstRenderRef.current = false;
-      prevMutedRef.current = muted;
-      return;
-    }
     if (!channel) return;
-    const mutedChanged = muted !== prevMutedRef.current;
-    prevMutedRef.current = muted;
-    if (!mutedChanged && !muted && volume > 0) {
-      // Volume wheel/keyboard change — show volume %
-      showStatus(`Volume: ${Math.round(volume * 100)}%`);
-    }
+    showStatus(
+      muted || volume === 0
+        ? "Muted"
+        : `Volume: ${Math.round(volume * 100)}%`
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [volume, muted]);
 
@@ -298,478 +172,124 @@ export default function Player({
     if (!video || !channel) return;
 
     setError(null);
+    setLoading(true);
     setPlaying(false);
     userPausedRef.current = false;
-    setUserPaused(false);
-    recentAutoUnmuteRef.current = 0;
     lastLiveSnapRef.current = 0;
-    // Suppress the pause overlay until the new channel has actually
-    // started playing at least once — prevents the glass play button
-    // flashing during the brief setPlaying(false) → setPlaying(true)
-    // window on every channel switch.
-    hasStartedPlaybackRef.current = false;
-    // Delay showing the loading spinner — the previous frame stays visible
-    // during the brief handoff, so the screen never goes dark on channel switch.
-    const loadingTimer = window.setTimeout(() => setLoading(true), 300);
-
-    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-      (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
-
-    // Was this channel chosen by an explicit tap on the channel list (as
-    // opposed to the page just loading, restoring the last channel, or an
-    // automatic skip-on-error)? If so, we have a fresh, genuine user
-    // gesture to work with — skip the muted-first dance and the
-    // tap-to-unmute overlay entirely and go straight to unmuted autoplay,
-    // on every platform (PC, Android, iOS).
-    const isManualSelect = !!(channel && manualChannelIds?.has(channel.id));
-    if (isManualSelect && channel) manualChannelIds!.delete(channel.id);
-    // On manual channel switch, dismiss any lingering unmute overlay instantly
-    // (no fade — the switch itself is already a fast visual transition).
-    if (isManualSelect) {
-      if (unmuteFadeTimerRef.current) window.clearTimeout(unmuteFadeTimerRef.current);
-      setUnmuteFading(false);
-      setNeedsUnmute(false);
-    }
-
-    // iOS (incl. iPadOS "desktop" UA on Safari) has strict autoplay-with-sound
-    // privacy rules — attempting the "play unmuted, fall back to muted, then
-    // try to unmute again" trick either fails silently or can leave the
-    // player stuck. On iOS (same as Android/PC) we go straight to muted
-    // autoplay first (always allowed), then either auto-unmute or surface
-    // the "Tap to unmute" overlay depending on the stored gesture grant —
-    // see onMutedPlayStarted/hasGrant below.
-    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-      (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
 
     // Track recovery attempts to avoid infinite loops
     let networkRetries = 0;
     let mediaRetries = 0;
-    const MAX_NETWORK_RETRIES = 5;
-    const MAX_MEDIA_RETRIES   = 4;
-
-    // Skip timer: if stream doesn't produce a frame within N seconds, skip it
+    const MAX_RETRIES = 2;
+    // Skip timer: if stream doesn't start within 12s, consider it dead
     const skipTimer = window.setTimeout(() => {
       if (channel) onStreamError?.(channel);
-    }, isIOS ? 20000 : isMobile ? 20000 : 11000);
+    }, 12000);
 
-    // ── Helpers ──────────────────────────────────────────────────────────
-    // Snap currentTime to the live edge. Safe to call any time.
-    const snapToLive = (v: HTMLVideoElement) => {
-      const hls = hlsRef.current;
-      if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
-        v.currentTime = hls.liveSyncPosition;
-      } else if (v.seekable.length > 0) {
-        const end = v.seekable.end(v.seekable.length - 1);
-        if (isFinite(end)) v.currentTime = end;
-      }
-    };
-
-    // ── Stall guard ───────────────────────────────────────────────────────
-    // Single debounce flag shared by onPause / onStalled / frozen detector.
-    // Prevents stacking multiple simultaneous recover attempts (the root
-    // cause of the load→play→load→play loop on slow connections).
-    let recoverScheduled = false;
-    let recoverTimer = 0;
-    // Cooldown after a recover — ignore new stall/pause/freeze triggers for
-    // a short window right after we just recovered. Mobile connections often
-    // report a brief "stalled"/"pause" blip immediately after resuming,
-    // which was re-triggering scheduleRecover and causing a visible
-    // loading→play→loading loop every couple of seconds.
-    let recoverCooldownUntil = 0;
-    // iOS native HLS rebuffers more slowly than hls.js on Android/desktop —
-    // give it the longest cooldown so we don't repeatedly call play()/seek
-    // while it's still naturally recovering (which restarts its internal
-    // buffering and looks like "loading again").
-    const RECOVER_COOLDOWN_MS = isIOS ? 8000 : isMobile ? 8000 : 1500;
-    let waitingTimer = 0;
-
-    const scheduleRecover = (delayMs: number, snap = false) => {
-      if (recoverScheduled || userPausedRef.current) return;
-      if (Date.now() < recoverCooldownUntil) return;
-      recoverScheduled = true;
-      recoverTimer = window.setTimeout(() => {
-        recoverScheduled = false;
-        recoverCooldownUntil = Date.now() + RECOVER_COOLDOWN_MS;
-        const v = videoRef.current;
-        if (!v || v.ended || userPausedRef.current) return;
-        // On iOS native HLS, seeking to the live edge while the player is
-        // still buffering throws away progress and restarts the load —
-        // this is what produced "loading → loading again → skip". Just
-        // nudge play() and let AVPlayer's own buffering resolve it.
-        // On Android/desktop, only snap to live when explicitly requested
-        // (truly frozen) — a plain stall/pause blip should NOT discard
-        // buffered data, since that's exactly what restarts the
-        // load → play → load cycle on mobile.
-        if (!isIOS && snap) snapToLive(v);
-        v.play().catch(() => {});
-      }, delayMs);
-    };
-
-    // ── Video events ─────────────────────────────────────────────────────
     const onPlaying = () => {
       window.clearTimeout(skipTimer);
-      window.clearTimeout(loadingTimer);
-      window.clearTimeout(recoverTimer);
-      window.clearTimeout(waitingTimer);
-      recoverScheduled = false;
-      nativeErrorRetries = 0;
-      hasStartedPlaybackRef.current = true;
       setLoading(false);
       setPlaying(true);
     };
-    const onWaiting  = () => {
-      // On mobile, a brief "waiting" event is normal during ABR level
-      // switches / minor rebuffers and resolves on its own. Showing the
-      // spinner immediately for every blip is what produced the
-      // load → play 2s → load loop. Give it a short grace period before
-      // surfacing the spinner; if "playing" fires first, this is cancelled.
-      if (isMobile) {
-        window.clearTimeout(waitingTimer);
-        waitingTimer = window.setTimeout(() => setLoading(true), 3500);
-      } else {
-        setLoading(true);
-      }
+    const onWaiting = () => {
+      setLoading(true);
     };
-    const onPause    = () => {
+    const onPause = () => {
       setPlaying(false);
-      if (userPausedRef.current) return;
-
-      // Did the browser just force-pause this video right after we
-      // auto-unmuted it (the "grant exists" path in onMutedPlayStarted)?
-      // This happens on page loads the browser doesn't treat as
-      // gesture-qualified — typically a plain hard refresh / Ctrl+R /
-      // pull-to-refresh — as opposed to a click-driven navigation like the
-      // logo tap, which IS treated as gesture-qualified and never gets
-      // punished this way. Recover by falling back to muted autoplay and
-      // surfacing the tap-to-unmute overlay, instead of leaving the
-      // player stuck paused and silent.
-      const v = videoRef.current;
-      const sinceUnmute = recentAutoUnmuteRef.current ? Date.now() - recentAutoUnmuteRef.current : Infinity;
-      if (v && !v.muted && sinceUnmute < 2500) {
-        recentAutoUnmuteRef.current = 0;
-        autoplayMutedRef.current = true; // re-enter the muted-autoplay window
-        v.muted = true;
-        v.play().then(() => {
-          setNeedsUnmute(true); // one tap restores sound, same as first-visit overlay
-          setUnmuteFading(false);
-        }).catch(() => {
-          autoplayMutedRef.current = false;
-          scheduleRecover(isIOS ? 1800 : isMobile ? 1500 : 700);
-        });
-        return;
-      }
-
-      scheduleRecover(isIOS ? 1800 : isMobile ? 1500 : 700);
+      // Only auto-resume if the stream paused on its own (not user-triggered)
+      // so manual pause works correctly. Loop/stall pauses have userPausedRef = false.
+      window.setTimeout(() => {
+        const v = videoRef.current;
+        if (!v || v.ended || userPausedRef.current) return;
+        if (v.paused) {
+          v.play().catch(() => {});
+        }
+      }, 400);
     };
-    const onStalled  = () => { scheduleRecover(isIOS ? 2000 : isMobile ? 2000 : 1000); };   // buffer empty — recover
-    const onEnded    = () => {
+    const onEnded = () => {
+      // For m3u8 streams set on loop — restart from beginning
       const v = videoRef.current;
       if (!v) return;
       v.currentTime = 0;
       v.play().catch(() => {});
     };
-    // Native <video> error event (used on the iOS native-HLS path — hls.js
-    // has its own ERROR handler below). iOS/Safari can fire a transient
-    // "error" during normal rebuffering on a flaky connection, not just on
-    // a truly broken stream. Previously this skipped the channel
-    // immediately, which is the "it even skips the channel" symptom.
-    // Retry by reloading the source with backoff first; only skip after
-    // repeated failures.
-    let nativeErrorRetries = 0;
-    const MAX_NATIVE_ERROR_RETRIES = 4;
-    const onError    = () => {
-      if (isIOS && nativeErrorRetries < MAX_NATIVE_ERROR_RETRIES) {
-        nativeErrorRetries++;
-        const v = videoRef.current;
-        window.setTimeout(() => {
-          if (!v || userPausedRef.current) return;
-          // Reload the source — clears the errored media element state
-          // without tearing down the whole player/effect.
-          v.src = channel.url;
-          v.play().catch(() => {});
-        }, 500 * Math.pow(2, nativeErrorRetries - 1)); // 500ms, 1s, 2s, 4s
-        return;
-      }
+    const onError = () => {
       setLoading(false);
       if (channel) onStreamError?.(channel);
     };
-
-    // ── Frozen detector (1-second interval) ──────────────────────────────
-    // timeupdate fires ~4×/s but slows down when tab is hidden.
-    // A dedicated 1-second interval is more reliable for detecting a truly
-    // frozen stream on both mobile and PC.
-    let lastTime  = -1;
-    let frozenSec = 0;
-    const FROZEN_THRESHOLD = isIOS ? 10 : isMobile ? 8 : 4; // seconds before we act
-    const frozenWatchdog = window.setInterval(() => {
-      const v = videoRef.current;
-      if (!v || v.paused || v.seeking || userPausedRef.current) {
-        lastTime = -1; frozenSec = 0; return;
-      }
-      if (v.currentTime === lastTime) {
-        frozenSec++;
-        if (frozenSec >= FROZEN_THRESHOLD) {
-          frozenSec = 0; lastTime = -1;
-          scheduleRecover(0, true); // snap immediately — stream is definitely frozen
+    const onStalled = () => {
+      // After a short grace period, if still paused, resume at live edge
+      window.setTimeout(() => {
+        const v = videoRef.current;
+        const hls = hlsRef.current;
+        if (!v || !v.paused) return;
+        if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
+          v.currentTime = hls.liveSyncPosition;
+        } else if (v.seekable.length > 0) {
+          const end = v.seekable.end(v.seekable.length - 1);
+          if (isFinite(end)) v.currentTime = end;
         }
-      } else {
-        frozenSec = 0;
-        lastTime  = v.currentTime;
-      }
-    }, 1000);
-
+        v.play().catch(() => {});
+      }, 3500);
+    };
     video.addEventListener("playing", onPlaying);
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("stalled", onStalled);
-    video.addEventListener("pause",   onPause);
-    video.addEventListener("ended",   onEnded);
-    video.addEventListener("error",   onError);
-
-    // ── Unified autoplay logic ──────────────────────────────────────────────
-    // Works identically on PC, Android, and iOS.
-    //
-    // HOW IT WORKS:
-    //   0. MANUAL CHANNEL TAP (isManualSelect=true): the user just tapped this
-    //      channel in the list — a fresh, genuine gesture. Skip everything
-    //      below and autoplay unmuted directly. No overlay, ever.
-    //   1. Otherwise, check localStorage for "revtv:gestureGranted".
-    //   2. FIRST VISIT (no grant): autoplay muted → show the glass tap-to-unmute
-    //      overlay. User taps → unmute + store grant forever. Done.
-    //   3. ANY SUBSEQUENT AUTOMATIC LOAD (grant exists — refresh, Ctrl+R, hard
-    //      reload, logo tap, tab reopen): autoplay muted → immediately unmute
-    //      in the .then() callback. No overlay shown. Always with sound.
-    //
-    // WHY MUTED FIRST (for path 2/3, not the manual-tap path):
-    //   Browsers always allow muted autoplay. Once the video is playing (even
-    //   muted), unmuting in the same .then() does NOT count as a new autoplay
-    //   request — it is treated as a volume change on an already-playing element.
-    //   This works on Chrome, Firefox, Edge, Chrome Android, Safari (with grant) —
-    //   except that some browsers will still force-pause it on a page load they
-    //   don't consider gesture-qualified (see onPause's recovery for that case).
-    //
-    // WHY A GRANT IS NEEDED ON FIRST VISIT:
-    //   On the very first page load (ever, or in a fresh private session), there
-    //   has been no user interaction at all. Some browsers (Safari on iOS/macOS,
-    //   strict Chrome profiles) block even the "unmute in .then()" trick until a
-    //   real tap/click has occurred. The overlay provides that one tap. After it,
-    //   the grant is stored and the browser's autoplay heuristic remembers the
-    //   site as "user has interacted here".
-
-    // Check gesture grant once per channel-load (stable, no closure issues)
-    const hasGrant = (() => {
-      try { return window.localStorage.getItem("revtv:gestureGranted") === "1"; } catch { return false; }
-    })();
-
-    // Hoisted so the cleanup return() can remove it even when the channel
-    // changes before loadedmetadata fires on iOS native HLS.
-    let iosMetaCleanup: (() => void) | null = null;
-
-    const onMutedPlayStarted = () => {
-      // Same check on every platform (PC, Android, iOS): only the
-      // presence of the stored gesture grant decides whether we show
-      // the tap-to-unmute overlay or auto-unmute immediately. iOS no
-      // longer requires an extra "trusted logo-tap" flag on top of the
-      // grant — that extra condition was causing iOS to show the
-      // tap-to-unmute overlay on every plain reload/refresh even
-      // though a grant already existed, unlike Android/PC.
-      if (!hasGrant) {
-        // First-ever visit (no grant yet): stay muted, show tap-to-unmute
-        // overlay. autoplayMutedRef stays true — cleared synchronously by
-        // doUnmute().
-        setNeedsUnmute(true);
-        setUnmuteFading(false);
-      } else {
-        // Grant exists: unmute immediately now that we have a playing element.
-        // Clear the flag BEFORE writing v.muted so the sync-volume effect
-        // does not interfere (it reads the ref synchronously).
-        autoplayMutedRef.current = false;
-        setNeedsUnmute(false);
-        setUnmuteFading(false);
-        const vid = videoRef.current;
-        if (vid) {
-          const willUnmute = !mutedRef.current;
-          vid.muted  = mutedRef.current;
-          vid.volume = volumeRef.current || 1;
-          if (willUnmute) recentAutoUnmuteRef.current = Date.now();
-        }
-      }
-    };
-
-    const attemptAutoplay = (v: HTMLVideoElement, direct: boolean) => {
-      if (direct) {
-        // Fresh, genuine user gesture (the user just tapped this channel
-        // in the list) — browsers allow unmuted autoplay directly off a
-        // gesture like this, so skip the muted-first dance and the
-        // tap-to-unmute overlay entirely. Go straight to sound, respecting
-        // whatever mute/volume the user already has set (defaults to
-        // unmuted at 100% on a fresh visit).
-        autoplayMutedRef.current = false;
-        setNeedsUnmute(false);
-        v.muted = mutedRef.current;
-        v.volume = volumeRef.current || 1;
-        if (!mutedRef.current) recentAutoUnmuteRef.current = Date.now();
-        const directPromise = v.play();
-        if (!directPromise) {
-          if (!mutedRef.current) { try { window.localStorage.setItem("revtv:gestureGranted", "1"); } catch {} }
-          return;
-        }
-        directPromise.then(() => {
-          // This genuinely played with sound off a real tap — persist the
-          // grant so future reloads skip straight to "grant exists" mode
-          // too, even if the user's very first interaction ever was a
-          // channel tap rather than the tap-to-unmute overlay.
-          if (!mutedRef.current) { try { window.localStorage.setItem("revtv:gestureGranted", "1"); } catch {} }
-        }).catch(() => {
-          // Very rare safety net (e.g. an unusually strict mobile browser
-          // that doesn't treat this as gesture-qualified) — fall back to
-          // the standard muted-first dance below.
-          const vid = videoRef.current;
-          if (!vid || userPausedRef.current) return;
-          attemptAutoplay(vid, false);
-        });
-        return;
-      }
-
-      // Signal that we are in the autoplay-muted window — blocks the
-      // sync-volume useEffect from overriding v.muted during this phase.
-      autoplayMutedRef.current = true;
-      v.muted = true;
-      v.volume = volumeRef.current || 1;
-
-      const playPromise = v.play();
-      if (!playPromise) {
-        onMutedPlayStarted();
-        return;
-      }
-
-      playPromise.then(() => {
-        onMutedPlayStarted();
-      }).catch(() => {
-        // Muted play rejected — retry once after a short delay.
-        window.setTimeout(() => {
-          const vid = videoRef.current;
-          if (!vid || userPausedRef.current) return;
-          vid.muted = true;
-          vid.play().then(() => {
-            onMutedPlayStarted();
-          }).catch(() => {
-            // Both attempts failed — release the flag so sync-volume resumes.
-            autoplayMutedRef.current = false;
-          });
-        }, 400);
-      });
-    };
-
+    video.addEventListener("pause", onPause);
+    video.addEventListener("ended", onEnded);
+    video.addEventListener("error", onError);
 
     if (Hls.isSupported()) {
-      // isMobile already declared above (used by skip timer + frozen threshold)
       const hls = new Hls({
-        enableWorker:  true,
-        // Low-latency mode trims buffers to the bone to stay as close to
-        // the live edge as possible — great on a stable PC connection,
-        // but on mobile data/WiFi the slightest jitter then drains the
-        // buffer instantly and causes the loading→play→loading loop.
-        // Disable it on mobile and trade a couple of seconds of extra
-        // latency for a buffer big enough to absorb network hiccups.
-        lowLatencyMode: !isMobile,
-
-        // Prefetch the first fragment before playback starts — this cuts
-        // the initial "loading" window noticeably on all platforms since
-        // the player starts downloading media alongside the manifest parse.
-        startFragPrefetch: true,
-
-        // ── Buffer sizing ─────────────────────────────────────────────
-        // Mobile networks (cellular / flaky WiFi) need a much deeper
-        // cushion than desktop to avoid the "play 2s → rebuffer" loop.
-        // Generous ahead-buffer absorbs multi-second jitter without
-        // re-entering the loading state.
-        backBufferLength:    isMobile ? 10 :  8,   // keep behind currentTime
-        maxBufferLength:     isMobile ? 40 : 20,   // target ahead-buffer (raised for smoother play)
-        maxMaxBufferLength:  isMobile ? 90 : 30,   // hard cap (raised to allow deeper fill)
-        maxBufferSize:       isMobile ?  30_000_000 : 20_000_000, // 30 MB / 20 MB
-        maxBufferHole:       isMobile ? 1.0 : 0.5, // tolerate larger gaps before "stalled"
-
-        // ── Quality / ABR ─────────────────────────────────────────────
-        // Don't force the lowest rendition on mobile — some streams'
-        // lowest-quality renditions are themselves unstable/low-fps and
-        // cause more rebuffering than a mid-quality one would. Let HLS
-        // auto-select based on measured bandwidth instead, capped to the
-        // screen size.
-        startLevel:          -1,                 // auto on all platforms
-        capLevelToPlayerSize: true,               // never load resolution > screen size
-        // Higher initial BW estimate = picks a better quality level on
-        // first play instead of starting at the lowest rendition.
-        abrEwmaDefaultEstimate: isMobile ? 800_000 : 2_500_000,
-        // Less twitchy ABR on mobile — fewer quality switches means
-        // fewer brief re-buffer blips while switching renditions.
-        // Be conservative going up, quick going down to avoid sustained stalls.
-        abrBandWidthFactor:   isMobile ? 0.85 : 0.92,
-        abrBandWidthUpFactor: isMobile ? 0.65 : 0.70,
-        abrEwmaFastLive:  isMobile ? 2.0 : 3.0,
-        abrEwmaSlowLive:  isMobile ? 9.0 : 9.0,
-
-        // ── Stall / nudge ─────────────────────────────────────────────
-        // Larger starvation delay = wait longer for buffer to refill
-        // before bailing (reduces "loading flash" on slow connections).
-        maxStarvationDelay:  isMobile ? 10 : 4,
-        maxLoadingDelay:     isMobile ? 10 : 4,
-        // Smaller nudge = less noticeable micro-jump when bridging a gap.
-        nudgeOffset:         isMobile ? 0.08 : 0.12,
-        nudgeMaxRetry:       isMobile ? 20 : 12,
-        highBufferWatchdogPeriod: isMobile ? 4 : 3,
-
-        // ── Fragment loading ──────────────────────────────────────────
-        // More retries + shorter delays = faster recovery from hiccups.
-        fragLoadingMaxRetry:     8,
-        manifestLoadingMaxRetry: 6,
-        levelLoadingMaxRetry:    6,
-        fragLoadingRetryDelay:   300,
-        manifestLoadingRetryDelay: 300,
-        levelLoadingRetryDelay:  300,
-        fragLoadingMaxRetryTimeout: 3000,
-
-        // ── Live sync ─────────────────────────────────────────────────
-        // Stay close enough to live edge without starving the buffer.
-        // 2 segments on desktop = minimal latency with enough cushion.
-        // 3 segments on mobile = extra buffer absorbs network jitter.
-        liveSyncDurationCount:       isMobile ? 3 : 2,
-        liveMaxLatencyDurationCount: isMobile ? 10 : 6,
-        maxFragLookUpTolerance: isMobile ? 0.5 : 0.2,
-        liveDurationInfinity: false,
-
-        // Progressive loading: start playing as soon as first fragments arrive.
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 30,
+        maxBufferLength: 8,
+        maxMaxBufferLength: 30,
+        maxBufferSize: 30 * 1000 * 1000,
+        startLevel: -1,
+        capLevelToPlayerSize: true,
+        abrEwmaDefaultEstimate: 500000,
+        // Fewer retries — fail faster so we can skip to next channel
+        fragLoadingMaxRetry: 2,
+        manifestLoadingMaxRetry: 2,
+        levelLoadingMaxRetry: 2,
         progressive: true,
       });
       hlsRef.current = hls;
       hls.loadSource(channel.url);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        attemptAutoplay(video, isManualSelect);
+        // Preserve the user's current mute/volume preference across
+        // channel switches — don't force-unmute a muted player.
+        video.muted = mutedRef.current;
+        video.volume = volumeRef.current;
+        video.play().catch(() => {
+          // Autoplay blocked — fall back to muted playback and keep the
+          // mute state in sync with the actual player.
+          video.muted = true;
+          if (!mutedRef.current) setMuted(true);
+          video.play().catch(() => {});
+        });
       });
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              if (networkRetries < MAX_NETWORK_RETRIES) {
+              if (networkRetries < MAX_RETRIES) {
                 networkRetries++;
-                // Exponential back-off: 400ms, 800ms, 1.6s, 3.2s, 6.4s
-                window.setTimeout(() => hls.startLoad(), 400 * Math.pow(2, networkRetries - 1));
+                hls.startLoad();
               } else {
+                // Network failed after retries — skip to next channel
                 window.clearTimeout(skipTimer);
                 setLoading(false);
                 if (channel) onStreamError?.(channel);
               }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              if (mediaRetries < MAX_MEDIA_RETRIES) {
+              if (mediaRetries < MAX_RETRIES) {
                 mediaRetries++;
-                if (mediaRetries === 1) {
-                  hls.recoverMediaError();
-                } else {
-                  // Second attempt: full swap — detach then re-attach media
-                  hls.swapAudioCodec();
-                  hls.recoverMediaError();
-                }
+                hls.recoverMediaError();
               } else {
                 window.clearTimeout(skipTimer);
                 setLoading(false);
@@ -781,53 +301,18 @@ export default function Player({
               setLoading(false);
               if (channel) onStreamError?.(channel);
           }
-        } else {
-          // Non-fatal: buffer stall nudge — HLS will nudge internally,
-          // but we also schedule a live-edge snap for safety
-          if (data.details === "bufferStalledError" || data.details === "bufferNudgeOnStall") {
-            scheduleRecover(500, false);
-          }
         }
       });
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       // Native HLS (Safari/iOS)
-      //
-      // iOS Safari behaviour:
-      //   • Muted autoplay is always allowed (even without a gesture).
-      //   • Unmuted autoplay requires a prior user gesture — stored as
-      //     revtv:gestureGranted in localStorage (survives Ctrl+R / reload).
-      //
-      // Strategy — same flow as Android/PC via attemptAutoplay:
-      //   MANUAL CHANNEL TAP : fresh gesture → unmuted directly, no overlay.
-      //   FIRST VISIT        : load muted → overlay → user tap → sound + grant stored.
-      //   ANY OTHER RELOAD   : grant exists → load muted → auto-unmute in .then().
-      //   (Ctrl+R, logo tap, swipe-refresh — all identical.)
-      //
-      // Why wait for loadedmetadata:
-      //   Calling play() immediately after .src= on iOS can return a promise
-      //   that resolves before the media engine is ready, causing muted state
-      //   to be silently dropped. loadedmetadata guarantees the element is
-      //   ready to accept play() reliably.
-      //   Fallback: if loadedmetadata hasn't fired in 4 s, call play() anyway
-      //   (some streams are slow to deliver initial metadata on iOS).
       video.src = channel.url;
-      video.load();
-      let iosMetaFired = false;
-      const onMeta = () => {
-        if (iosMetaFired) return;
-        iosMetaFired = true;
-        video.removeEventListener("loadedmetadata", onMeta);
-        iosMetaCleanup = null;
-        attemptAutoplay(video, isManualSelect);
-      };
-      const iosMetaFallback = window.setTimeout(() => {
-        if (!iosMetaFired) onMeta();
-      }, 4000);
-      iosMetaCleanup = () => {
-        video.removeEventListener("loadedmetadata", onMeta);
-        window.clearTimeout(iosMetaFallback);
-      };
-      video.addEventListener("loadedmetadata", onMeta);
+      video.muted = mutedRef.current;
+      video.volume = volumeRef.current;
+      video.play().catch(() => {
+        video.muted = true;
+        if (!mutedRef.current) setMuted(true);
+        video.play().catch(() => {});
+      });
     } else {
       window.clearTimeout(skipTimer);
       setError("HLS not supported on this browser.");
@@ -836,29 +321,19 @@ export default function Player({
 
     return () => {
       window.clearTimeout(skipTimer);
-      window.clearTimeout(loadingTimer);
-      window.clearTimeout(recoverTimer);
-      window.clearTimeout(waitingTimer);
-      window.clearInterval(frozenWatchdog);
-      // Clean up iOS loadedmetadata listener if the channel changed before
-      // metadata arrived (prevents attemptAutoplay firing on the old channel).
-      iosMetaCleanup?.();
-      // Release the autoplay-muted guard so the sync-volume effect
-      // is not stuck blocked on the next channel load.
-      autoplayMutedRef.current = false;
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("stalled", onStalled);
-      video.removeEventListener("pause",   onPause);
-      video.removeEventListener("ended",   onEnded);
-      video.removeEventListener("error",   onError);
+      video.removeEventListener("pause", onPause);
+      video.removeEventListener("ended", onEnded);
+      video.removeEventListener("error", onError);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
-      // Keep video.src intact so the last frame stays visible during
-      // the channel handoff — prevents the black-screen flash.
       video.pause();
+      video.removeAttribute("src");
+      video.load();
     };
   }, [channel?.id, channel?.url]);
 
@@ -866,44 +341,9 @@ export default function Player({
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    // While autoplay-muted is active (overlay showing or grant-unmute
-    // in-flight) do NOT override v.muted — the HLS effect and doUnmute
-    // own the muted state during that window.
-    if (autoplayMutedRef.current) {
-      v.volume = volume;
-      return;
-    }
     v.muted = muted;
     v.volume = volume;
   }, [volume, muted]);
-
-  // ---- session activity tracking ----
-  // Any interaction (click/tap/key/scroll) marks the session as active,
-  // resetting the 10-minute inactivity clock used by utils/persist.ts.
-  // Throttled so we're not writing to sessionStorage on every pixel of
-  // scroll — once every few seconds is plenty.
-  useEffect(() => {
-    let lastMark = 0;
-    const onActivity = () => {
-      const now = Date.now();
-      if (now - lastMark < 5000) return;
-      lastMark = now;
-      markActivity();
-    };
-    const opts = { passive: true } as AddEventListenerOptions;
-    window.addEventListener("pointerdown", onActivity, opts);
-    window.addEventListener("keydown", onActivity);
-    window.addEventListener("touchstart", onActivity, opts);
-    window.addEventListener("wheel", onActivity, opts);
-    // Record initial activity for this load too.
-    onActivity();
-    return () => {
-      window.removeEventListener("pointerdown", onActivity);
-      window.removeEventListener("keydown", onActivity);
-      window.removeEventListener("touchstart", onActivity);
-      window.removeEventListener("wheel", onActivity);
-    };
-  }, []);
 
   // apply brightness as video filter
   useEffect(() => {
@@ -1037,36 +477,13 @@ export default function Player({
   // Tracks the last time we snapped to live edge — prevents spamming seeks.
   const lastLiveSnapRef = useRef<number>(0);
 
-  // Called by the ● LIVE button — always jumps to the absolute live edge
-  // with no debounce. Seeks to live edge and ALWAYS resumes — never pauses.
-  const jumpToLiveEdge = useCallback(() => {
-    const v = videoRef.current;
-    const hls = hlsRef.current;
-    if (!v) return;
-    let liveEdge: number | null = null;
-    if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
-      liveEdge = hls.liveSyncPosition;
-    } else if (v.seekable.length > 0) {
-      const end = v.seekable.end(v.seekable.length - 1);
-      if (isFinite(end)) liveEdge = end;
-    }
-    if (liveEdge != null) {
-      lastLiveSnapRef.current = Date.now();
-      v.currentTime = liveEdge;
-    }
-    // Always ensure playing — seeking must never pause the stream.
-    if (v.paused) {
-      userPausedRef.current = false;
-      v.play().catch(() => {});
-    }
-  }, []);
-
   const syncToLiveEdge = useCallback(() => {
     const v = videoRef.current;
     const hls = hlsRef.current;
     if (!v) return;
     const now = Date.now();
-    if (now - lastLiveSnapRef.current < 3_000) return; // debounce 3s
+    // Debounce: don't snap more than once every 8 seconds
+    if (now - lastLiveSnapRef.current < 8_000) return;
     let liveEdge: number | null = null;
     if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
       liveEdge = hls.liveSyncPosition;
@@ -1075,20 +492,22 @@ export default function Player({
       if (isFinite(end)) liveEdge = end;
     }
     if (liveEdge == null) return;
-    if (liveEdge - v.currentTime > 3) { // snap if >3s behind live
+    if (liveEdge - v.currentTime > 10) {
       lastLiveSnapRef.current = now;
       v.currentTime = liveEdge;
     }
   }, []);
 
-  // Live-edge keeper: runs every 5s, snaps if >3s behind live edge.
+  // Live-edge keeper: snaps forward if 10s+ behind. Runs every 30s (no spam).
+  // Also fires when user resumes after a manual pause via syncToLiveEdge() in togglePlay.
   useEffect(() => {
     const id = window.setInterval(() => {
       const v = videoRef.current;
-      if (!v || v.paused || v.seeking || userPausedRef.current) return;
+      if (!v || v.paused || v.seeking) return;
       const hls = hlsRef.current;
       const now = Date.now();
-      if (now - lastLiveSnapRef.current < 3_000) return;
+      // Debounce: skip if we already snapped recently
+      if (now - lastLiveSnapRef.current < 8_000) return;
       let liveEdge: number | null = null;
       if (hls && hls.liveSyncPosition != null && isFinite(hls.liveSyncPosition)) {
         liveEdge = hls.liveSyncPosition;
@@ -1097,11 +516,11 @@ export default function Player({
         if (isFinite(end)) liveEdge = end;
       }
       if (liveEdge == null) return;
-      if (liveEdge - v.currentTime > 3) {
+      if (liveEdge - v.currentTime > 10) {
         lastLiveSnapRef.current = now;
         v.currentTime = liveEdge;
       }
-    }, 5_000);
+    }, 30_000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -1110,67 +529,29 @@ export default function Player({
     if (!v) return;
     if (v.paused) {
       userPausedRef.current = false;
-      setUserPaused(false);
       // On resume: jump to live edge so viewer gets the latest stream
       syncToLiveEdge();
       v.play().catch(() => {});
     } else {
-      // Set the ref BEFORE calling pause() — the 'pause' event fires
-      // synchronously inside pause() on some Android browsers, so the
-      // ref must already be true when onPause checks it.
       userPausedRef.current = true;
-      setUserPaused(true);
       v.pause();
     }
     armHide();
   }, [armHide, syncToLiveEdge]);
 
   const toggleMute = useCallback(() => {
-    const v = videoRef.current;
-    const newMuted = !mutedRef.current;
-    // Update the DOM immediately — don't wait for the React re-render cycle.
-    // This prevents the 1-frame window where the button shows one state but
-    // the video element is still in the opposite state (the "stuck icon" bug).
-    if (v) {
-      v.muted = newMuted;
-      if (!newMuted) v.volume = volumeRef.current || 1;
-    }
-    mutedRef.current = newMuted;
-    setMuted(newMuted);
-    // Also hide the overlay immediately if user taps mute while it's showing
-    // (shouldn't normally happen, but belt-and-suspenders)
-    if (!newMuted) dismissUnmuteOverlay(true);
+    setMuted((m) => !m);
     armHide();
   }, [armHide]);
 
-
-
   const changeVolume = useCallback(
     (val: number) => {
-      const newVol = Math.round(Math.max(0, Math.min(1, val)) * 100) / 100;
+      const newVol = Math.max(0, Math.min(1, val));
       setVolume(newVol);
       if (newVol > 0 && muted) setMuted(false);
     },
     [muted]
   );
-
-  // PC: hovering the speaker icon and scrolling the mouse wheel acts
-  // as a volume +/- control. Attached as a native (non-passive)
-  // listener so preventDefault reliably stops page scroll.
-  useEffect(() => {
-    const el = volumeWheelRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const step = 0.05;
-      const current = muted ? 0 : volume;
-      const next = Math.round(Math.max(0, Math.min(1, current + (e.deltaY < 0 ? step : -step))) * 100) / 100;
-      setVolume(next);
-      if (next > 0 && muted) setMuted(false);
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, [volume, muted]);
 
   const toggleFullscreen = useCallback(async () => {
     const video = videoRef.current as HTMLVideoElement | null;
@@ -1504,57 +885,9 @@ export default function Player({
     return () => document.removeEventListener("keydown", onKey);
   }, [channel, togglePlay, toggleMute, toggleFullscreen]);
 
-  // Tap-to-unmute: called when user taps the glass overlay (ALL platforms).
-  // Syncs DOM immediately, stores grant, triggers fade-out animation on overlay.
-  const doUnmute = useCallback(() => {
-    // Clear the autoplay-muted guard BEFORE writing v.muted so the
-    // sync-volume effect (if it fires) does not immediately re-mute.
-    autoplayMutedRef.current = false;
-    recentAutoUnmuteRef.current = 0;
-    const v = videoRef.current;
-    if (v) {
-      v.muted = false;
-      v.volume = volumeRef.current || 1;
-      if (v.paused) v.play().catch(() => {});
-    }
-    mutedRef.current = false;
-    setMuted(false);
-    // Fade out the overlay quickly (180ms) then remove it from DOM
-    dismissUnmuteOverlay(false);
-    try { window.localStorage.setItem("revtv:gestureGranted", "1"); } catch {}
-
-    // This tap is the very first genuine, trusted click the browser has
-    // seen on this site — the only way to satisfy a browser's "navigated
-    // by a user gesture" autoplay exception, since a script can never fake
-    // a real click. Immediately follow it with ONE same-URL navigation,
-    // exactly like a logo tap. This gives the browser a real "played with
-    // sound right after a gesture-driven navigation" data point for this
-    // origin, which is what lets plain reloads (Ctrl+R, the reload button,
-    // swipe-to-refresh) start autoplaying with sound directly afterwards —
-    // same as a manual logo tap always could. Runs once ever per browser.
-    //
-    // SKIPPED on iOS: iOS Safari's autoplay rules work differently —
-    // the primedOnce navigation causes the page to reload and then
-    // immediately show "Tap to Unmute" again (glitchy loop). On iOS we
-    // simply store the grant and let the user tap to unmute on each hard
-    // reload (iOS always requires a gesture for unmuted autoplay anyway).
-    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-      (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
-    if (!isIOS) {
-      try {
-        if (window.localStorage.getItem("revtv:primedOnce") !== "1") {
-          window.localStorage.setItem("revtv:primedOnce", "1");
-          window.location.href = window.location.origin + window.location.pathname;
-        }
-      } catch {}
-    }
-  }, [dismissUnmuteOverlay]);
-
   const onVideoClick = (e: ReactMouseEvent) => {
     if (isSwiping.current) return;
     e.stopPropagation();
-    // If iOS needs a tap to start, any tap on the player triggers it
-    if (needsUnmute) { doUnmute(); return; }
     togglePlay();
   };
 
@@ -1581,12 +914,7 @@ export default function Player({
         "mx-auto rounded-2xl border border-white/10 aspect-video max-h-[80vh] shadow-2xl shadow-violet-900/10"
   );
   const containerStyle: CSSProperties = {
-    // In fullscreen on Android, use pure black so the area behind the
-    // video letterbox/pillarbox borders is clean black, not purple gradient.
-    // On iOS and inline (non-fullscreen), keep the branded dark purple gradient.
-    background: presentationFullscreen
-      ? "#000000"
-      : "linear-gradient(160deg,#0d0520 0%,#060112 40%,#09021a 70%,#050010 100%)",
+    background: "linear-gradient(160deg,#0d0520 0%,#060112 40%,#09021a 70%,#050010 100%)",
     touchAction: presentationFullscreen ? "none" : "manipulation",
   };
 
@@ -1662,56 +990,15 @@ export default function Player({
         </div>
       )}
 
-      {/* Loading — fades in so channel switches never flash dark */}
+      {/* Loading */}
       {loading && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40"
-          style={{ animation: "fadeInOverlay 200ms ease forwards" }}>
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40 ">
           <div className="flex flex-col items-center gap-3">
             <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/15 border-t-white/80" />
             <span className="text-xs font-medium uppercase tracking-widest text-white/60">
               Loading
             </span>
           </div>
-        </div>
-      )}
-
-      {/* Paused overlay — light glass blur over the still-visible frame,
-          with an iOS-style frosted play button that scales/fades in
-          smoothly. Clicking anywhere resumes playback. Hidden while
-          loading/transitioning so it doesn't fight those overlays. */}
-      {channel && userPaused && !loading && !error && !fsTransitioning && !needsUnmute && (
-        <div
-          className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 backdrop-blur-[2px]"
-          style={{ animation: "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both" }}
-          onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-          onDoubleClick={onVideoDoubleClick}
-        >
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-            aria-label="Play"
-            data-player-control
-            className="group flex h-16 w-16 items-center justify-center rounded-full border text-white transition-[transform,background-color] duration-300 ease-out hover:scale-[1.06] active:scale-95 sm:h-[72px] sm:w-[72px]"
-            style={{
-              animation: "iosGlassPop 480ms cubic-bezier(.22,1,.36,1) both",
-              background: "rgba(255,255,255,0.14)",
-              borderColor: "rgba(255,255,255,0.28)",
-              backdropFilter: "blur(24px) saturate(180%)",
-              WebkitBackdropFilter: "blur(24px) saturate(180%)",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.35)",
-            }}
-          >
-            <svg
-              width="26"
-              height="26"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className="ml-1 transition-transform duration-300 ease-out group-hover:scale-110 sm:h-7 sm:w-7"
-              style={{ animation: "iosIconFade 420ms cubic-bezier(.22,1,.36,1) 60ms both" }}
-            >
-              <polygon points="5 3 19 12 5 21 5 3" />
-            </svg>
-          </button>
         </div>
       )}
 
@@ -1873,65 +1160,7 @@ export default function Player({
         </div>
       )}
 
-      {/* Tap-to-unmute overlay — ALL platforms (PC, Android, iOS).
-          Only shown on first-ever visit. Blur + glass button, same style
-          as the paused-play overlay. Tap anywhere to unmute + store grant.
-          On tap: quick fade-out animation (180ms) then removed from DOM.
-          On channel switch (manual): dismissed instantly, no animation. */}
-      {needsUnmute && (
-        <div
-          className="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center"
-          onClick={(e) => { e.stopPropagation(); doUnmute(); }}
-          style={{
-            cursor: "pointer",
-            /* iOS-glass backdrop: very light frost so video shows through clearly */
-            backdropFilter: "blur(4px) saturate(130%) brightness(1.08)",
-            WebkitBackdropFilter: "blur(4px) saturate(130%) brightness(1.08)",
-            background: "rgba(255,255,255,0.06)",
-            animation: unmuteFading
-              ? "unmuteFadeOut 180ms cubic-bezier(.4,0,.2,1) both"
-              : "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both",
-          }}
-        >
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); doUnmute(); }}
-              aria-label="Tap to unmute"
-              data-player-control
-              className="flex h-16 w-16 items-center justify-center rounded-full border text-white sm:h-[72px] sm:w-[72px]"
-              style={{
-                animation: "iosGlassPop 480ms cubic-bezier(.22,1,.36,1) both",
-                background: "rgba(255,255,255,0.22)",
-                borderColor: "rgba(255,255,255,0.45)",
-                backdropFilter: "blur(20px) saturate(180%) brightness(1.15)",
-                WebkitBackdropFilter: "blur(20px) saturate(180%) brightness(1.15)",
-                boxShadow: "0 4px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.55)",
-              }}
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-                stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                style={{ animation: "iosIconFade 420ms cubic-bezier(.22,1,.36,1) 60ms both", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.4))" }}
-              >
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                <line x1="23" y1="9" x2="17" y2="15" />
-                <line x1="17" y1="9" x2="23" y2="15" />
-              </svg>
-            </button>
-            <span style={{
-              fontSize: "12px",
-              fontWeight: 600,
-              letterSpacing: "0.07em",
-              color: "rgba(255,255,255,0.92)",
-              fontFamily: "'Inter', system-ui, sans-serif",
-              textShadow: "0 1px 3px rgba(0,0,0,0.5)",
-              animation: "iosIconFade 420ms cubic-bezier(.22,1,.36,1) 120ms both",
-            }}>Tap to Unmute</span>
-          </div>
-        </div>
-      )}
-
-            {/* Top overlay (channel info) */}
+      {/* Top overlay (channel info) */}
       <div
         className={cn(
           "pointer-events-none absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/80 via-black/40 to-transparent p-4 transition-all duration-500 sm:p-5",
@@ -1944,12 +1173,7 @@ export default function Player({
           <div className="min-w-0 flex-1">
             {channel && (
               <>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); jumpToLiveEdge(); }}
-                  title="Jump to live edge"
-                  className="pointer-events-auto mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 transition-all duration-200 hover:border-red-500/40 hover:bg-red-500/10 active:scale-95 cursor-pointer"
-                >
+                <div className="mb-1.5 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 ">
                   <span className="relative flex h-1.5 w-1.5">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
                     <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-500" />
@@ -1957,7 +1181,7 @@ export default function Player({
                   <span className="text-[10px] font-semibold uppercase tracking-widest text-white/80">
                     Live
                   </span>
-                </button>
+                </div>
                 <h2 className="truncate text-sm font-semibold text-white sm:text-lg">
                   {channel.name}
                 </h2>
@@ -1970,7 +1194,29 @@ export default function Player({
         </div>
       </div>
 
-
+      {/* Center play/pause on pause - always perfectly centered on first paint */}
+      {!playing && !loading && channel && (
+        <div
+          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
+        >
+          <button
+            onClick={togglePlay}
+            className="pointer-events-auto flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white  transition-transform duration-300 hover:scale-110 hover:bg-white/20 active:scale-95 sm:h-20 sm:w-20"
+            style={{ animation: "playPop 280ms cubic-bezier(.34,1.56,.64,1) both" }}
+            aria-label="Play"
+          >
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="ml-1"
+            >
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Bottom controls */}
       <div
@@ -2022,13 +1268,12 @@ export default function Player({
             </svg>
           </button>
 
-          {/* Volume — hover + scroll wheel to adjust on PC. Hidden when tap-to-unmute overlay is active */}
-          <div ref={volumeWheelRef} className="group/vol flex items-center gap-1.5">
+          {/* Volume */}
+          <div className="group/vol flex items-center gap-1.5">
             <button
               onClick={toggleMute}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white  transition-all duration-300 hover:scale-110 hover:border-white/30 hover:bg-white/15 active:scale-95 sm:h-11 sm:w-11"
               aria-label={muted ? "Unmute" : "Mute"}
-              title="Scroll to adjust volume"
             >
               {muted || volume === 0 ? (
                 <svg
@@ -2194,7 +1439,7 @@ export default function Player({
           </div>
         </div>
 
-        {/* lucide lucide-zap + Revenger pill */}
+        {/* lucide lucide-zap + Revenger pill | Clock pill (ZAP style, white) */}
         <div className="mt-2.5 flex items-center gap-2 sm:mt-3">
           {/* Zap + Revenger */}
           <div
@@ -2237,18 +1482,48 @@ export default function Player({
               Revenger
             </span>
           </div>
+
+          {/* Clock pill — ZAP REVENGER style, white, beside it */}
+          <div
+            className="flex items-center gap-1.5 rounded-full border px-2 py-0.5"
+            style={{
+              borderColor: "rgba(255,255,255,0.22)",
+              backgroundColor: "rgba(255,255,255,0.08)",
+            }}
+          >
+            {/* White dot — same size/position as ZAP dot */}
+            <span className="relative inline-flex h-3 w-3 items-center justify-center">
+              <span
+                className="absolute h-1 w-1 rounded-full"
+                style={{
+                  backgroundColor: "#ffffff",
+                  top: "50%",
+                  left: "50%",
+                  transform: "translate(-50%, -50%)",
+                  boxShadow: "0 0 4px rgba(255,255,255,0.9)",
+                  animation: "clockDotPulse 1.4s ease-in-out infinite",
+                }}
+              />
+            </span>
+            {/* HH:MM:SS */}
+            <span
+              className="font-semibold tabular-nums"
+              style={{ fontSize: "10px", color: "#ffffff", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}
+            >{bdClock.time}</span>
+            {/* AM/PM */}
+            <span
+              className="font-semibold uppercase tracking-widest"
+              style={{ fontSize: "10px", color: "rgba(255,255,255,0.75)", fontFamily: "'Space Grotesk','Space Grotesk Fallback',sans-serif", lineHeight: 1 }}
+            >{bdClock.ampm}</span>
+          </div>
         </div>
       </div>
 
       <style>{`
-        @keyframes fadeInOverlay {
-          from { opacity: 0; }
-          to   { opacity: 1; }
-        }
-        /* Quick fade-out for the tap-to-unmute overlay when tapped */
-        @keyframes unmuteFadeOut {
-          0%   { opacity: 1; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
-          100% { opacity: 0; backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); }
+        @keyframes playPop {
+          0% { opacity: 0; transform: scale(0.7); }
+          60% { opacity: 1; transform: scale(1.08); }
+          100% { opacity: 1; transform: scale(1); }
         }
         /* Zap dot pulse — the green dot overlaid on the zap icon
            pulses with a soft scale + opacity flicker. */
@@ -2256,25 +1531,12 @@ export default function Player({
           0%, 100% { opacity: 0.4; transform: translate(-50%, -50%) scale(0.7); }
           50%      { opacity: 1;   transform: translate(-50%, -50%) scale(1.3); }
         }
+        @keyframes clockDotPulse {
+          0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(0.75); }
+          50%      { opacity: 1;   transform: translate(-50%, -50%) scale(1.35); }
+        }
         @keyframes gesturePop {
           0% { opacity: 0; transform: scale(0.92); }
-          100% { opacity: 1; transform: scale(1); }
-        }
-        /* iOS-glass style overlay fade — backdrop blur eases in smoothly. */
-        @keyframes iosOverlayFade {
-          0%   { opacity: 0; backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); }
-          100% { opacity: 1; }
-        }
-        /* iOS-glass style pop for the pause/play button — gentle
-           scale + blur-in with a soft overshoot, no harsh bounce. */
-        @keyframes iosGlassPop {
-          0%   { opacity: 0; transform: scale(0.82); filter: blur(6px); }
-          70%  { opacity: 1; transform: scale(1.05); filter: blur(0px); }
-          100% { opacity: 1; transform: scale(1); filter: blur(0px); }
-        }
-        /* Icon fades/sharpens in slightly after the glass shell. */
-        @keyframes iosIconFade {
-          0%   { opacity: 0; transform: scale(0.7); }
           100% { opacity: 1; transform: scale(1); }
         }
       `}</style>
