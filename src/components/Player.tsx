@@ -182,6 +182,10 @@ export default function Player({
   // From then on (refresh, Ctrl+R, hard reload, channel change, tab reopen)
   // the player always autoplays with sound. Overlay never shown again.
   const [needsUnmute, setNeedsUnmute] = useState(false);
+  // Ref mirror so the sync-volume effect can read the latest value
+  // synchronously without a stale closure (state updates are async).
+  const needsUnmuteRef = useRef(false);
+  useEffect(() => { needsUnmuteRef.current = needsUnmute; }, [needsUnmute]);
   const statusTimerRef = useRef<number | null>(null);
 
   const showStatus = useCallback((msg: string) => {
@@ -457,6 +461,10 @@ export default function Player({
       try { return window.localStorage.getItem("revtv:gestureGranted") === "1"; } catch { return false; }
     })();
 
+    // Hoisted so the cleanup return() can remove it even when the channel
+    // changes before loadedmetadata fires on iOS native HLS.
+    let iosMetaCleanup: (() => void) | null = null;
+
     const attemptAutoplay = (v: HTMLVideoElement) => {
       // ALWAYS start muted — guaranteed autoplay on every platform/browser.
       // We NEVER touch v.muted after this point inside attemptAutoplay.
@@ -644,8 +652,19 @@ export default function Player({
       });
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       // Native HLS (Safari/iOS)
+      // Wait for loadedmetadata before calling play() so the promise is
+      // genuine — calling play() immediately after setting src on iOS can
+      // resolve/reject before any media data arrives, causing the
+      // tap-to-unmute overlay to either not appear or flicker away.
+      const onMeta = () => {
+        video.removeEventListener("loadedmetadata", onMeta);
+        iosMetaCleanup = null;
+        attemptAutoplay(video);
+      };
+      iosMetaCleanup = () => video.removeEventListener("loadedmetadata", onMeta);
+      video.addEventListener("loadedmetadata", onMeta);
       video.src = channel.url;
-      attemptAutoplay(video);
+      video.load();
     } else {
       window.clearTimeout(skipTimer);
       setError("HLS not supported on this browser.");
@@ -658,6 +677,9 @@ export default function Player({
       window.clearTimeout(recoverTimer);
       window.clearTimeout(waitingTimer);
       window.clearInterval(frozenWatchdog);
+      // Clean up iOS loadedmetadata listener if the channel changed before
+      // metadata arrived (prevents attemptAutoplay firing on the old channel).
+      iosMetaCleanup?.();
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("stalled", onStalled);
@@ -678,6 +700,14 @@ export default function Player({
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
+    // While the tap-to-unmute overlay is active the video MUST stay muted
+    // (iOS blocks unmuted autoplay until a real user gesture). Overriding
+    // v.muted here before the tap would race with attemptAutoplay and
+    // leave the video silently muted with the overlay never dismissing.
+    if (needsUnmuteRef.current) {
+      v.volume = volume;
+      return;
+    }
     v.muted = muted;
     v.volume = volume;
   }, [volume, muted]);
