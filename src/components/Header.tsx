@@ -7,6 +7,10 @@ export default function Header() {
     // Auto-refresh (primedOnce navigation from tap-to-unmute) does NOT
     // clear the seed, so the background stays the same during that reload.
     try { localStorage.removeItem("revtv:bgSeed"); } catch {}
+    // On iOS: set a flag so the next page load knows this navigation was
+    // triggered by a real user tap (trusted gesture), allowing the player
+    // to skip the "tap to unmute" overlay and autoplay with sound directly.
+    try { sessionStorage.setItem("revtv:logoTapNav", "1"); } catch {}
     window.location.href = window.location.origin + window.location.pathname;
   };
 

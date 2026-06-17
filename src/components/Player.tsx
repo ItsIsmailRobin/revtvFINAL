@@ -563,9 +563,23 @@ export default function Player({
     let iosMetaCleanup: (() => void) | null = null;
 
     const onMutedPlayStarted = () => {
-      if (!hasGrant || isIOS) {
-        // First-ever visit OR iOS (iOS requires a real tap to unmute on
-        // every page load — it does not allow the auto-unmute trick):
+      // On iOS, check if this page load came from a trusted logo-tap gesture.
+      // The logo tap sets "revtv:logoTapNav" in sessionStorage just before
+      // navigating. We consume (delete) the flag immediately so it only
+      // applies once — for this one load only.
+      let iosLogoTapNav = false;
+      if (isIOS) {
+        try {
+          iosLogoTapNav = sessionStorage.getItem("revtv:logoTapNav") === "1";
+          if (iosLogoTapNav) sessionStorage.removeItem("revtv:logoTapNav");
+        } catch {}
+      }
+
+      if (!hasGrant || (isIOS && !iosLogoTapNav)) {
+        // First-ever visit OR iOS without a trusted logo-tap gesture
+        // (iOS requires a real tap to unmute on every page load —
+        // it does not allow the auto-unmute trick unless this load
+        // was triggered by a direct user tap like the logo):
         // stay muted, show tap-to-unmute overlay.
         // autoplayMutedRef stays true — cleared synchronously by doUnmute().
         setNeedsUnmute(true);
@@ -665,6 +679,11 @@ export default function Player({
         // latency for a buffer big enough to absorb network hiccups.
         lowLatencyMode: !isMobile,
 
+        // Prefetch the first fragment before playback starts — this cuts
+        // the initial "loading" window noticeably on all platforms since
+        // the player starts downloading media alongside the manifest parse.
+        startFragPrefetch: true,
+
         // ── Buffer sizing ─────────────────────────────────────────────
         // Mobile networks (cellular / flaky WiFi) need a much deeper
         // cushion than desktop to avoid the "play 2s → rebuffer" loop.
@@ -684,12 +703,14 @@ export default function Player({
         // screen size.
         startLevel:          -1,                 // auto on all platforms
         capLevelToPlayerSize: true,               // never load resolution > screen size
-        abrEwmaDefaultEstimate: isMobile ? 500_000 : 1_500_000, // higher initial BW guess = faster start quality
+        // Higher initial BW estimate = picks a better quality level on
+        // first play instead of starting at the lowest rendition.
+        abrEwmaDefaultEstimate: isMobile ? 800_000 : 2_500_000,
         // Less twitchy ABR on mobile — fewer quality switches means
         // fewer brief re-buffer blips while switching renditions.
         // Be conservative going up, quick going down to avoid sustained stalls.
-        abrBandWidthFactor:   isMobile ? 0.85 : 0.90,
-        abrBandWidthUpFactor: isMobile ? 0.65 : 0.65,
+        abrBandWidthFactor:   isMobile ? 0.85 : 0.92,
+        abrBandWidthUpFactor: isMobile ? 0.65 : 0.70,
         abrEwmaFastLive:  isMobile ? 2.0 : 3.0,
         abrEwmaSlowLive:  isMobile ? 9.0 : 9.0,
 
@@ -699,7 +720,7 @@ export default function Player({
         maxStarvationDelay:  isMobile ? 10 : 4,
         maxLoadingDelay:     isMobile ? 10 : 4,
         // Smaller nudge = less noticeable micro-jump when bridging a gap.
-        nudgeOffset:         isMobile ? 0.08 : 0.15,
+        nudgeOffset:         isMobile ? 0.08 : 0.12,
         nudgeMaxRetry:       isMobile ? 20 : 12,
         highBufferWatchdogPeriod: isMobile ? 4 : 3,
 
@@ -715,6 +736,8 @@ export default function Player({
 
         // ── Live sync ─────────────────────────────────────────────────
         // Stay close enough to live edge without starving the buffer.
+        // 2 segments on desktop = minimal latency with enough cushion.
+        // 3 segments on mobile = extra buffer absorbs network jitter.
         liveSyncDurationCount:       isMobile ? 3 : 2,
         liveMaxLatencyDurationCount: isMobile ? 10 : 6,
         maxFragLookUpTolerance: isMobile ? 0.5 : 0.2,
