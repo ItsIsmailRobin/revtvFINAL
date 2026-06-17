@@ -11,7 +11,7 @@ export function FooterCredits() {
   const TEXT: React.CSSProperties = { fontSize: "11.5px", textTransform: "uppercase", letterSpacing: "0.18em", fontWeight: 500, transition: "color 0.3s, text-shadow 0.3s" };
 
   return (
-    <div className="flex flex-col items-center gap-1 py-6">
+    <div className="flex flex-col items-center gap-1" style={{ paddingTop: "24px", paddingBottom: "24px" }}>
 
       {/* Line 1: Created By [⚡ Revenger] */}
       <div

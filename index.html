@@ -176,39 +176,74 @@
       ]
     }
     </script>
-  </head>
-  <body>
-    <div id="root"></div>
 
     <!--
-      Refresh key interceptor — converts Ctrl+R / F5 / Cmd+R into a soft
-      same-URL navigation (identical to what the logo click does).
-      This keeps the browser audio context alive so autoplay with sound
-      continues working after a "refresh", exactly like the logo tap does.
-      Without this, a true page reload destroys the audio context and
-      browsers block unmuted autoplay again.
+      RELOAD INTERCEPTOR — converts ALL reload gestures into soft same-URL
+      navigation (identical to logo tap), so autoplay-with-sound works.
+
+      TWO strategies, one for each reload type:
+
+      1. KEYBOARD (Ctrl+R / F5 / Cmd+R):
+         Intercepted in keydown capture phase — preventDefault stops the
+         browser reload, then location.href does the soft navigation instead.
+
+      2. RELOAD BUTTON + SWIPE-TO-REFRESH (Android/iOS):
+         beforeunload cannot cancel these (browsers block it intentionally).
+         Instead: on the NEW page load, check if it was a reload via
+         performance.navigation.type or PerformanceNavigationTiming.
+         If it was a reload, immediately soft-navigate to the same URL —
+         which re-runs the page as a navigation (not a reload), preserving
+         the audio context exactly like a logo tap does.
+         A sessionStorage flag prevents the redirect from looping.
     -->
     <script>
       (function () {
-        document.addEventListener("keydown", function (e) {
-          // F5 — plain refresh (all platforms)
-          var isF5 = e.key === "F5";
-          // Ctrl+R — Windows/Linux
-          var isCtrlR = e.ctrlKey && !e.metaKey && (e.key === "r" || e.key === "R");
-          // Cmd+R — macOS
-          var isCmdR = e.metaKey && !e.ctrlKey && (e.key === "r" || e.key === "R");
-
+        // ── Strategy 1: Keyboard reloads ──────────────────────────────
+        document.addEventListener('keydown', function (e) {
+          var isF5    = e.key === 'F5';
+          var isCtrlR = e.ctrlKey && !e.metaKey && (e.key === 'r' || e.key === 'R');
+          var isCmdR  = e.metaKey && !e.ctrlKey && (e.key === 'r' || e.key === 'R');
           if (isF5 || isCtrlR || isCmdR) {
             e.preventDefault();
             e.stopImmediatePropagation();
-            // Navigate to the same URL — identical to logo click.
-            // The browser treats this as a same-origin navigation, not a
-            // true reload, so the audio context stays unlocked.
-            window.location.href = window.location.origin + window.location.pathname + window.location.search + window.location.hash;
+            window.location.href = window.location.href;
           }
-        }, true); // capture phase — intercepts before anything else sees the key
+        }, true);
+
+        // ── Strategy 2: Reload button / swipe-to-refresh ──────────────
+        // Detect if this page load was caused by a reload.
+        // Use a sessionStorage flag to prevent redirect loops.
+        var LOOP_KEY = '_revtv_reload_nav';
+        if (sessionStorage.getItem(LOOP_KEY)) {
+          // This load was our own redirect — clear flag and continue normally.
+          sessionStorage.removeItem(LOOP_KEY);
+        } else {
+          // Check navigation type
+          var isReload = false;
+          try {
+            // Modern API (Chrome 57+, Firefox 58+, Safari 15.4+)
+            var nav = performance.getEntriesByType('navigation')[0];
+            if (nav && nav.type === 'reload') isReload = true;
+          } catch (e1) {}
+          if (!isReload) {
+            try {
+              // Legacy API fallback
+              if (performance.navigation && performance.navigation.type === 1) isReload = true;
+            } catch (e2) {}
+          }
+
+          if (isReload) {
+            // Was a reload (button or swipe). Set flag then soft-navigate.
+            // The flag stops the next load (our redirect) from looping.
+            sessionStorage.setItem(LOOP_KEY, '1');
+            window.location.href = window.location.href;
+          }
+        }
       })();
     </script>
+  </head>
+  <body>
+    <div id="root"></div>
 
     <!--
       Early playlist prefetch — seeds channels from localStorage immediately

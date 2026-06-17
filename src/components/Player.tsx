@@ -175,10 +175,18 @@ export default function Player({
   // when the user changes them via keyboard, then fades out after 3s.
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [statusVisible, setStatusVisible] = useState(false);
-  // iOS only: true when autoplay with sound failed (first visit, no prior gesture).
-  // Shows a blurred overlay with a play icon — one tap starts sound.
-  // After that tap, all subsequent refreshes/channel changes play with sound automatically.
-  const [iosNeedsPlay, setIosNeedsPlay] = useState(false);
+  // ALL platforms (PC, Android, iOS): true only on first-ever visit when
+  // no gesture grant exists in localStorage yet.
+  // Shows the glass blurred overlay — tap anywhere to unmute.
+  // After that one tap, "revtv:gestureGranted" is stored forever in localStorage.
+  // From then on (refresh, Ctrl+R, hard reload, channel change, tab reopen)
+  // the player always autoplays with sound. Overlay never shown again.
+  const [needsUnmute, setNeedsUnmute] = useState(false);
+  // True while the autoplay-muted phase is active (overlay shown OR about
+  // to be shown). Set synchronously by the HLS effect, cleared by doUnmute
+  // or the grant-exists unmute path. The sync-volume useEffect reads this
+  // ref to avoid overriding v.muted=true during the muted-autoplay window.
+  const autoplayMutedRef = useRef(false);
   const statusTimerRef = useRef<number | null>(null);
 
   const showStatus = useCallback((msg: string) => {
@@ -424,82 +432,90 @@ export default function Player({
     video.addEventListener("ended",   onEnded);
     video.addEventListener("error",   onError);
 
-    // ── Autoplay with sound — unified strategy for ALL platforms ────────
+    // ── Unified autoplay logic ──────────────────────────────────────────────
+    // Works identically on PC, Android, and iOS.
     //
-    // KEY INSIGHT: Browsers allow muted autoplay always. Once the video is
-    // playing (even muted), unmuting in the same .then() callback works
-    // silently on PC and Android — the autoplay policy is already satisfied
-    // by the playing video element, so unmuting doesn't count as a new
-    // "unmuted play" request.
+    // HOW IT WORKS:
+    //   1. Check localStorage for "revtv:gestureGranted".
+    //   2. FIRST VISIT (no grant): autoplay muted → show the glass tap-to-unmute
+    //      overlay. User taps → unmute + store grant forever. Done.
+    //   3. ANY SUBSEQUENT LOAD (grant exists — refresh, Ctrl+R, hard reload,
+    //      channel change, logo tap, tab reopen): autoplay muted → immediately
+    //      unmute in the .then() callback. No overlay shown. Always with sound.
     //
-    // iOS (Safari) is different: it blocks autoplay with sound even after a
-    // muted play() starts, because it requires a REAL user gesture in the
-    // current page lifecycle — not just a resolved promise. So on iOS:
-    //   • First visit (no iosGestureGranted in localStorage): start muted,
-    //     show the blur+play overlay. One tap grants sound forever.
-    //   • After grant (localStorage has "1"): start muted, then unmute in
-    //     the .then() — Safari 15.4+ allows this when the page has had at
-    //     least one prior gesture in any session. Works on refresh too.
+    // WHY MUTED FIRST:
+    //   Browsers always allow muted autoplay. Once the video is playing (even
+    //   muted), unmuting in the same .then() does NOT count as a new autoplay
+    //   request — it is treated as a volume change on an already-playing element.
+    //   This works on Chrome, Firefox, Edge, Chrome Android, Safari (with grant).
     //
-    // PC / Android: start muted → play() → unmute immediately in .then().
-    // This is 100% reliable, requires no user tap, and works on every
-    // browser (Chrome, Firefox, Edge, Samsung Internet, Chrome Android).
+    // WHY A GRANT IS NEEDED ON FIRST VISIT:
+    //   On the very first page load (ever, or in a fresh private session), there
+    //   has been no user interaction at all. Some browsers (Safari on iOS/macOS,
+    //   strict Chrome profiles) block even the "unmute in .then()" trick until a
+    //   real tap/click has occurred. The overlay provides that one tap. After it,
+    //   the grant is stored and the browser's autoplay heuristic remembers the
+    //   site as "user has interacted here".
 
-    const attemptAutoplay = (v: HTMLVideoElement) => {
-      // Always start muted — guaranteed to succeed on all platforms
-      v.muted = true;
-      v.volume = volumeRef.current;
+    // Check gesture grant once per channel-load (stable, no closure issues)
+    const hasGrant = (() => {
+      try { return window.localStorage.getItem("revtv:gestureGranted") === "1"; } catch { return false; }
+    })();
 
-      if (isIOS) {
-        const hasGrant = (() => {
-          try { return window.localStorage.getItem("revtv:iosGestureGranted") === "1"; } catch { return false; }
-        })();
+    // Hoisted so the cleanup return() can remove it even when the channel
+    // changes before loadedmetadata fires on iOS native HLS.
+    let iosMetaCleanup: (() => void) | null = null;
 
-        v.play().then(() => {
-          // Muted play succeeded (always does on iOS)
-          if (hasGrant && !mutedRef.current) {
-            // Prior gesture exists — unmute immediately
-            v.muted = false;
-            v.volume = volumeRef.current || 1;
-            mutedRef.current = false;
-            setMuted(false);
-            setIosNeedsPlay(false);
-          } else if (hasGrant && mutedRef.current) {
-            // User had manually muted — respect it
-            setIosNeedsPlay(false);
-          } else {
-            // No prior gesture — keep muted, show overlay
-            setIosNeedsPlay(true);
-          }
-        }).catch(() => {
-          // Even muted failed (very rare) — retry once
-          window.setTimeout(() => v.play().catch(() => {}), 300);
-          setIosNeedsPlay(!hasGrant);
-        });
-
+    const onMutedPlayStarted = () => {
+      if (!hasGrant) {
+        // First-ever visit: stay muted, show tap-to-unmute overlay.
+        // autoplayMutedRef stays true — cleared synchronously by doUnmute().
+        setNeedsUnmute(true);
       } else {
-        // PC & Android: muted play → unmute in .then() — always works
-        v.play().then(() => {
-          // Video is now playing. Unmute if user hasn't manually muted.
-          if (!mutedRef.current) {
-            v.muted = false;
-            v.volume = volumeRef.current || 1;
-          }
-          setIosNeedsPlay(false);
-        }).catch(() => {
-          // Extremely rare (e.g. network error before first frame).
-          // Retry once after a short delay.
-          window.setTimeout(() => {
-            v.play().then(() => {
-              if (!mutedRef.current) {
-                v.muted = false;
-                v.volume = volumeRef.current || 1;
-              }
-            }).catch(() => {});
-          }, 300);
-        });
+        // Grant exists: unmute immediately now that we have a playing element.
+        // Clear the flag BEFORE writing v.muted so the sync-volume effect
+        // does not interfere (it reads the ref synchronously).
+        autoplayMutedRef.current = false;
+        setNeedsUnmute(false);
+        const vid = videoRef.current;
+        if (vid) {
+          vid.muted  = mutedRef.current;
+          vid.volume = volumeRef.current || 1;
+        }
       }
     };
+
+    const attemptAutoplay = (v: HTMLVideoElement) => {
+      // Signal that we are in the autoplay-muted window — blocks the
+      // sync-volume useEffect from overriding v.muted during this phase.
+      autoplayMutedRef.current = true;
+      v.muted = true;
+      v.volume = volumeRef.current || 1;
+
+      const playPromise = v.play();
+      if (!playPromise) {
+        onMutedPlayStarted();
+        return;
+      }
+
+      playPromise.then(() => {
+        onMutedPlayStarted();
+      }).catch(() => {
+        // Muted play rejected — retry once after a short delay.
+        window.setTimeout(() => {
+          const vid = videoRef.current;
+          if (!vid || userPausedRef.current) return;
+          vid.muted = true;
+          vid.play().then(() => {
+            onMutedPlayStarted();
+          }).catch(() => {
+            // Both attempts failed — release the flag so sync-volume resumes.
+            autoplayMutedRef.current = false;
+          });
+        }, 400);
+      });
+    };
+
 
     if (Hls.isSupported()) {
       // isMobile already declared above (used by skip timer + frozen threshold)
@@ -636,8 +652,32 @@ export default function Player({
       });
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       // Native HLS (Safari/iOS)
+      //
+      // iOS Safari behaviour:
+      //   • Muted autoplay is always allowed.
+      //   • Unmuted autoplay requires a prior user gesture (stored as
+      //     revtv:gestureGranted). Without it iOS silently ignores
+      //     v.muted = false and the video stays muted with no overlay.
+      //
+      // Strategy — identical to Android/PC path via attemptAutoplay:
+      //   FIRST VISIT  : set src, load(), then on loadedmetadata call
+      //                  attemptAutoplay() → muted play → overlay shows.
+      //                  User tap → doUnmute() plays with sound + stores grant.
+      //   RETURN VISIT : same flow but onMutedPlayStarted() unmutes
+      //                  immediately in .then() since grant exists.
+      //
+      // We must wait for loadedmetadata before play() — calling play()
+      // right after src assignment on iOS returns a promise that resolves
+      // before media is ready and the subsequent muted state gets lost.
       video.src = channel.url;
-      attemptAutoplay(video);
+      video.load();
+      const onMeta = () => {
+        video.removeEventListener("loadedmetadata", onMeta);
+        iosMetaCleanup = null;
+        attemptAutoplay(video);
+      };
+      iosMetaCleanup = () => video.removeEventListener("loadedmetadata", onMeta);
+      video.addEventListener("loadedmetadata", onMeta);
     } else {
       window.clearTimeout(skipTimer);
       setError("HLS not supported on this browser.");
@@ -650,6 +690,12 @@ export default function Player({
       window.clearTimeout(recoverTimer);
       window.clearTimeout(waitingTimer);
       window.clearInterval(frozenWatchdog);
+      // Clean up iOS loadedmetadata listener if the channel changed before
+      // metadata arrived (prevents attemptAutoplay firing on the old channel).
+      iosMetaCleanup?.();
+      // Release the autoplay-muted guard so the sync-volume effect
+      // is not stuck blocked on the next channel load.
+      autoplayMutedRef.current = false;
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("stalled", onStalled);
@@ -670,6 +716,13 @@ export default function Player({
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
+    // While autoplay-muted is active (overlay showing or grant-unmute
+    // in-flight) do NOT override v.muted — the HLS effect and doUnmute
+    // own the muted state during that window.
+    if (autoplayMutedRef.current) {
+      v.volume = volume;
+      return;
+    }
     v.muted = muted;
     v.volume = volume;
   }, [volume, muted]);
@@ -921,7 +974,20 @@ export default function Player({
   }, [armHide, syncToLiveEdge]);
 
   const toggleMute = useCallback(() => {
-    setMuted((m) => !m);
+    const v = videoRef.current;
+    const newMuted = !mutedRef.current;
+    // Update the DOM immediately — don't wait for the React re-render cycle.
+    // This prevents the 1-frame window where the button shows one state but
+    // the video element is still in the opposite state (the "stuck icon" bug).
+    if (v) {
+      v.muted = newMuted;
+      if (!newMuted) v.volume = volumeRef.current || 1;
+    }
+    mutedRef.current = newMuted;
+    setMuted(newMuted);
+    // Also hide the overlay immediately if user taps mute while it's showing
+    // (shouldn't normally happen, but belt-and-suspenders)
+    if (!newMuted) setNeedsUnmute(false);
     armHide();
   }, [armHide]);
 
@@ -1286,28 +1352,29 @@ export default function Player({
     return () => document.removeEventListener("keydown", onKey);
   }, [channel, togglePlay, toggleMute, toggleFullscreen]);
 
-  // iOS tap-to-play: called when user taps the blurred overlay on iOS.
-  // Unmutes, resumes, stores the gesture grant so future loads autoplay with sound.
-  const doIosPlay = useCallback(() => {
+  // Tap-to-unmute: called when user taps the glass overlay (ALL platforms).
+  // Syncs DOM immediately, stores grant, hides overlay.
+  const doUnmute = useCallback(() => {
+    // Clear the autoplay-muted guard BEFORE writing v.muted so the
+    // sync-volume effect (if it fires) does not immediately re-mute.
+    autoplayMutedRef.current = false;
     const v = videoRef.current;
     if (v) {
       v.muted = false;
       v.volume = volumeRef.current || 1;
-      // Resume if paused (muted autoplay was playing in background)
       if (v.paused) v.play().catch(() => {});
     }
     mutedRef.current = false;
     setMuted(false);
-    setIosNeedsPlay(false);
-    // Remember gesture grant — next refresh/channel will autoplay with sound
-    try { window.localStorage.setItem("revtv:iosGestureGranted", "1"); } catch {}
+    setNeedsUnmute(false);
+    try { window.localStorage.setItem("revtv:gestureGranted", "1"); } catch {}
   }, []);
 
   const onVideoClick = (e: ReactMouseEvent) => {
     if (isSwiping.current) return;
     e.stopPropagation();
     // If iOS needs a tap to start, any tap on the player triggers it
-    if (iosNeedsPlay) { doIosPlay(); return; }
+    if (needsUnmute) { doUnmute(); return; }
     togglePlay();
   };
 
@@ -1364,7 +1431,6 @@ export default function Player({
             onDoubleClick={onVideoDoubleClick}
             className="h-full w-full cursor-pointer"
             playsInline
-            muted
             // @ts-ignore - webkit-playsinline is iOS-specific
             webkit-playsinline="true"
             style={{
@@ -1428,7 +1494,7 @@ export default function Player({
           with an iOS-style frosted play button that scales/fades in
           smoothly. Clicking anywhere resumes playback. Hidden while
           loading/transitioning so it doesn't fight those overlays. */}
-      {channel && !playing && !loading && !error && !fsTransitioning && hasStartedPlaybackRef.current && !iosNeedsPlay && (
+      {channel && !playing && !loading && !error && !fsTransitioning && hasStartedPlaybackRef.current && !needsUnmute && (
         <div
           className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 backdrop-blur-[2px]"
           style={{ animation: "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both" }}
@@ -1622,49 +1688,61 @@ export default function Player({
         </div>
       )}
 
-      {/* iOS — tap to play with sound overlay.
-          Only shown on iOS when autoplay with sound was blocked (first visit,
-          no gesture grant yet). Full blur over the video; tapping anywhere
-          starts sound and stores the grant so future loads are automatic. */}
-      {iosNeedsPlay && (
+      {/* Tap-to-unmute overlay — ALL platforms (PC, Android, iOS).
+          Only shown on first-ever visit. Blur + glass button, same style
+          as the paused-play overlay. Tap anywhere to unmute + store grant. */}
+      {needsUnmute && (
         <div
           className="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center"
-          onClick={(e) => { e.stopPropagation(); doIosPlay(); }}
+          onClick={(e) => { e.stopPropagation(); doUnmute(); }}
           style={{
             cursor: "pointer",
-            backdropFilter: "blur(8px) saturate(140%)",
-            WebkitBackdropFilter: "blur(8px) saturate(140%)",
-            background: "rgba(0,0,0,0.38)",
+            /* iOS-glass backdrop: very light frost so video shows through clearly */
+            backdropFilter: "blur(4px) saturate(130%) brightness(1.08)",
+            WebkitBackdropFilter: "blur(4px) saturate(130%) brightness(1.08)",
+            background: "rgba(255,255,255,0.06)",
             animation: "iosOverlayFade 380ms cubic-bezier(.4,0,.2,1) both",
           }}
         >
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); doIosPlay(); }}
-            aria-label="Tap to play with sound"
-            data-player-control
-            className="flex h-16 w-16 items-center justify-center rounded-full border text-white sm:h-[72px] sm:w-[72px]"
-            style={{
-              animation: "iosGlassPop 480ms cubic-bezier(.22,1,.36,1) both",
-              background: "rgba(255,255,255,0.14)",
-              borderColor: "rgba(255,255,255,0.28)",
-              backdropFilter: "blur(24px) saturate(180%)",
-              WebkitBackdropFilter: "blur(24px) saturate(180%)",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.35)",
-            }}
-          >
-            <svg
-              width="26" height="26" viewBox="0 0 24 24" fill="currentColor"
-              className="ml-1"
-              style={{ animation: "iosIconFade 420ms cubic-bezier(.22,1,.36,1) 60ms both" }}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); doUnmute(); }}
+              aria-label="Tap to unmute"
+              data-player-control
+              className="flex h-16 w-16 items-center justify-center rounded-full border text-white sm:h-[72px] sm:w-[72px]"
+              style={{
+                animation: "iosGlassPop 480ms cubic-bezier(.22,1,.36,1) both",
+                background: "rgba(255,255,255,0.22)",
+                borderColor: "rgba(255,255,255,0.45)",
+                backdropFilter: "blur(20px) saturate(180%) brightness(1.15)",
+                WebkitBackdropFilter: "blur(20px) saturate(180%) brightness(1.15)",
+                boxShadow: "0 4px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.55)",
+              }}
             >
-              <polygon points="5 3 19 12 5 21 5 3" />
-            </svg>
-          </button>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                style={{ animation: "iosIconFade 420ms cubic-bezier(.22,1,.36,1) 60ms both", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.4))" }}
+              >
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <line x1="23" y1="9" x2="17" y2="15" />
+                <line x1="17" y1="9" x2="23" y2="15" />
+              </svg>
+            </button>
+            <span style={{
+              fontSize: "12px",
+              fontWeight: 600,
+              letterSpacing: "0.07em",
+              color: "rgba(255,255,255,0.92)",
+              fontFamily: "'Inter', system-ui, sans-serif",
+              textShadow: "0 1px 3px rgba(0,0,0,0.5)",
+              animation: "iosIconFade 420ms cubic-bezier(.22,1,.36,1) 120ms both",
+            }}>Tap to Unmute</span>
+          </div>
         </div>
       )}
 
-      {/* Top overlay (channel info) */}
+            {/* Top overlay (channel info) */}
       <div
         className={cn(
           "pointer-events-none absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/80 via-black/40 to-transparent p-4 transition-all duration-500 sm:p-5",
