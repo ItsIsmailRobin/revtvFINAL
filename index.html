@@ -223,8 +223,15 @@
         // ── Strategy 1: Keyboard reloads ──────────────────────────────
         document.addEventListener('keydown', function (e) {
           var isF5    = e.key === 'F5';
+          var isF12   = e.key === 'F12';
           var isCtrlR = e.ctrlKey && !e.metaKey && (e.key === 'r' || e.key === 'R');
           var isCmdR  = e.metaKey && !e.ctrlKey && (e.key === 'r' || e.key === 'R');
+          // Disable F12 (DevTools)
+          if (isF12) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return false;
+          }
           if (isF5 || isCtrlR || isCmdR) {
             e.preventDefault();
             e.stopImmediatePropagation();
@@ -276,13 +283,17 @@
     -->
     <script>
       (function () {
-        var PLAYLIST_URL = "https://raw.githubusercontent.com/ItsIsmailRobin/playlisttv/refs/heads/main/playlist.m3u";
+        // URL is split/encoded to prevent it from appearing in page source
+        var _a = ["aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL0l0c0lzbWFpbFJvYmlu",
+                  "L3BsYXlsaXN0dHYvcmVmcy9oZWFkcy9tYWluL3BsYXlsaXN0Lm0zdQ=="];
+        var PLAYLIST_URL = atob(_a[0]) + atob(_a[1]);
         var CACHE_KEY    = "revtv:playlistCache";
-        var EXCLUDE      = ["welcome to playz tv", "playz tv | new app", "playz tv"];
+        var EXCLUDE      = [];
 
         function isExcluded(name, group) {
+          if (!EXCLUDE.length) return false;
           var t = (name + " " + group).toLowerCase();
-          return EXCLUDE.some(function(k) { return t.indexOf(k) !== -1 || group.toLowerCase().indexOf("welcome to playz") !== -1; });
+          return EXCLUDE.some(function(k) { return t.indexOf(k) !== -1; });
         }
 
         function parseM3U(text) {
