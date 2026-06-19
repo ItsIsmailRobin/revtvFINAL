@@ -218,78 +218,18 @@
       autoplay + the familiar tap-to-unmute overlay instead of leaving the
       player stuck paused and silent.
     -->
-    <!-- DevTools protection: detects open devtools and closes/reloads the tab -->
     <script>
       (function () {
-        // ── DevTools Detection & Response ─────────────────────────────
-        var _dt = false;
-
-        // Action when devtools detected: try to close tab, fallback to blank
-        function _onDevTools() {
-          if (_dt) return;
-          _dt = true;
-          try { window.open('', '_self', ''); window.close(); } catch(e) {}
-          // Fallback: navigate away so the page is unusable
-          try { window.location.replace('about:blank'); } catch(e) {}
-        }
-
-        // Method 1: window size threshold — devtools docks subtract width or height
-        var _threshold = 160;
-        function _checkSize() {
-          var wDiff = window.outerWidth  - window.innerWidth;
-          var hDiff = window.outerHeight - window.innerHeight;
-          if (wDiff > _threshold || hDiff > _threshold) _onDevTools();
-        }
-        setInterval(_checkSize, 500);
-
-        // Method 2: console.log toString trick — debugger expands the object
-        var _img = new Image();
-        Object.defineProperty(_img, 'id', {
-          get: function () { _onDevTools(); return ''; }
-        });
-        setInterval(function () {
-          // Calling console.log causes devtools to evaluate object properties
-          // which triggers the getter above only when devtools is open
-          console.log('%c', _img);
-          console.clear();
-        }, 1000);
-
-        // ── Strategy 1: Keyboard reloads + block all DevTools shortcuts ──
+        // ── Strategy 1: Keyboard reloads ──────────────────────────────
         document.addEventListener('keydown', function (e) {
           var isF5    = e.key === 'F5';
-          var isF12   = e.key === 'F12';
-          // Ctrl+Shift+I / Ctrl+Shift+J / Ctrl+Shift+C / Ctrl+U (Windows/Linux)
-          var isCtrlShift = e.ctrlKey && e.shiftKey && !e.metaKey &&
-                            (e.key === 'I' || e.key === 'i' ||
-                             e.key === 'J' || e.key === 'j' ||
-                             e.key === 'C' || e.key === 'c');
-          var isCtrlU = e.ctrlKey && !e.metaKey && !e.shiftKey &&
-                        (e.key === 'U' || e.key === 'u');
-          // Cmd+Option+I / Cmd+Option+J / Cmd+Option+C (Mac)
-          var isMacDev = e.metaKey && e.altKey &&
-                         (e.key === 'I' || e.key === 'i' ||
-                          e.key === 'J' || e.key === 'j' ||
-                          e.key === 'C' || e.key === 'c');
           var isCtrlR = e.ctrlKey && !e.metaKey && (e.key === 'r' || e.key === 'R');
           var isCmdR  = e.metaKey && !e.ctrlKey && (e.key === 'r' || e.key === 'R');
-
-          if (isF12 || isCtrlShift || isCtrlU || isMacDev) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            _onDevTools();
-            return false;
-          }
           if (isF5 || isCtrlR || isCmdR) {
             e.preventDefault();
             e.stopImmediatePropagation();
             window.location.href = window.location.href;
           }
-        }, true);
-
-        // Block right-click context menu (prevents "Inspect Element")
-        document.addEventListener('contextmenu', function (e) {
-          e.preventDefault();
-          return false;
         }, true);
 
         // ── Strategy 2: Reload button / swipe-to-refresh ──────────────
@@ -336,17 +276,14 @@
     -->
     <script>
       (function () {
-        // URL is split/encoded to prevent it from appearing in page source
-        var _a = ["aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL0l0c0lzbWFpbFJvYmlu",
-                  "L3BsYXlsaXN0dHYvcmVmcy9oZWFkcy9tYWluL3BsYXlsaXN0Lm0zdQ=="];
-        var PLAYLIST_URL = atob(_a[0]) + atob(_a[1]);
-        var CACHE_KEY    = "revtv:playlistCache";
-        var EXCLUDE      = [];
+        var _d = atob, _k = ["aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL0l0c0lzbWFpbFJvYmluL3BsYXlsaXN0dHYvcmVmcy9oZWFkcy9tYWluL3BsYXlsaXN0Lm0zdQ==", "cmV2dHY6cGxheWxpc3RDYWNoZQ==", "d2VsY29tZSB0byBwbGF5eiB0dg==", "cGxheXogdHYgfCBuZXcgYXBw", "cGxheXogdHY="];
+        var PLAYLIST_URL = _d(_k[0]);
+        var CACHE_KEY    = _d(_k[1]);
+        var EXCLUDE      = [_d(_k[2]), _d(_k[3]), _d(_k[4])];
 
         function isExcluded(name, group) {
-          if (!EXCLUDE.length) return false;
           var t = (name + " " + group).toLowerCase();
-          return EXCLUDE.some(function(k) { return t.indexOf(k) !== -1; });
+          return EXCLUDE.some(function(k) { return t.indexOf(k) !== -1 || group.toLowerCase().indexOf("welcome to playz") !== -1; });
         }
 
         function parseM3U(text) {
