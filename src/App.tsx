@@ -113,6 +113,21 @@ export default function App() {
     setActiveChannel(all[0]);
   }, []);
 
+  // Compute the next channel in the filtered list for background preloading.
+  // When a channel errors and auto-skips, the next channel is already
+  // partially buffered — so playback resumes much faster.
+  const nextChannel = useMemo(() => {
+    if (!activeChannel || channels.length < 2) return null;
+    const idx = channels.findIndex(c => c.id === activeChannel.id);
+    if (idx === -1) return null;
+    // Skip failed channels when choosing what to preload
+    for (let i = 1; i < channels.length; i++) {
+      const candidate = channels[(idx + i) % channels.length];
+      if (!failedChannelsRef.current.has(candidate.url)) return candidate;
+    }
+    return null;
+  }, [activeChannel, channels]);
+
   const fetchPlaylist = async () => {
     try {
       setError(null);
@@ -284,7 +299,7 @@ export default function App() {
 
           {/* Left column: player */}
           <div className="flex flex-col">
-            <Player channel={activeChannel} onStreamError={handleStreamError} manualChannelIds={manualChannelIdsRef.current} />
+            <Player channel={activeChannel} onStreamError={handleStreamError} manualChannelIds={manualChannelIdsRef.current} nextChannel={nextChannel} />
           </div>
 
           {/* Right column: sidebar (desktop) — self-start keeps top aligned with player */}

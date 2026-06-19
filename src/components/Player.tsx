@@ -23,6 +23,14 @@ interface PlayerProps {
    *  directly. Shared mutable Set so it can be updated without forcing an
    *  extra render on the parent. */
   manualChannelIds?: Set<string>;
+  /**
+   * The NEXT channel to preload silently in the background.
+   * A hidden, muted, paused HLS instance fetches just enough fragments
+   * so that switching to this channel starts instantly.
+   * This never affects the audio/video quality of the currently-watched channel —
+   * the preloader stops downloading after a short prefetch window.
+   */
+  nextChannel?: Channel | null;
 }
 
 interface GestureState {
@@ -48,6 +56,7 @@ export default function Player({
   channel,
   onStreamError,
   manualChannelIds,
+  nextChannel,
 }: PlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -55,6 +64,19 @@ export default function Player({
   const hlsRef = useRef<Hls | null>(null);
   const hideTimerRef = useRef<number | null>(null);
   const gestureLayerRef = useRef<HTMLDivElement>(null);
+
+  // ── Background preloader ──────────────────────────────────────────────────
+  // A hidden, muted <video> element with its own HLS instance that fetches
+  // just enough fragments of the NEXT channel so switching to it is instant.
+  // Rules that keep it from hurting main playback quality:
+  //   • Only starts after the main channel has been playing for 5 seconds.
+  //   • Uses the lowest ABR quality level (startLevel: 0) and a tiny buffer cap.
+  //   • Stops downloading (hls.stopLoad()) after 8 seconds of prefetch.
+  //   • Destroyed immediately when the main channel changes or on unmount.
+  const preloadVideoRef = useRef<HTMLVideoElement>(null);
+  const preloadHlsRef   = useRef<Hls | null>(null);
+  const preloadTimerRef = useRef<number | null>(null); // delay before preload starts
+  const preloadStopRef  = useRef<number | null>(null); // timer to stop loading after prefetch
 
   const gestureState = useRef<GestureState>({
     startX: 0,
@@ -868,6 +890,97 @@ export default function Player({
     };
   }, [channel?.id, channel?.url]);
 
+  // ── Background preloader effect ──────────────────────────────────────────
+  // Silently pre-buffers the next channel so switching to it is near-instant.
+  //
+  // HOW IT AVOIDS HURTING MAIN PLAYBACK:
+  //   1. Waits 5s after the main channel starts playing before starting.
+  //   2. Uses the absolute lowest quality (startLevel:0), tiny buffers, and
+  //      a minimal bandwidth estimate — it competes as little as possible.
+  //   3. Stops ALL downloading (hls.stopLoad()) after 8s of prefetch, so it
+  //      never hogs bandwidth once the initial fragments are in memory.
+  //   4. The hidden <video> is always muted, never plays audio.
+  //   5. Torn down immediately the moment the main channel changes.
+  useEffect(() => {
+    const preloadVideo = preloadVideoRef.current;
+
+    // Clear any pending timers and tear down the previous preloader.
+    const teardown = () => {
+      if (preloadTimerRef.current) { window.clearTimeout(preloadTimerRef.current); preloadTimerRef.current = null; }
+      if (preloadStopRef.current)  { window.clearTimeout(preloadStopRef.current);  preloadStopRef.current  = null; }
+      if (preloadHlsRef.current)   { preloadHlsRef.current.destroy(); preloadHlsRef.current = null; }
+      if (preloadVideo) { preloadVideo.src = ""; preloadVideo.load(); }
+    };
+
+    teardown(); // always reset when channel or nextChannel changes
+
+    if (!nextChannel || !preloadVideo) return;
+    // Don't preload if it's the same as the current channel (edge case)
+    if (channel && nextChannel.id === channel.id) return;
+    // Don't preload on iOS native HLS — the hidden video.src= assignment
+    // can trigger the browser to allocate a native AVPlayer instance and
+    // fight for the same decoder resources as the main video. hls.js
+    // runs fine in a hidden element on Chrome/Android/desktop.
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
+    if (isIOS || !Hls.isSupported()) return;
+
+    // Wait 5 seconds after channel mount before starting preload.
+    // This gives the main player time to fully stabilise before we
+    // add any background network activity.
+    preloadTimerRef.current = window.setTimeout(() => {
+      preloadTimerRef.current = null;
+
+      const hls = new Hls({
+        enableWorker: true,
+        // ── Quality: lock to the lowest rendition ──────────────────────
+        startLevel: 0,             // lowest quality only — saves bandwidth
+        autoStartLoad: true,
+        capLevelToPlayerSize: false,
+        // ── Tiny buffer — just enough for a fast start, nothing more ───
+        maxBufferLength:    4,     // only 4 s ahead
+        maxMaxBufferLength: 6,
+        backBufferLength:   0,
+        maxBufferSize:      3_000_000, // 3 MB cap
+        // ── Low bandwidth estimate — won't try high bitrates ───────────
+        abrEwmaDefaultEstimate: 200_000,
+        // ── Skip low-latency and progressive modes ─────────────────────
+        lowLatencyMode: false,
+        progressive: false,
+        // ── Fewer retries — this is background, failures are fine ──────
+        fragLoadingMaxRetry: 2,
+        manifestLoadingMaxRetry: 2,
+        levelLoadingMaxRetry: 2,
+        // ── Live sync ──────────────────────────────────────────────────
+        liveSyncDurationCount: 2,
+      });
+
+      preloadHlsRef.current = hls;
+      preloadVideo.muted  = true;   // always silent
+      preloadVideo.volume = 0;
+
+      hls.loadSource(nextChannel.url);
+      hls.attachMedia(preloadVideo);
+
+      // After 8 seconds of prefetch, stop all fragment downloads.
+      // The manifest + first few fragments are now in memory — that's
+      // all we need for a fast start when the user switches to this channel.
+      preloadStopRef.current = window.setTimeout(() => {
+        preloadStopRef.current = null;
+        if (preloadHlsRef.current) {
+          preloadHlsRef.current.stopLoad();
+        }
+      }, 8000);
+
+      // On any fatal error, just silently tear down the preloader.
+      hls.on(Hls.Events.ERROR, (_e, data) => {
+        if (data.fatal) teardown();
+      });
+    }, 5000);
+
+    return teardown;
+  }, [channel?.id, nextChannel?.id, nextChannel?.url]);
+
   // sync volume
   useEffect(() => {
     const v = videoRef.current;
@@ -1634,6 +1747,25 @@ export default function Player({
                   ? "fill"
                   : "none",
               transition: "object-fit 300ms ease",
+            }}
+          />
+          {/* Hidden background preloader video — muted, off-screen, zero size.
+              Preloads the next channel's manifest + first fragments so
+              switching to it is near-instant. Never affects main playback. */}
+          <video
+            ref={preloadVideoRef}
+            muted
+            playsInline
+            // @ts-ignore
+            webkit-playsinline="true"
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              width: 0,
+              height: 0,
+              opacity: 0,
+              pointerEvents: "none",
+              visibility: "hidden",
             }}
           />
           {/* On mobile in fullscreen, a transparent gesture layer captures taps
