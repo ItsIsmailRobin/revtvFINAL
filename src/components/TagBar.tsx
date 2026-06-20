@@ -63,7 +63,7 @@ export default function TagBar({
       <div className="flex items-center py-2">
         {/* < arrow slot */}
         {!hideArrows && (
-        <div className="relative flex shrink-0 items-center justify-center pl-2 pr-2">
+        <div className="relative flex shrink-0 items-center justify-center pl-2 pr-1">
           <button
             onClick={() => canLeft && scroll(-1)}
             aria-label="Previous tags"
@@ -142,7 +142,13 @@ export default function TagBar({
           <div
             ref={scrollRef}
             className="scrollbar-hide flex items-center gap-2 overflow-x-auto"
-            style={{ paddingLeft: "8px", paddingRight: "8px", paddingTop: "6px", paddingBottom: "6px" }}
+            style={{
+              paddingLeft: "4px",
+              paddingRight: "4px",
+              paddingTop: "6px",
+              paddingBottom: "6px",
+              scrollSnapType: "x mandatory",
+            }}
           >
             {tags.map((tag, idx) => {
               const isActive = tag === activeTag;
@@ -168,6 +174,7 @@ export default function TagBar({
                   onMouseLeave={() => setHoveredTag(null)}
                   style={{
                     animation: `tagEnter 360ms cubic-bezier(.4,0,.2,1) ${idx * 10}ms both`,
+                    scrollSnapAlign: "start",
                     color: isActive
                       ? "#fff"
                       : isHovering
@@ -233,7 +240,7 @@ export default function TagBar({
 
         {/* > arrow slot */}
         {!hideArrows && (
-        <div className="relative flex shrink-0 items-center justify-center pl-2 pr-2">
+        <div className="relative flex shrink-0 items-center justify-center pl-1 pr-2">
           <button
             onClick={() => scroll(1)}
             aria-label="Next tags"

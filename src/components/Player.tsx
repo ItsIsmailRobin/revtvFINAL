@@ -2334,12 +2334,25 @@ export default function Player({
 
         {/* lucide lucide-zap + Revenger pill */}
         <div className="mt-2.5 flex items-center gap-2 sm:mt-3">
-          {/* Zap + Revenger */}
-          <div
+          {/* Zap + Revenger — hidden instant-refresh trigger.
+              Tapping this dispatches the same "revtv:refresh-playlist"
+              event the header button uses, but with zero cooldown/disable
+              logic, so every single tap re-fetches the playlist instantly
+              no matter how rapidly or how many times it's pressed.
+              Intentionally no hover/active styles or transitions — it
+              must look and feel exactly like the static badge it always
+              was. */}
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent("revtv:refresh-playlist"))}
+            aria-label="Refresh playlist"
             className="flex items-center gap-1.5 rounded-full border px-2 py-0.5"
             style={{
               borderColor: "rgba(52,191,128,0.25)",
               backgroundColor: "rgba(52,191,128,0.10)",
+              cursor: "default",
+              WebkitTapHighlightColor: "transparent",
+              outline: "none",
             }}
           >
             <span className="relative inline-flex h-3 w-3 items-center justify-center">
@@ -2374,7 +2387,7 @@ export default function Player({
             >
               Revenger
             </span>
-          </div>
+          </button>
         </div>
       </div>
 
