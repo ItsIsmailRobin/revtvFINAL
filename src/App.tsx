@@ -85,7 +85,11 @@ export default function App() {
   });
   const [categoriesOpen, setCategoriesOpen] = useState(false);
 
+  // Only tracks failures within the CURRENT auto-skip chain.
+  // Reset every time the user manually selects a channel, or after
+  // a short cooldown — prevents permanent blacklisting across sessions.
   const failedChannelsRef = useRef<Set<string>>(new Set());
+  const failedResetTimerRef = useRef<number | null>(null);
   const channelsRef = useRef<Channel[]>(channels);
   useEffect(() => { channelsRef.current = channels; }, [channels]);
   // Channel ids the user just tapped directly in the channel list (real
@@ -102,14 +106,31 @@ export default function App() {
 
   const handleStreamError = useCallback((failedChannel: Channel) => {
     failedChannelsRef.current.add(failedChannel.url);
+
+    // Auto-clear the failed set after 30 seconds so channels can be
+    // retried — prevents permanent blacklisting when many skip events
+    // happen in a row (e.g. high visitor load, flaky network).
+    if (failedResetTimerRef.current) window.clearTimeout(failedResetTimerRef.current);
+    failedResetTimerRef.current = window.setTimeout(() => {
+      failedChannelsRef.current.clear();
+      failedResetTimerRef.current = null;
+    }, 30_000);
+
     const all = channelsRef.current;
     if (!all.length) return;
     const idx = all.findIndex(c => c.id === failedChannel.id);
+
+    // Find next non-failed channel within one pass
     for (let i = 1; i <= all.length; i++) {
       const next = all[(idx + i) % all.length];
-      if (!failedChannelsRef.current.has(next.url)) { setActiveChannel(next); return; }
+      if (!failedChannelsRef.current.has(next.url)) {
+        setActiveChannel(next);
+        return;
+      }
     }
+    // All channels tried — fully reset and go back to start
     failedChannelsRef.current.clear();
+    if (failedResetTimerRef.current) { window.clearTimeout(failedResetTimerRef.current); failedResetTimerRef.current = null; }
     setActiveChannel(all[0]);
   }, []);
 
@@ -253,6 +274,12 @@ export default function App() {
 
   const handleSelect = (ch: Channel) => {
     manualChannelIdsRef.current.add(ch.id);
+    // Reset the failed-channels set on every manual tap — the user is
+    // explicitly choosing this channel and all prior auto-skips should
+    // be forgotten. This prevents channels being permanently blacklisted
+    // during a session just because auto-skip ran through them once.
+    failedChannelsRef.current.clear();
+    if (failedResetTimerRef.current) { window.clearTimeout(failedResetTimerRef.current); failedResetTimerRef.current = null; }
     setActiveChannel(ch);
     // On mobile the channel list is below the player — snap the page
     // instantly to the top so the player is always in view.

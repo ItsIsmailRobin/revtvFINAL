@@ -364,13 +364,16 @@ export default function Player({
     // Track recovery attempts to avoid infinite loops
     let networkRetries = 0;
     let mediaRetries = 0;
-    const MAX_NETWORK_RETRIES = 5;
+    const MAX_NETWORK_RETRIES = 8;  // more retries for slow/loaded servers
     const MAX_MEDIA_RETRIES   = 4;
 
-    // Skip timer: if stream doesn't produce a frame within N seconds, skip it
+    // Skip timer: if stream doesn't produce a frame within N seconds, skip it.
+    // Use generous timeouts so slow-starting streams (high server load, CDN
+    // warm-up) are not incorrectly killed — they work fine in VLC because VLC
+    // waits much longer before giving up.
     const skipTimer = window.setTimeout(() => {
       if (channel) onStreamError?.(channel);
-    }, isIOS ? 20000 : isMobile ? 20000 : 11000);
+    }, isIOS ? 35000 : isMobile ? 30000 : 25000);
 
     // ── Helpers ──────────────────────────────────────────────────────────
     // Snap currentTime to the live edge. Safe to call any time.
@@ -400,7 +403,8 @@ export default function Player({
     // give it the longest cooldown so we don't repeatedly call play()/seek
     // while it's still naturally recovering (which restarts its internal
     // buffering and looks like "loading again").
-    const RECOVER_COOLDOWN_MS = isIOS ? 8000 : isMobile ? 8000 : 1500;
+    // Also raised on desktop to prevent rapid-fire recovery on slow/shared streams.
+    const RECOVER_COOLDOWN_MS = isIOS ? 10000 : isMobile ? 10000 : 4000;
     let waitingTimer = 0;
 
     const scheduleRecover = (delayMs: number, snap = false) => {
@@ -439,15 +443,16 @@ export default function Player({
     };
     const onWaiting  = () => {
       // On mobile, a brief "waiting" event is normal during ABR level
-      // switches / minor rebuffers and resolves on its own. Showing the
-      // spinner immediately for every blip is what produced the
-      // load → play 2s → load loop. Give it a short grace period before
-      // surfacing the spinner; if "playing" fires first, this is cancelled.
+      // switches / minor rebuffers and resolves on its own. Give a generous
+      // grace window (5s mobile, 2s desktop) before showing the spinner —
+      // this avoids the load→play→load loop on slower connections and
+      // high-visitor scenarios where the stream is momentarily slow.
       if (isMobile) {
         window.clearTimeout(waitingTimer);
-        waitingTimer = window.setTimeout(() => setLoading(true), 3500);
+        waitingTimer = window.setTimeout(() => setLoading(true), 5000);
       } else {
-        setLoading(true);
+        window.clearTimeout(waitingTimer);
+        waitingTimer = window.setTimeout(() => setLoading(true), 2000);
       }
     };
     const onPause    = () => {
@@ -518,9 +523,12 @@ export default function Player({
     // timeupdate fires ~4×/s but slows down when tab is hidden.
     // A dedicated 1-second interval is more reliable for detecting a truly
     // frozen stream on both mobile and PC.
+    // Thresholds are generous — a stream that works in VLC but appears
+    // "frozen" here is almost always just slow to deliver frames under
+    // load; give it plenty of time before acting.
     let lastTime  = -1;
     let frozenSec = 0;
-    const FROZEN_THRESHOLD = isIOS ? 10 : isMobile ? 8 : 4; // seconds before we act
+    const FROZEN_THRESHOLD = isIOS ? 18 : isMobile ? 14 : 10; // seconds before we act
     const frozenWatchdog = window.setInterval(() => {
       const v = videoRef.current;
       if (!v || v.paused || v.seeking || userPausedRef.current) {
@@ -699,7 +707,9 @@ export default function Player({
         // buffer instantly and causes the loading→play→loading loop.
         // Disable it on mobile and trade a couple of seconds of extra
         // latency for a buffer big enough to absorb network hiccups.
-        lowLatencyMode: !isMobile,
+        // Also disabled on desktop for live IPTV where the server may be
+        // under heavy visitor load — stability > latency.
+        lowLatencyMode: false,
 
         // Prefetch the first fragment before playback starts — this cuts
         // the initial "loading" window noticeably on all platforms since
@@ -707,62 +717,55 @@ export default function Player({
         startFragPrefetch: true,
 
         // ── Buffer sizing ─────────────────────────────────────────────
-        // Mobile networks (cellular / flaky WiFi) need a much deeper
-        // cushion than desktop to avoid the "play 2s → rebuffer" loop.
-        // Generous ahead-buffer absorbs multi-second jitter without
-        // re-entering the loading state.
-        backBufferLength:    isMobile ? 10 :  8,   // keep behind currentTime
-        maxBufferLength:     isMobile ? 40 : 20,   // target ahead-buffer (raised for smoother play)
-        maxMaxBufferLength:  isMobile ? 90 : 30,   // hard cap (raised to allow deeper fill)
-        maxBufferSize:       isMobile ?  30_000_000 : 20_000_000, // 30 MB / 20 MB
-        maxBufferHole:       isMobile ? 1.0 : 0.5, // tolerate larger gaps before "stalled"
+        // Bigger buffers absorb the jitter from busy IPTV servers and
+        // high visitor counts. The key symptom "works in VLC but blank
+        // here" is almost always a buffer that's too shallow.
+        backBufferLength:    isMobile ? 15 :  12,
+        maxBufferLength:     isMobile ? 60 :  40,
+        maxMaxBufferLength:  isMobile ? 120 : 60,
+        maxBufferSize:       isMobile ? 50_000_000 : 30_000_000, // 50 MB / 30 MB
+        maxBufferHole:       isMobile ? 1.5 : 1.0,
 
         // ── Quality / ABR ─────────────────────────────────────────────
-        // Don't force the lowest rendition on mobile — some streams'
-        // lowest-quality renditions are themselves unstable/low-fps and
-        // cause more rebuffering than a mid-quality one would. Let HLS
-        // auto-select based on measured bandwidth instead, capped to the
-        // screen size.
-        startLevel:          -1,                 // auto on all platforms
-        capLevelToPlayerSize: true,               // never load resolution > screen size
+        startLevel:          -1,
+        capLevelToPlayerSize: true,
         // Higher initial BW estimate = picks a better quality level on
         // first play instead of starting at the lowest rendition.
         abrEwmaDefaultEstimate: isMobile ? 800_000 : 2_500_000,
-        // Less twitchy ABR on mobile — fewer quality switches means
-        // fewer brief re-buffer blips while switching renditions.
-        // Be conservative going up, quick going down to avoid sustained stalls.
-        abrBandWidthFactor:   isMobile ? 0.85 : 0.92,
-        abrBandWidthUpFactor: isMobile ? 0.65 : 0.70,
-        abrEwmaFastLive:  isMobile ? 2.0 : 3.0,
+        // Less twitchy ABR — fewer quality switches means fewer rebuffer
+        // blips, especially important on loaded servers.
+        abrBandWidthFactor:   isMobile ? 0.80 : 0.88,
+        abrBandWidthUpFactor: isMobile ? 0.60 : 0.65,
+        abrEwmaFastLive:  isMobile ? 3.0 : 4.0,
         abrEwmaSlowLive:  isMobile ? 9.0 : 9.0,
 
         // ── Stall / nudge ─────────────────────────────────────────────
-        // Larger starvation delay = wait longer for buffer to refill
-        // before bailing (reduces "loading flash" on slow connections).
-        maxStarvationDelay:  isMobile ? 10 : 4,
-        maxLoadingDelay:     isMobile ? 10 : 4,
-        // Smaller nudge = less noticeable micro-jump when bridging a gap.
-        nudgeOffset:         isMobile ? 0.08 : 0.12,
-        nudgeMaxRetry:       isMobile ? 20 : 12,
-        highBufferWatchdogPeriod: isMobile ? 4 : 3,
+        // Long starvation delays = wait for slow server instead of skipping.
+        // This is the single most important setting for "works in VLC but
+        // blank here" — VLC waits ~30s, we should wait nearly as long.
+        maxStarvationDelay:  isMobile ? 16 : 12,
+        maxLoadingDelay:     isMobile ? 16 : 12,
+        nudgeOffset:         isMobile ? 0.08 : 0.1,
+        nudgeMaxRetry:       isMobile ? 30 : 20,
+        highBufferWatchdogPeriod: isMobile ? 6 : 4,
 
         // ── Fragment loading ──────────────────────────────────────────
-        // More retries + shorter delays = faster recovery from hiccups.
-        fragLoadingMaxRetry:     8,
-        manifestLoadingMaxRetry: 6,
-        levelLoadingMaxRetry:    6,
-        fragLoadingRetryDelay:   300,
-        manifestLoadingRetryDelay: 300,
-        levelLoadingRetryDelay:  300,
-        fragLoadingMaxRetryTimeout: 3000,
+        // More retries + longer timeouts for slow/shared IPTV servers.
+        fragLoadingMaxRetry:        12,
+        manifestLoadingMaxRetry:    8,
+        levelLoadingMaxRetry:       8,
+        fragLoadingRetryDelay:      500,
+        manifestLoadingRetryDelay:  500,
+        levelLoadingRetryDelay:     500,
+        fragLoadingMaxRetryTimeout: 8000,
+        manifestLoadingTimeout:     15000,
+        levelLoadingTimeout:        15000,
+        fragLoadingTimeOut:         20000,
 
         // ── Live sync ─────────────────────────────────────────────────
-        // Stay close enough to live edge without starving the buffer.
-        // 2 segments on desktop = minimal latency with enough cushion.
-        // 3 segments on mobile = extra buffer absorbs network jitter.
-        liveSyncDurationCount:       isMobile ? 3 : 2,
-        liveMaxLatencyDurationCount: isMobile ? 10 : 6,
-        maxFragLookUpTolerance: isMobile ? 0.5 : 0.2,
+        liveSyncDurationCount:       isMobile ? 4 : 3,
+        liveMaxLatencyDurationCount: isMobile ? 12 : 8,
+        maxFragLookUpTolerance: isMobile ? 0.5 : 0.3,
         liveDurationInfinity: false,
 
         // Progressive loading: start playing as soon as first fragments arrive.
@@ -780,8 +783,10 @@ export default function Player({
             case Hls.ErrorTypes.NETWORK_ERROR:
               if (networkRetries < MAX_NETWORK_RETRIES) {
                 networkRetries++;
-                // Exponential back-off: 400ms, 800ms, 1.6s, 3.2s, 6.4s
-                window.setTimeout(() => hls.startLoad(), 400 * Math.pow(2, networkRetries - 1));
+                // Exponential back-off with longer initial delay for loaded
+                // servers: 800ms, 1.6s, 3.2s, 6.4s, 12.8s, 25.6s, 51.2s, 102.4s
+                // VLC waits this long — we should too before giving up.
+                window.setTimeout(() => hls.startLoad(), 800 * Math.pow(2, networkRetries - 1));
               } else {
                 window.clearTimeout(skipTimer);
                 setLoading(false);
