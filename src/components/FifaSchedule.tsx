@@ -189,6 +189,18 @@ function resolveTeamFlag(rawName: string): { team: string; flag: string } | null
 
 const PLACEHOLDER_RE = /^(Win [A-L]|R-up [A-L]|Best 3rd|R32 Win|R16 Win|QF Win|SF Win|SF Los\.)$/;
 
+// Converts a real kickoff instant (from the API, in UTC) into accurate
+// Bangladesh date/time strings — used to correct any static date/time that
+// was guessed wrong, instead of trusting a fixed offset that can drift.
+function bdDateTimeFromIso(iso: string): { date: string; time: string } | null {
+  const ms = new Date(iso).getTime();
+  if (!Number.isFinite(ms)) return null;
+  const d = new Date(ms);
+  const date = d.toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" }); // YYYY-MM-DD
+  const time = d.toLocaleTimeString("en-GB", { timeZone: "Asia/Dhaka", hour12: false, hour: "2-digit", minute: "2-digit" }); // HH:MM
+  return { date, time };
+}
+
 type Standing = { team: string; flag: string; pts: number; gd: number; gf: number };
 
 function computeGroupStandings(letter: string, scoreMap: Record<string, [number, number]>): Standing[] | null {
@@ -657,12 +669,20 @@ export default function FifaSchedule() {
   const [scoreMap, setScoreMap] = useState<Record<string, [number, number]>>({});
   // teamOverrides: real team/flag confirmed by the API for a placeholder slot
   const [teamOverrides, setTeamOverrides] = useState<Record<number, TeamOverride>>({});
+  // dateTimeOverrides: real kickoff date/time (BD) confirmed by the API, in case
+  // the static schedule's guessed time was off
+  const [dateTimeOverrides, setDateTimeOverrides] = useState<Record<number, { date: string; time: string }>>({});
 
   useEffect(() => {
     const fetchScores = async () => {
       try {
         const map: Record<string, [number, number]> = {};
         const overrides: Record<number, TeamOverride> = {};
+        const dtOverrides: Record<number, { date: string; time: string }> = {};
+        // Tracks which ESPN events have already been claimed by a match id this
+        // cycle, so two different static rows can never lock onto the same real
+        // fixture (that was the cause of "duplicate" matches showing up).
+        const usedEventIds = new Set<string>();
 
         // ── Source 1: ESPN full schedule + live scoreboard ────────────────
         const espnFetch = async () => {
@@ -744,18 +764,20 @@ export default function FifaSchedule() {
           const awayScore = parseInt(String(away.score ?? "-1"), 10);
           if (homeScore < 0 || awayScore < 0) continue;
 
+          const evId = String(e.id ?? `${homeTeam}|${awayTeam}|${e.date ?? ""}`);
+          const evDT = bdDateTimeFromIso(String(e.date ?? ""));
+
           for (const m of MATCHES) {
             if (!m.stage.startsWith("Group ")) continue; // knockout slots handled in Pass B
-            if (map[`${m.id}`]) continue; // already have a score for this match
+            if (map[`${m.id}`]) continue; // already resolved this match
             const mA = norm(m.teamA), mB = norm(m.teamB);
-            if (
-              (homeTeam.includes(mA) || mA.includes(homeTeam)) &&
-              (awayTeam.includes(mB) || mB.includes(awayTeam))
-            ) { map[`${m.id}`] = [homeScore, awayScore]; break; }
-            if (
-              (homeTeam.includes(mB) || mB.includes(homeTeam)) &&
-              (awayTeam.includes(mA) || mA.includes(awayTeam))
-            ) { map[`${m.id}`] = [awayScore, homeScore]; break; }
+            const fwd = (homeTeam.includes(mA) || mA.includes(homeTeam)) && (awayTeam.includes(mB) || mB.includes(awayTeam));
+            const rev = (homeTeam.includes(mB) || mB.includes(homeTeam)) && (awayTeam.includes(mA) || mA.includes(awayTeam));
+            if (!fwd && !rev) continue;
+            map[`${m.id}`] = fwd ? [homeScore, awayScore] : [awayScore, homeScore];
+            if (evDT) dtOverrides[m.id] = evDT;
+            usedEventIds.add(evId);
+            break;
           }
         }
 
@@ -772,19 +794,22 @@ export default function FifaSchedule() {
           if (!PLACEHOLDER_RE.test(m.teamA) && !PLACEHOLDER_RE.test(m.teamB)) continue;
 
           const targetMs = matchStart(m).getTime();
-          let best: { ev: Record<string, unknown>; rank: number } | null = null;
+          let best: { ev: Record<string, unknown>; id: string; rank: number } | null = null;
           for (const ev of espnEvents) {
             const comps = (ev.competitions as Record<string, unknown>[])?.[0];
             if (!comps) continue;
+            const evId = String(ev.id ?? "");
+            if (evId && usedEventIds.has(evId)) continue; // already claimed by another slot
             const evMs = new Date(String(ev.date ?? "")).getTime();
             if (!Number.isFinite(evMs)) continue;
             const hoursDiff = Math.abs(evMs - targetMs) / 3600000;
             if (hoursDiff > 30) continue; // only consider fixtures near this kickoff slot
             const venueMatch = norm(m.city).length > 0 && venueOf(ev).includes(norm(m.city));
             const rank = (venueMatch ? 0 : 1000) + hoursDiff;
-            if (!best || rank < best.rank) best = { ev, rank };
+            if (!best || rank < best.rank) best = { ev, id: evId, rank };
           }
           if (!best) continue;
+          if (best.id) usedEventIds.add(best.id);
 
           const comps = (best.ev.competitions as Record<string, unknown>[])?.[0];
           const competitors = comps?.competitors as Record<string, unknown>[] | undefined;
@@ -803,6 +828,9 @@ export default function FifaSchedule() {
           if (homeResolved) { ov.teamA = homeResolved.team; ov.flagA = homeResolved.flag; }
           if (awayResolved) { ov.teamB = awayResolved.team; ov.flagB = awayResolved.flag; }
           overrides[m.id] = ov;
+
+          const evDT = bdDateTimeFromIso(String(best.ev.date ?? ""));
+          if (evDT) dtOverrides[m.id] = evDT;
 
           const status = (comps?.status as Record<string, unknown>)?.type as Record<string, unknown>;
           const isCompleted = status?.completed === true;
@@ -834,6 +862,7 @@ export default function FifaSchedule() {
 
         setScoreMap(map);
         setTeamOverrides(overrides);
+        setDateTimeOverrides(dtOverrides);
       } catch {
         // Silently ignore fetch errors — keep showing the last-known data instead of crashing
       }
@@ -849,18 +878,21 @@ export default function FifaSchedule() {
   // winner/runner-up — no need to wait on the API for the Round of 32 names.
   const localBracket = useMemo(() => computeLocalGroupResolution(scoreMap), [scoreMap]);
 
-  // Merge, API-confirmed name > our own local guess > static placeholder text.
+  // Merge, API-confirmed name/time > our own local guess > static placeholder text.
   const displayMatches = useMemo<Match[]>(() => MATCHES.map(m => {
     const api = teamOverrides[m.id];
     const local = localBracket[m.id];
+    const dt = dateTimeOverrides[m.id];
     return {
       ...m,
+      date: dt?.date ?? m.date,
+      time: dt?.time ?? m.time,
       teamA: api?.teamA ?? local?.teamA ?? m.teamA,
       flagA: api?.flagA ?? local?.flagA ?? m.flagA,
       teamB: api?.teamB ?? local?.teamB ?? m.teamB,
       flagB: api?.flagB ?? local?.flagB ?? m.flagB,
     };
-  }), [teamOverrides, localBracket]);
+  }), [teamOverrides, localBracket, dateTimeOverrides]);
 
   const allDays = useMemo(() => groupByDate(displayMatches), [displayMatches]);
 
