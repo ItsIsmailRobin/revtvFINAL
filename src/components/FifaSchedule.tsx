@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FooterCredits } from "./Footer";
 
 // ─── Types ────────────────────────────────────────────────────────
@@ -125,6 +125,109 @@ const MATCHES: Match[] = [
   { id:103, stage:"3rd Place", date:"2026-07-19", time:"03:00", teamA:"SF Los.", flagA:f("xx"), teamB:"SF Los.", flagB:f("xx"), city:"Miami", venue:"Hard Rock Stadium" },
   { id:104, stage:"⭐ Final", date:"2026-07-20", time:"01:00", teamA:"SF Win", flagA:f("xx"), teamB:"SF Win", flagB:f("xx"), city:"East Rutherford", venue:"MetLife Stadium" },
 ];
+
+// ─── Bracket auto-resolution — turns "Win A" / "R-up L" / "Best 3rd" etc. ──
+// into the real qualified team + flag, live, as soon as it's known. Two
+// sources feed this, combined with the API (ESPN) always taking priority:
+//   1) computeLocalGroupResolution — the instant a group's 6 matches all
+//      have a final score (from our own scoreMap), we work out the winner
+//      and runner-up ourselves. This updates the Round of 32 immediately,
+//      even before ESPN has published the official knockout fixture.
+//   2) The live fetch below matches each placeholder fixture (by kickoff
+//      date + venue, since those are fixed by FIFA regardless of who
+//      qualifies) against ESPN's schedule, and once ESPN shows real team
+//      names for that slot, uses those — this covers Round of 16 onward
+//      and the "Best 3rd" slots, whose exact assignment isn't guessable
+//      locally.
+
+function norm(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/\b(and|&)\b/g, "and")
+    .trim();
+}
+
+// A few name variants ESPN/other sources use that differ from ours.
+const TEAM_ALIASES: Record<string, string> = {
+  "turkey": "trkiye",
+  "czech republic": "czechia",
+  "korea republic": "south korea",
+  "republic of korea": "south korea",
+  "ivory coast": "ivory coast",
+  "cote divoire": "ivory coast",
+  "cabo verde": "cape verde",
+  "congo dr": "dr congo",
+  "democratic republic of the congo": "dr congo",
+  "united states": "usa",
+  "bosnia and herzegovina": "bosnia herz",
+  "bosnia herzegovina": "bosnia herz",
+};
+
+// name -> {team, flag} for every real (non-placeholder) team in the field.
+const TEAM_FLAG_MAP: Record<string, { team: string; flag: string }> = (() => {
+  const map: Record<string, { team: string; flag: string }> = {};
+  for (const m of MATCHES) {
+    if (!m.stage.startsWith("Group ")) continue;
+    map[norm(m.teamA)] ??= { team: m.teamA, flag: m.flagA };
+    map[norm(m.teamB)] ??= { team: m.teamB, flag: m.flagB };
+  }
+  return map;
+})();
+
+function resolveTeamFlag(rawName: string): { team: string; flag: string } | null {
+  const key = norm(rawName);
+  if (!key) return null;
+  const aliased = TEAM_ALIASES[key] ?? key;
+  if (TEAM_FLAG_MAP[aliased]) return TEAM_FLAG_MAP[aliased];
+  for (const k of Object.keys(TEAM_FLAG_MAP)) {
+    if (k.includes(aliased) || aliased.includes(k)) return TEAM_FLAG_MAP[k];
+  }
+  return null;
+}
+
+const PLACEHOLDER_RE = /^(Win [A-L]|R-up [A-L]|Best 3rd|R32 Win|R16 Win|QF Win|SF Win|SF Los\.)$/;
+
+type Standing = { team: string; flag: string; pts: number; gd: number; gf: number };
+
+function computeGroupStandings(letter: string, scoreMap: Record<string, [number, number]>): Standing[] | null {
+  const groupMatches = MATCHES.filter(m => m.stage === `Group ${letter}`);
+  if (!groupMatches.length) return null;
+  const table: Record<string, Standing> = {};
+  const ensure = (name: string, flag: string) => (table[name] ??= { team: name, flag, pts: 0, gd: 0, gf: 0 });
+  for (const m of groupMatches) {
+    ensure(m.teamA, m.flagA); ensure(m.teamB, m.flagB);
+    const s = scoreMap[`${m.id}`];
+    if (!s) return null; // group isn't finished yet — no standings until it is
+    const [a, b] = s;
+    const A = table[m.teamA], B = table[m.teamB];
+    A.gf += a; B.gf += b; A.gd += a - b; B.gd += b - a;
+    if (a > b) A.pts += 3; else if (b > a) B.pts += 3; else { A.pts++; B.pts++; }
+  }
+  return Object.values(table).sort((x, y) => y.pts - x.pts || y.gd - x.gd || y.gf - x.gf || x.team.localeCompare(y.team));
+}
+
+type TeamOverride = { teamA?: string; flagA?: string; teamB?: string; flagB?: string };
+
+function computeLocalGroupResolution(scoreMap: Record<string, [number, number]>): Record<number, TeamOverride> {
+  const out: Record<number, TeamOverride> = {};
+  const standingsByGroup: Record<string, Standing[] | null> = {};
+  for (const L of "ABCDEFGHIJKL") standingsByGroup[L] = computeGroupStandings(L, scoreMap);
+
+  for (const m of MATCHES) {
+    if (m.stage !== "Round of 32") continue;
+    const ov: TeamOverride = {};
+    const winA = m.teamA.match(/^Win ([A-L])$/), rupA = m.teamA.match(/^R-up ([A-L])$/);
+    const winB = m.teamB.match(/^Win ([A-L])$/), rupB = m.teamB.match(/^R-up ([A-L])$/);
+    if (winA) { const t = standingsByGroup[winA[1]]?.[0]; if (t) { ov.teamA = t.team; ov.flagA = t.flag; } }
+    if (rupA) { const t = standingsByGroup[rupA[1]]?.[1]; if (t) { ov.teamA = t.team; ov.flagA = t.flag; } }
+    if (winB) { const t = standingsByGroup[winB[1]]?.[0]; if (t) { ov.teamB = t.team; ov.flagB = t.flag; } }
+    if (rupB) { const t = standingsByGroup[rupB[1]]?.[1]; if (t) { ov.teamB = t.team; ov.flagB = t.flag; } }
+    if (ov.teamA || ov.teamB) out[m.id] = ov;
+  }
+  return out;
+}
 
 // ─── Time helpers ─────────────────────────────────────────────────
 // bdNow() returns the current moment as a real Date — used for numeric comparisons only.
@@ -548,29 +651,18 @@ function DayColumn({ dayGroup, todayBD, scoreMap }: { dayGroup: { date: string; 
 // ─── Main component ───────────────────────────────────────────────
 export default function FifaSchedule() {
   const colsPerPage = useColsPerPage();
-  const allDays = groupByDate(MATCHES);
 
-  // Rebuild pages whenever colsPerPage changes
-  const pages = (() => {
-    const p: { date: string; matches: Match[] }[][] = [];
-    for (let i = 0; i < allDays.length; i += colsPerPage) p.push(allDays.slice(i, i + colsPerPage));
-    return p;
-  })();
-
-  // ── Live score fetching ──────────────────────────────────────────
-  // scoreMap: key = "TeamA|TeamB" (sorted), value = [scoreA, scoreB]
+  // ── Live score fetching + knockout-slot auto-resolution ────────────
+  // scoreMap: key = matchId, value = [scoreA, scoreB]
   const [scoreMap, setScoreMap] = useState<Record<string, [number, number]>>({});
+  // teamOverrides: real team/flag confirmed by the API for a placeholder slot
+  const [teamOverrides, setTeamOverrides] = useState<Record<number, TeamOverride>>({});
 
   useEffect(() => {
-    // Normalize team names for fuzzy matching
-    const norm = (s: string) => s.toLowerCase()
-      .replace(/[^a-z0-9 ]/g, "")
-      .replace(/\b(and|&)\b/g, "and")
-      .trim();
-
     const fetchScores = async () => {
       try {
         const map: Record<string, [number, number]> = {};
+        const overrides: Record<number, TeamOverride> = {};
 
         // ── Source 1: ESPN full schedule + live scoreboard ────────────────
         const espnFetch = async () => {
@@ -597,7 +689,7 @@ export default function FifaSchedule() {
               if (!existingIds.has((ev as Record<string, unknown>).id)) allEvents.push(ev);
             }
           }
-          return allEvents;
+          return allEvents as Record<string, unknown>[];
         };
 
         // ── Source 2: TheSportsDB free API for FIFA WC 2026 ──────────────
@@ -630,9 +722,9 @@ export default function FifaSchedule() {
           sportsdbFetch().catch(() => []),
         ]);
 
-        // ── Process ESPN events ───────────────────────────────────────────
+        // ── Pass A: group-stage matches — fixed real names, fuzzy-match ───
         for (const ev of espnEvents) {
-          const e = ev as Record<string, unknown>;
+          const e = ev;
           const comps = (e.competitions as Record<string, unknown>[])?.[0];
           if (!comps) continue;
           const status = (comps.status as Record<string, unknown>)?.type as Record<string, unknown>;
@@ -653,7 +745,8 @@ export default function FifaSchedule() {
           if (homeScore < 0 || awayScore < 0) continue;
 
           for (const m of MATCHES) {
-            if (map[`${m.id}`]) continue; // already have score for this match
+            if (!m.stage.startsWith("Group ")) continue; // knockout slots handled in Pass B
+            if (map[`${m.id}`]) continue; // already have a score for this match
             const mA = norm(m.teamA), mB = norm(m.teamB);
             if (
               (homeTeam.includes(mA) || mA.includes(homeTeam)) &&
@@ -666,12 +759,68 @@ export default function FifaSchedule() {
           }
         }
 
-        // ── Fill gaps using TheSportsDB (crosscheck / fallback) ───────────
+        // ── Pass B: knockout placeholder slots — resolve by kickoff date + venue ──
+        // These are fixed by FIFA regardless of who qualifies, so date+venue is a
+        // reliable way to find "this" fixture on ESPN even before we know the teams.
+        const venueOf = (e: Record<string, unknown>) => {
+          const comps = (e.competitions as Record<string, unknown>[])?.[0] as Record<string, unknown> | undefined;
+          const venue = comps?.venue as Record<string, unknown> | undefined;
+          return norm(String(venue?.fullName ?? ""));
+        };
+        for (const m of MATCHES) {
+          if (m.stage.startsWith("Group ")) continue;
+          if (!PLACEHOLDER_RE.test(m.teamA) && !PLACEHOLDER_RE.test(m.teamB)) continue;
+
+          const targetMs = matchStart(m).getTime();
+          let best: { ev: Record<string, unknown>; rank: number } | null = null;
+          for (const ev of espnEvents) {
+            const comps = (ev.competitions as Record<string, unknown>[])?.[0];
+            if (!comps) continue;
+            const evMs = new Date(String(ev.date ?? "")).getTime();
+            if (!Number.isFinite(evMs)) continue;
+            const hoursDiff = Math.abs(evMs - targetMs) / 3600000;
+            if (hoursDiff > 30) continue; // only consider fixtures near this kickoff slot
+            const venueMatch = norm(m.city).length > 0 && venueOf(ev).includes(norm(m.city));
+            const rank = (venueMatch ? 0 : 1000) + hoursDiff;
+            if (!best || rank < best.rank) best = { ev, rank };
+          }
+          if (!best) continue;
+
+          const comps = (best.ev.competitions as Record<string, unknown>[])?.[0];
+          const competitors = comps?.competitors as Record<string, unknown>[] | undefined;
+          if (!competitors || competitors.length < 2) continue;
+          const home = competitors.find((c: Record<string, unknown>) => c.homeAway === "home");
+          const away = competitors.find((c: Record<string, unknown>) => c.homeAway === "away");
+          if (!home || !away) continue;
+
+          const homeName = (home.team as Record<string, unknown>)?.displayName as string ?? "";
+          const awayName = (away.team as Record<string, unknown>)?.displayName as string ?? "";
+          const homeResolved = resolveTeamFlag(homeName);
+          const awayResolved = resolveTeamFlag(awayName);
+          if (!homeResolved && !awayResolved) continue; // still TBD on ESPN's side too
+
+          const ov: TeamOverride = {};
+          if (homeResolved) { ov.teamA = homeResolved.team; ov.flagA = homeResolved.flag; }
+          if (awayResolved) { ov.teamB = awayResolved.team; ov.flagB = awayResolved.flag; }
+          overrides[m.id] = ov;
+
+          const status = (comps?.status as Record<string, unknown>)?.type as Record<string, unknown>;
+          const isCompleted = status?.completed === true;
+          const isInProgress = status?.state === "in";
+          const homeScore = parseInt(String(home.score ?? "-1"), 10);
+          const awayScore = parseInt(String(away.score ?? "-1"), 10);
+          if ((isCompleted || isInProgress) && homeScore >= 0 && awayScore >= 0) {
+            map[`${m.id}`] = [homeScore, awayScore];
+          }
+        }
+
+        // ── Fill remaining gaps using TheSportsDB (crosscheck / fallback) ──
         for (const r of sportsdbResults) {
           const rA = norm(r.teamA), rB = norm(r.teamB);
           for (const m of MATCHES) {
-            if (map[`${m.id}`]) continue; // ESPN already has it
-            const mA = norm(m.teamA), mB = norm(m.teamB);
+            if (map[`${m.id}`]) continue; // already resolved above
+            const ov = overrides[m.id];
+            const mA = norm(ov?.teamA ?? m.teamA), mB = norm(ov?.teamB ?? m.teamB);
             if (
               (rA.includes(mA) || mA.includes(rA)) &&
               (rB.includes(mB) || mB.includes(rB))
@@ -684,16 +833,43 @@ export default function FifaSchedule() {
         }
 
         setScoreMap(map);
+        setTeamOverrides(overrides);
       } catch {
-        // Silently ignore fetch errors — show nothing instead of crashing
+        // Silently ignore fetch errors — keep showing the last-known data instead of crashing
       }
     };
 
     fetchScores();
-    // Re-fetch every 30 seconds for live match score updates
+    // Re-fetch every 30 seconds for live match score / bracket updates
     const id = setInterval(fetchScores, 30 * 1000);
     return () => clearInterval(id);
   }, []);
+
+  // The instant a group finishes (from our own scoreMap) we already know its
+  // winner/runner-up — no need to wait on the API for the Round of 32 names.
+  const localBracket = useMemo(() => computeLocalGroupResolution(scoreMap), [scoreMap]);
+
+  // Merge, API-confirmed name > our own local guess > static placeholder text.
+  const displayMatches = useMemo<Match[]>(() => MATCHES.map(m => {
+    const api = teamOverrides[m.id];
+    const local = localBracket[m.id];
+    return {
+      ...m,
+      teamA: api?.teamA ?? local?.teamA ?? m.teamA,
+      flagA: api?.flagA ?? local?.flagA ?? m.flagA,
+      teamB: api?.teamB ?? local?.teamB ?? m.teamB,
+      flagB: api?.flagB ?? local?.flagB ?? m.flagB,
+    };
+  }), [teamOverrides, localBracket]);
+
+  const allDays = useMemo(() => groupByDate(displayMatches), [displayMatches]);
+
+  // Rebuild pages whenever colsPerPage or the resolved schedule changes
+  const pages = useMemo(() => {
+    const p: { date: string; matches: Match[] }[][] = [];
+    for (let i = 0; i < allDays.length; i += colsPerPage) p.push(allDays.slice(i, i + colsPerPage));
+    return p;
+  }, [allDays, colsPerPage]);
 
   // Reactive today — single 30s interval drives both live-match ticks and current-day date refresh
   const [todayBD, setTodayBD] = useState(() => bdTodayStr());
